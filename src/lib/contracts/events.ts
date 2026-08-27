@@ -1,0 +1,174 @@
+/**
+ * The domain event catalogue.
+ *
+ * An event is the past tense of something the business did. Automations,
+ * notifications, dashboards and the audit trail all key off these names, so a
+ * module that invents its own event name is a module nothing can react to.
+ *
+ * Two rules that keep this useful rather than decorative:
+ *
+ *   · **Events are emitted after the transaction commits.** An automation must
+ *     never fire for a booking that was rolled back. A handler that throws is
+ *     reported, never rethrown into the business operation — a failed WhatsApp
+ *     message must not undo a confirmed booking.
+ *
+ *   · **Every payload carries the organization.** A subscriber that has to
+ *     look up which tenant an event belongs to will eventually forget, and a
+ *     cross-tenant notification is a data leak with a delivery receipt.
+ */
+
+export const DOMAIN_EVENTS = [
+  // Booking
+  'booking.created',
+  'booking.confirmed',
+  'booking.dates_changed',
+  'booking.guests_changed',
+  'booking.unit_changed',
+  'booking.price_changed',
+  'booking.cancelled',
+  'booking.no_show',
+  'booking.checked_in',
+  'booking.checked_out',
+  'booking.completed',
+
+  // Availability
+  'hold.created',
+  'hold.extended',
+  'hold.released',
+  'hold.expired',
+  'hold.converted',
+  'availability.blocked',
+  'availability.unblocked',
+
+  // Guest
+  'guest.created',
+  'guest.merged',
+  'guest.request_submitted',
+  'lead.created',
+  'lead.status_changed',
+  'quote.sent',
+  'quote.viewed',
+  'quote.accepted',
+  'quote.expired',
+
+  // Money
+  'payment.link_sent',
+  'payment.received',
+  'payment.failed',
+  'payment.refunded',
+  'deposit.authorized',
+  'deposit.captured',
+  'deposit.released',
+  'invoice.issued',
+  'invoice.failed',
+
+  // Contract
+  'contract.sent',
+  'contract.signed',
+
+  // Agent network
+  'agent.invited',
+  'agent.activated',
+  'agent.suspended',
+  'agent.permissions_changed',
+  'commission.created',
+  'commission.became_eligible',
+  'commission.approved',
+  'commission.paid',
+  'commission.cancelled',
+
+  // Owners
+  'owner_statement.issued',
+  'owner_payout.approved',
+  'owner_payout.paid',
+
+  // Operations
+  'preparation.calculated',
+  'preparation.changed',
+  'task.created',
+  'task.assigned',
+  'task.started',
+  'task.completed',
+  'task.verified',
+  'task.overdue',
+  'incident.opened',
+  'incident.resolved',
+  'inventory.shortage_detected',
+  'inventory.transferred',
+
+  // Approvals
+  'approval.requested',
+  'approval.decided',
+  'approval.expired',
+
+  // Website
+  'site.generated',
+  'site.published',
+  'site.rolled_back',
+
+  // Channels
+  'channel.reservation_received',
+  'channel.sync_failed',
+
+  // Security — these exist so somebody can be told, not merely so it is logged
+  'security.new_device_login',
+  'security.permission_escalated',
+  'security.bulk_export',
+  'security.payment_config_changed',
+] as const
+
+export type DomainEventName = (typeof DOMAIN_EVENTS)[number]
+
+/**
+ * The envelope every event travels in.
+ *
+ * `occurredAt` is when the thing happened, not when the handler ran — a
+ * retried notification must not claim the payment arrived an hour late.
+ * `correlationId` ties an event back to the request that caused it, which is
+ * the only way to answer "why did this guest get three messages".
+ */
+export interface DomainEvent<TPayload = unknown> {
+  name: DomainEventName
+  /** Always present. A subscriber must never have to infer the tenant. */
+  organizationId: string
+  /** The thing the event is about. */
+  resourceType: string
+  resourceId: string
+  propertyId?: string | null
+  /** Who caused it. Absent for events raised by a scheduled job. */
+  actorUserId?: string | null
+  occurredAt: string
+  correlationId: string
+  /**
+   * Stable across retries of the same logical event, so a handler can refuse
+   * to act twice. A webhook delivered three times is one event.
+   */
+  idempotencyKey: string
+  payload: TPayload
+}
+
+const EVENT_SET: ReadonlySet<string> = new Set(DOMAIN_EVENTS)
+
+export function isDomainEvent(name: string): name is DomainEventName {
+  return EVENT_SET.has(name)
+}
+
+/**
+ * Events that must reach a person rather than only a log.
+ *
+ * Kept as data so notification routing does not become a growing switch
+ * statement that somebody forgets to extend.
+ */
+export const ALERT_EVENTS: readonly DomainEventName[] = [
+  'payment.failed',
+  'invoice.failed',
+  'channel.sync_failed',
+  'inventory.shortage_detected',
+  'task.overdue',
+  'incident.opened',
+  'approval.requested',
+  'security.new_device_login',
+  'security.permission_escalated',
+  'security.bulk_export',
+  'security.payment_config_changed',
+]
