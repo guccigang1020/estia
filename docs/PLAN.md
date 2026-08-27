@@ -1,7 +1,8 @@
 # ESTIA · תוכנית בנייה
 
 > **גרסה 4** — לפי אפיון 4.0.
-> ההחלטות הארכיטקטוניות נמצאות ב-[ARCHITECTURE.md](ARCHITECTURE.md). כאן: מה בונים, ובאיזה סדר.
+> ההחלטות הארכיטקטוניות נמצאות ב-[ARCHITECTURE.md](ARCHITECTURE.md).
+> החבילות והתמחור ב-[PACKAGES.md](PACKAGES.md). כאן: מה בונים, ובאיזה סדר.
 
 ---
 
@@ -82,8 +83,8 @@
 | 2 | GitHub פרטי + Vercel | כתובת חיה, מתעדכנת מעצמה |
 | 3 | ⛔ **החלטה: פרויקט Supabase חדש** (עלות) | — |
 | 4 | מיגרציה: `users`, `organizations`, `memberships` | קיימות, עם RLS |
-| 5 | מיגרציה: `roles`, `permissions`, `role_permissions`, `membership_roles`, `membership_scopes` | מטריצת ההרשאות במסד |
-| 6 | Permission Engine — `can(user, action, resource)` | בדיקות מוכיחות חסימה, לא רק אישור |
+| 5 | מיגרציה: `roles`, `permissions`, `role_permissions`, `membership_roles`, `membership_scopes`, `plans`, `organization_subscriptions` | מטריצת ההרשאות והחבילות במסד |
+| 6 | Permission Engine — `can(user, action, resource)`, כולל בדיקת חבילה | בדיקות מוכיחות חסימה, לא רק אישור. חריגה ממכסה מציעה שדרוג ולא שוברת תפעול |
 | 7 | RLS על כל טבלה + `my_organizations()` | **מטריצת בידוד: ארגון א׳ לא קורא ארגון ב׳** |
 | 8 | Auth: אימייל+סיסמה, Magic Link, Sessions | כניסה, יציאה, ניתוק מכשיר |
 | 9 | MFA + מדיניות סיסמאות + Rate limiting | ניסיונות כושלים נחסמים |
@@ -212,6 +213,7 @@
 |---|---|
 | **לפני M3** | ⛔ מי הלקוח המשלם הראשון — צימרים או חברות ניהול (סעיף 1) |
 | משימה 3 | פרויקט Supabase חדש — חשבון ומסלול |
+| לפני מכירה ראשונה | אימות מחירי החבילות מול 5 בעלי צימרים — [PACKAGES.md](PACKAGES.md) סעיף 7 |
 | M3 | סגנונות העיצוב שתשלח · עלות AI ליצירת תוכן |
 | משימה 37 | ספק סליקה. יש כבר מסוף? |
 | משימה 45 | ספק חשבוניות. יש כבר חשבון מורנינג? |
