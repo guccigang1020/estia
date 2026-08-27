@@ -1,0 +1,43 @@
+/**
+ * Environment configuration, validated once at startup.
+ *
+ * A missing variable should stop the application immediately with a sentence
+ * that says which one, not surface three hours later as an authentication
+ * failure nobody can explain.
+ */
+
+function required(name: string, value: string | undefined): string {
+  if (!value || value.trim() === '') {
+    throw new Error(
+      `Missing required environment variable ${name}. ` +
+        `Copy .env.example to .env.local and fill it in.`,
+    )
+  }
+  return value
+}
+
+export const env = {
+  supabaseUrl: required(
+    'NEXT_PUBLIC_SUPABASE_URL',
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+  ),
+  supabasePublishableKey: required(
+    'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  ),
+} as const
+
+/**
+ * The service role key bypasses row level security completely.
+ *
+ * It is read lazily and only from server code, so that importing anything in
+ * this module from a client component cannot drag it into the browser bundle.
+ * It has no `NEXT_PUBLIC_` prefix, which means Next.js will not inline it —
+ * and it must never be given one.
+ */
+export function serviceRoleKey(): string {
+  if (typeof window !== 'undefined') {
+    throw new Error('The service role key must never be read in the browser.')
+  }
+  return required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY)
+}

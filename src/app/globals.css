@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   ESTIA — Design tokens: the single source of truth for visual style.
+   ============================================================================
+
+   Every colour, radius, font, shadow and layout measure in the product is
+   defined HERE and nowhere else. Components and pages must reference tokens
+   (`bg-surface`, `text-muted-foreground`, `rounded-lg`, `font-display`, ...)
+   and must never contain a literal colour value. This is what will later let
+   each customer's public website swap to a supplied brand style by replacing
+   one block of raw values — without touching a single component.
+
+   Structure
+   ---------
+   1. RAW TOKENS   `--estia-*` on :root. Actual values. Light theme.
+   2. THEME MAP    `@theme inline` binds raw tokens to Tailwind namespaces,
+                   which is what generates the utility classes.
+   3. DARK THEME   `prefers-color-scheme: dark` REDEFINES the raw tokens only.
+                   Nothing in the theme map or in any component changes, so
+                   there are no `dark:` variants scattered through the UI.
+
+   Semantic roles (use the role, not the hue)
+   ------------------------------------------
+   background / foreground     the page ground and its primary ink
+   surface                     raised panels: cards, header
+   muted / muted-foreground    recessed fills and secondary ink
+   border / border-strong      hairline separators / control outlines (>= 3:1)
+   primary                     the brand green. Actions, emphasis.
+   accent                      the warm gold. Highlights and badges.
+                               `accent` is a FILL (pair with accent-foreground);
+                               `accent-strong` is the INK version for gold text.
+   success / warning / danger  state colours
+
+   Contrast
+   --------
+   Every pair below was measured against WCAG 2.1: text pairs meet AA
+   (>= 4.5:1) or better in BOTH themes, and border-strong / ring meet the 3:1
+   non-text requirement. Measured ratios are noted inline. If you change a
+   value, re-measure — do not eyeball it.
+   ============================================================================ */
+
+/* ---------------------------------------------------------------- 1. RAW --- */
+:root {
+  color-scheme: light;
+
+  /* -- Ground & ink ------------------------------------------------------- */
+  --estia-background: #faf8f3; /* warm ivory, not clinical white           */
+  --estia-surface: #ffffff;
+  --estia-surface-raised: #ffffff;
+  --estia-muted: #f1eee6;
+  --estia-foreground: #0c1e16; /* 16.31:1 on background — AAA              */
+  --estia-muted-foreground: #55665d; /*  5.74:1 on background — AA         */
+
+  /* -- Lines -------------------------------------------------------------- */
+  --estia-border: #e4e0d5; /* decorative hairline                          */
+  --estia-border-strong: #8c8778; /*  3.38:1 on background — AA non-text    */
+
+  /* -- Brand: deep green -------------------------------------------------- */
+  --estia-primary: #0e5138; /*  8.78:1 on background — AAA                  */
+  --estia-primary-foreground: #ffffff; /*  9.32:1 on primary — AAA          */
+  --estia-primary-soft: #e6efe9; /* tinted fill for quiet brand surfaces    */
+
+  /* -- Brand: warm gold --------------------------------------------------- */
+  --estia-accent: #c8912a; /* fill only                                     */
+  --estia-accent-foreground: #1a1206; /*  6.65:1 on accent — AA            */
+  --estia-accent-strong: #8a5a0f; /*  5.57:1 on background — AA (gold ink)  */
+  --estia-accent-soft: #f8efdc;
+
+  /* -- State -------------------------------------------------------------- */
+  --estia-success: #136b4a; /*  6.50:1 on surface — AA                      */
+  --estia-warning: #8f4c0b; /*  6.55:1 on surface — AA                      */
+  --estia-danger: #a32320; /*  7.45:1 on surface — AAA                      */
+
+  /* -- Focus -------------------------------------------------------------- */
+  --estia-ring: #0e5138; /*  8.78:1 on background — well past 3:1           */
+
+  /* -- Elevation ---------------------------------------------------------- */
+  --estia-shadow-soft: 0 1px 2px rgb(12 30 22 / 0.05),
+    0 6px 20px -12px rgb(12 30 22 / 0.16);
+  --estia-shadow-lift: 0 2px 4px rgb(12 30 22 / 0.06),
+    0 18px 44px -20px rgb(12 30 22 / 0.26);
+
+  /* -- Type --------------------------------------------------------------- */
+  /* Wired to next/font in src/app/layout.tsx. Hebrew-capable fallbacks are
+     listed first so a font failure degrades to a Hebrew face, not a Latin one. */
+  --estia-font-sans: var(--font-heebo), "Segoe UI", Arial, system-ui, sans-serif;
+  --estia-font-display: var(--font-frank-ruhl-libre), "Frank Ruhl Libre",
+    Georgia, serif;
+
+  /* -- Geometry ----------------------------------------------------------- */
+  --estia-radius-xs: 0.375rem;
+  --estia-radius-sm: 0.5rem;
+  --estia-radius-md: 0.75rem;
+  --estia-radius-lg: 1rem;
+  --estia-radius-xl: 1.375rem;
+  --estia-radius-2xl: 1.75rem;
+
+  /* -- Layout measures ---------------------------------------------------- */
+  --estia-shell: 76rem; /* max content width                                */
+  --estia-prose: 40rem; /* max comfortable reading measure                  */
+}
+
+/* ------------------------------------------------------------- 2. THEME --- */
+/* `inline` makes utilities emit `var(--estia-*)` directly, which is what lets
+   the dark block below re-theme the whole product by changing raw values. */
+@theme inline {
+  --color-background: var(--estia-background);
+  --color-foreground: var(--estia-foreground);
+  --color-surface: var(--estia-surface);
+  --color-surface-raised: var(--estia-surface-raised);
+  --color-muted: var(--estia-muted);
+  --color-muted-foreground: var(--estia-muted-foreground);
+
+  --color-border: var(--estia-border);
+  --color-border-strong: var(--estia-border-strong);
+  --color-ring: var(--estia-ring);
+
+  --color-primary: var(--estia-primary);
+  --color-primary-foreground: var(--estia-primary-foreground);
+  --color-primary-soft: var(--estia-primary-soft);
+
+  --color-accent: var(--estia-accent);
+  --color-accent-foreground: var(--estia-accent-foreground);
+  --color-accent-strong: var(--estia-accent-strong);
+  --color-accent-soft: var(--estia-accent-soft);
+
+  --color-success: var(--estia-success);
+  --color-warning: var(--estia-warning);
+  --color-danger: var(--estia-danger);
+
+  --font-sans: var(--estia-font-sans);
+  --font-display: var(--estia-font-display);
+
+  --radius-xs: var(--estia-radius-xs);
+  --radius-sm: var(--estia-radius-sm);
+  --radius-md: var(--estia-radius-md);
+  --radius-lg: var(--estia-radius-lg);
+  --radius-xl: var(--estia-radius-xl);
+  --radius-2xl: var(--estia-radius-2xl);
+
+  --shadow-soft: var(--estia-shadow-soft);
+  --shadow-lift: var(--estia-shadow-lift);
+
+  --container-shell: var(--estia-shell);
+  --container-prose: var(--estia-prose);
+}
+
+/* -------------------------------------------------------------- 3. DARK --- */
+/* Only raw values are redefined. No colour is restated anywhere else. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --estia-background: #07140f; /* deep green ground                       */
+    --estia-surface: #0e1f18;
+    --estia-surface-raised: #16291f;
+    --estia-muted: #16291f;
+    --estia-foreground: #eaf1ec; /* 16.39:1 on background — AAA             */
+    --estia-muted-foreground: #a0b3a8; /*  8.52:1 on background — AAA      */
+
+    --estia-border: #1f3529;
+    --estia-border-strong: #527260; /*  3.53:1 on background — AA non-text  */
+
+    --estia-primary: #34d19a; /*  9.62:1 on background — AAA                */
+    --estia-primary-foreground: #04150e; /*  9.59:1 on primary — AAA        */
+    --estia-primary-soft: #102b20;
+
+    --estia-accent: #f2c879;
+    --estia-accent-foreground: #1f1503; /* 11.41:1 on accent — AAA         */
+    --estia-accent-strong: #f2c879; /* 11.93:1 on background — AAA          */
+    --estia-accent-soft: #2a2010;
+
+    --estia-success: #4ade9e;
+    --estia-warning: #f0b44e;
+    --estia-danger: #ff8a80;
+
+    --estia-ring: #34d19a;
+
+    --estia-shadow-soft: 0 1px 2px rgb(0 0 0 / 0.5),
+      0 6px 20px -12px rgb(0 0 0 / 0.7);
+    --estia-shadow-lift: 0 2px 4px rgb(0 0 0 / 0.55),
+      0 18px 44px -20px rgb(0 0 0 / 0.85);
+  }
+}
+
+/* --------------------------------------------------------------- 4. BASE -- */
+@layer base {
+  /* Tailwind v4 defaults border-color to currentColor; anchor it to the token
+     so an un-suffixed `border` is always the themed hairline. */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    /* Hebrew reads better with slightly looser default leading. */
+    line-height: 1.65;
+  }
+
+  /* A visible, token-coloured focus ring everywhere — never removed. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  ::selection {
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
