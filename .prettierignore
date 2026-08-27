@@ -1,0 +1,23 @@
+# Build output
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Dependencies
+node_modules/
+
+# Legacy reference material. Large generated HTML kept for design reference
+# only; it is not source, is never edited by hand, and must never be
+# reformatted.
+_reference/
+
+# Lockfile is owned by npm, not by us.
+package-lock.json
+
+# Binary / generated assets
+public/
+*.ico

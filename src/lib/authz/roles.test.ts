@@ -30,8 +30,12 @@ const ORG = 'org-a'
 const EVERY_ENTITLEMENT: ReadonlySet<Entitlement> = new Set(ENTITLEMENTS)
 
 const ALL_GRANTS: readonly Grant[] = [...PERMISSIONS, ...FIELD_PERMISSIONS]
-const NON_PLATFORM_PERMISSIONS = PERMISSIONS.filter((p) => !p.startsWith('platform.'))
-const PLATFORM_PERMISSIONS = PERMISSIONS.filter((p) => p.startsWith('platform.'))
+const NON_PLATFORM_PERMISSIONS = PERMISSIONS.filter(
+  (p) => !p.startsWith('platform.'),
+)
+const PLATFORM_PERMISSIONS = PERMISSIONS.filter((p) =>
+  p.startsWith('platform.'),
+)
 
 /** An actor wearing a role, on the richest plan, with organization-wide reach. */
 function actorInRole(role: SystemRole, overrides: Partial<Actor> = {}): Actor {
@@ -58,9 +62,11 @@ describe('cleaner', () => {
   const cleaner = actorInRole('cleaner')
 
   it('denies a cleaner access to financial reports', () => {
-    expect(authorize(cleaner, 'report.financial.view', RESOURCE)).toMatchObject({
-      reason: 'missing_permission',
-    })
+    expect(authorize(cleaner, 'report.financial.view', RESOURCE)).toMatchObject(
+      {
+        reason: 'missing_permission',
+      },
+    )
   })
 
   it.each(['finance.view', 'payment.view', 'report.financial.view'] as const)(
@@ -162,7 +168,9 @@ describe('reception', () => {
   const reception = actorInRole('reception')
 
   it('denies reception the profitability of a booking', () => {
-    expect(authorize(reception, 'booking.view_profitability', RESOURCE)).toMatchObject({
+    expect(
+      authorize(reception, 'booking.view_profitability', RESOURCE),
+    ).toMatchObject({
       reason: 'missing_permission',
       grant: 'booking.view_profitability',
     })
@@ -199,7 +207,9 @@ describe('marketing_editor', () => {
     const bookingGrants = ALL_GRANTS.filter((g) => g.startsWith('booking.'))
     const held = bookingGrants.filter((g) => can(marketing, g, RESOURCE))
 
-    expect(held, 'booking grants a marketing editor should not hold').toEqual([])
+    expect(held, 'booking grants a marketing editor should not hold').toEqual(
+      [],
+    )
   })
 
   it('denies a marketing editor any access to finance', () => {
@@ -214,7 +224,9 @@ describe('marketing_editor', () => {
     )
     const held = financeGrants.filter((g) => can(marketing, g, RESOURCE))
 
-    expect(held, 'finance grants a marketing editor should not hold').toEqual([])
+    expect(held, 'finance grants a marketing editor should not hold').toEqual(
+      [],
+    )
   })
 
   it('denies a marketing editor any access to guests', () => {
@@ -224,7 +236,7 @@ describe('marketing_editor', () => {
     expect(held, 'guest grants a marketing editor should not hold').toEqual([])
   })
 
-  it('denies a marketing editor the publishing of the site, which is a manager\'s decision', () => {
+  it("denies a marketing editor the publishing of the site, which is a manager's decision", () => {
     expect(can(marketing, 'site.publish', RESOURCE)).toBe(false)
     expect(can(marketing, 'site.rollback', RESOURCE)).toBe(false)
     expect(can(marketing, 'site.manage_domain', RESOURCE)).toBe(false)
@@ -293,7 +305,9 @@ describe('property_owner', () => {
       scope: { kind: 'properties', propertyIds: ['prop-mine'] },
     })
 
-    expect(can(owner, 'owner_statement.view', { organizationId: ORG })).toBe(false)
+    expect(can(owner, 'owner_statement.view', { organizationId: ORG })).toBe(
+      false,
+    )
   })
 })
 
@@ -318,7 +332,9 @@ describe('external_vendor', () => {
   })
 
   it('denies an external vendor a task that is not theirs, when scoped to their own records', () => {
-    const vendor = actorInRole('external_vendor', { scope: { kind: 'own_records' } })
+    const vendor = actorInRole('external_vendor', {
+      scope: { kind: 'own_records' },
+    })
 
     expect(
       can(vendor, 'task.view', {
@@ -327,7 +343,10 @@ describe('external_vendor', () => {
       }),
     ).toBe(false)
     expect(
-      can(vendor, 'task.view', { organizationId: ORG, assignedToUserId: 'user-1' }),
+      can(vendor, 'task.view', {
+        organizationId: ORG,
+        assignedToUserId: 'user-1',
+      }),
     ).toBe(true)
   })
 })
@@ -337,12 +356,15 @@ describe('external_vendor', () => {
 describe('administrator', () => {
   const administrator = actorInRole('administrator')
 
-  it.each(OWNER_ONLY)('denies an administrator the owner-only grant "%s"', (grant) => {
-    expect(authorize(administrator, grant, RESOURCE)).toMatchObject({
-      reason: 'missing_permission',
-      grant,
-    })
-  })
+  it.each(OWNER_ONLY)(
+    'denies an administrator the owner-only grant "%s"',
+    (grant) => {
+      expect(authorize(administrator, grant, RESOURCE)).toMatchObject({
+        reason: 'missing_permission',
+        grant,
+      })
+    },
+  )
 
   it('holds every organization grant except the four reserved to the owner', () => {
     const expected = [...NON_PLATFORM_PERMISSIONS, ...FIELD_PERMISSIONS].filter(
@@ -358,7 +380,9 @@ describe('administrator', () => {
       (g) => !OWNER_ONLY.includes(g) && !can(administrator, g, RESOURCE),
     )
 
-    expect(missing, 'organization grants an administrator is missing').toEqual([])
+    expect(missing, 'organization grants an administrator is missing').toEqual(
+      [],
+    )
   })
 
   it('holds no platform grant', () => {
@@ -381,12 +405,16 @@ describe('organization_owner', () => {
 
   it('holds each of the four owner-only grants that an administrator does not', () => {
     for (const grant of OWNER_ONLY) {
-      expect(can(owner, grant, RESOURCE), `owner should hold ${grant}`).toBe(true)
+      expect(can(owner, grant, RESOURCE), `owner should hold ${grant}`).toBe(
+        true,
+      )
     }
   })
 
   it('holds no platform grant, because ownership of a customer organization is not staff access', () => {
-    const held = PLATFORM_PERMISSIONS.filter((g) => holds('organization_owner', g))
+    const held = PLATFORM_PERMISSIONS.filter((g) =>
+      holds('organization_owner', g),
+    )
 
     expect(held, 'platform grants held by an organization owner').toEqual([])
   })
@@ -407,7 +435,9 @@ describe('organization_owner', () => {
 
 describe('no customer role holds a platform grant', () => {
   it.each(SYSTEM_ROLES)('grants no platform permission to "%s"', (role) => {
-    const held = grantsForSystemRole(role).filter((g) => g.startsWith('platform.'))
+    const held = grantsForSystemRole(role).filter((g) =>
+      g.startsWith('platform.'),
+    )
 
     expect(held, `platform grants held by ${role}`).toEqual([])
   })
@@ -416,17 +446,23 @@ describe('no customer role holds a platform grant', () => {
     const everything = grantsForRoles(SYSTEM_ROLES)
     const held = [...everything].filter((g) => g.startsWith('platform.'))
 
-    expect(held, 'platform grants reachable by stacking every system role').toEqual([])
+    expect(
+      held,
+      'platform grants reachable by stacking every system role',
+    ).toEqual([])
   })
 })
 
 describe('every role is built from the catalogue', () => {
-  it.each(SYSTEM_ROLES)('grants "%s" only strings that exist in the catalogue', (role) => {
-    const known = new Set<string>(ALL_GRANTS)
-    const unknown = grantsForSystemRole(role).filter((g) => !known.has(g))
+  it.each(SYSTEM_ROLES)(
+    'grants "%s" only strings that exist in the catalogue',
+    (role) => {
+      const known = new Set<string>(ALL_GRANTS)
+      const unknown = grantsForSystemRole(role).filter((g) => !known.has(g))
 
-    expect(unknown, `unrecognised grants in ${role}`).toEqual([])
-  })
+      expect(unknown, `unrecognised grants in ${role}`).toEqual([])
+    },
+  )
 
   it('recognises every catalogue permission through isPermission()', () => {
     const unrecognised = PERMISSIONS.filter((p) => !isPermission(p))
@@ -495,10 +531,15 @@ describe('grantsForRoles()', () => {
 
   it('does not let a combination of roles reach an owner-only grant', () => {
     const union = grantsForRoles(
-      SYSTEM_ROLES.filter((r) => r !== 'organization_owner' && r !== 'administrator'),
+      SYSTEM_ROLES.filter(
+        (r) => r !== 'organization_owner' && r !== 'administrator',
+      ),
     )
     const held = OWNER_ONLY.filter((g) => union.has(g))
 
-    expect(held, 'owner-only grants reachable by stacking composed roles').toEqual([])
+    expect(
+      held,
+      'owner-only grants reachable by stacking composed roles',
+    ).toEqual([])
   })
 })

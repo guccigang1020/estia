@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* ============================================================================
    ESTIA — Design tokens: the single source of truth for visual style.
@@ -76,17 +76,18 @@
   --estia-ring: #0e5138; /*  8.78:1 on background — well past 3:1           */
 
   /* -- Elevation ---------------------------------------------------------- */
-  --estia-shadow-soft: 0 1px 2px rgb(12 30 22 / 0.05),
-    0 6px 20px -12px rgb(12 30 22 / 0.16);
-  --estia-shadow-lift: 0 2px 4px rgb(12 30 22 / 0.06),
-    0 18px 44px -20px rgb(12 30 22 / 0.26);
+  --estia-shadow-soft:
+    0 1px 2px rgb(12 30 22 / 0.05), 0 6px 20px -12px rgb(12 30 22 / 0.16);
+  --estia-shadow-lift:
+    0 2px 4px rgb(12 30 22 / 0.06), 0 18px 44px -20px rgb(12 30 22 / 0.26);
 
   /* -- Type --------------------------------------------------------------- */
   /* Wired to next/font in src/app/layout.tsx. Hebrew-capable fallbacks are
      listed first so a font failure degrades to a Hebrew face, not a Latin one. */
-  --estia-font-sans: var(--font-heebo), "Segoe UI", Arial, system-ui, sans-serif;
-  --estia-font-display: var(--font-frank-ruhl-libre), "Frank Ruhl Libre",
-    Georgia, serif;
+  --estia-font-sans:
+    var(--font-heebo), 'Segoe UI', Arial, system-ui, sans-serif;
+  --estia-font-display:
+    var(--font-frank-ruhl-libre), 'Frank Ruhl Libre', Georgia, serif;
 
   /* -- Geometry ----------------------------------------------------------- */
   --estia-radius-xs: 0.375rem;
@@ -177,10 +178,10 @@
 
     --estia-ring: #34d19a;
 
-    --estia-shadow-soft: 0 1px 2px rgb(0 0 0 / 0.5),
-      0 6px 20px -12px rgb(0 0 0 / 0.7);
-    --estia-shadow-lift: 0 2px 4px rgb(0 0 0 / 0.55),
-      0 18px 44px -20px rgb(0 0 0 / 0.85);
+    --estia-shadow-soft:
+      0 1px 2px rgb(0 0 0 / 0.5), 0 6px 20px -12px rgb(0 0 0 / 0.7);
+    --estia-shadow-lift:
+      0 2px 4px rgb(0 0 0 / 0.55), 0 18px 44px -20px rgb(0 0 0 / 0.85);
   }
 }
 

@@ -40,7 +40,14 @@ function makePlan(overrides: Partial<Plan> = {}): Plan {
     monthlyPrice: 64_900,
     yearlyPrice: 649_000,
     limits: PRO_LIMITS,
-    entitlements: ['core', 'payments', 'invoicing', 'website', 'team', 'operations'],
+    entitlements: [
+      'core',
+      'payments',
+      'invoicing',
+      'website',
+      'team',
+      'operations',
+    ],
     isPublic: true,
     sortOrder: 3,
     ...overrides,
@@ -75,7 +82,7 @@ function makeEffective(
 // ── Entitlements ──────────────────────────────────────────────────────────
 
 describe('effectiveEntitlements()', () => {
-  it('returns the plan\'s own features when nothing is overridden', () => {
+  it("returns the plan's own features when nothing is overridden", () => {
     const result = effectiveEntitlements(makeEffective())
 
     expect([...result].sort()).toEqual(
@@ -132,7 +139,9 @@ describe('effectiveEntitlements()', () => {
   })
 
   it('collapses a cancelled subscription to the core product only', () => {
-    const result = effectiveEntitlements(makeEffective({}, { status: 'cancelled' }))
+    const result = effectiveEntitlements(
+      makeEffective({}, { status: 'cancelled' }),
+    )
 
     expect([...result]).toEqual(['core'])
   })
@@ -141,7 +150,10 @@ describe('effectiveEntitlements()', () => {
     const result = effectiveEntitlements(
       makeEffective(
         {},
-        { status: 'cancelled', entitlementGrants: ['owner_portal', 'multi_brand'] },
+        {
+          status: 'cancelled',
+          entitlementGrants: ['owner_portal', 'multi_brand'],
+        },
       ),
     )
 
@@ -149,9 +161,11 @@ describe('effectiveEntitlements()', () => {
   })
 
   it('leaves a cancelled customer their core product, so a failed card does not lock them out of their own bookings', () => {
-    expect(effectiveEntitlements(makeEffective({}, { status: 'cancelled' })).has('core')).toBe(
-      true,
-    )
+    expect(
+      effectiveEntitlements(makeEffective({}, { status: 'cancelled' })).has(
+        'core',
+      ),
+    ).toBe(true)
   })
 
   const stillPaying: readonly SubscriptionStatus[] = [
@@ -172,7 +186,9 @@ describe('effectiveEntitlements()', () => {
   )
 
   it('always includes the core product, even on a plan that does not list it', () => {
-    const result = effectiveEntitlements(makeEffective({ entitlements: ['payments'] }))
+    const result = effectiveEntitlements(
+      makeEffective({ entitlements: ['payments'] }),
+    )
 
     expect(result.has('core')).toBe(true)
   })
@@ -192,7 +208,7 @@ describe('effectiveEntitlements()', () => {
     expect(result.has('api_access')).toBe(false)
   })
 
-  it('does not mutate the plan\'s own entitlement list', () => {
+  it("does not mutate the plan's own entitlement list", () => {
     const plan = makePlan()
     const before = [...plan.entitlements]
 
@@ -211,18 +227,22 @@ describe('effectiveEntitlements()', () => {
 // ── Limits ────────────────────────────────────────────────────────────────
 
 describe('effectiveLimits()', () => {
-  it('returns the plan\'s limits when the customer has no special deal', () => {
+  it("returns the plan's limits when the customer has no special deal", () => {
     expect(effectiveLimits(makeEffective())).toEqual(PRO_LIMITS)
   })
 
   it('lets a per-customer override win over the plan limit', () => {
-    const result = effectiveLimits(makeEffective({}, { limitOverrides: { units: 25 } }))
+    const result = effectiveLimits(
+      makeEffective({}, { limitOverrides: { units: 25 } }),
+    )
 
     expect(result.units).toBe(25)
   })
 
   it('leaves the limits the override does not mention untouched', () => {
-    const result = effectiveLimits(makeEffective({}, { limitOverrides: { units: 25 } }))
+    const result = effectiveLimits(
+      makeEffective({}, { limitOverrides: { units: 25 } }),
+    )
 
     expect(result.properties).toBe(5)
     expect(result.members).toBe(10)
@@ -230,13 +250,17 @@ describe('effectiveLimits()', () => {
   })
 
   it('lets an override make a limit unlimited', () => {
-    const result = effectiveLimits(makeEffective({}, { limitOverrides: { members: null } }))
+    const result = effectiveLimits(
+      makeEffective({}, { limitOverrides: { members: null } }),
+    )
 
     expect(result.members).toBeNull()
   })
 
   it('lets an override lower a limit as well as raise it', () => {
-    const result = effectiveLimits(makeEffective({}, { limitOverrides: { units: 2 } }))
+    const result = effectiveLimits(
+      makeEffective({}, { limitOverrides: { units: 2 } }),
+    )
 
     expect(result.units).toBe(2)
   })
@@ -246,10 +270,15 @@ describe('effectiveLimits()', () => {
       makeEffective({}, { limitOverrides: { units: 25, storageGb: 200 } }),
     )
 
-    expect(result).toEqual({ properties: 5, units: 25, members: 10, storageGb: 200 })
+    expect(result).toEqual({
+      properties: 5,
+      units: 25,
+      members: 10,
+      storageGb: 200,
+    })
   })
 
-  it('does not mutate the plan\'s own limits', () => {
+  it("does not mutate the plan's own limits", () => {
     const plan = makePlan()
 
     effectiveLimits({
@@ -298,7 +327,7 @@ describe('agreedPrice()', () => {
     expect(agreedPrice(makeEffective({}, { interval: 'yearly' }))).toBe(649_000)
   })
 
-  it('keeps an early customer on their original price after the plan\'s list price is raised', () => {
+  it("keeps an early customer on their original price after the plan's list price is raised", () => {
     // Signed at ₪499/month. The back office later raises Pro to ₪649/month.
     const signedAt = 49_900
     const effective = makeEffective(
@@ -394,7 +423,7 @@ describe('formatAgorot()', () => {
     expect(formatAgorot(100_000_000)).toBe('₪1,000,000')
   })
 
-  it('renders the agreed price of a grandfathered customer, not the plan\'s', () => {
+  it("renders the agreed price of a grandfathered customer, not the plan's", () => {
     const effective = makeEffective(
       { monthlyPrice: 64_900 },
       { agreedMonthlyPrice: 49_900 },
@@ -408,14 +437,17 @@ describe('formatAgorot()', () => {
 
 describe('the plan feeds the authorization engine', () => {
   it('produces a set the engine can consult directly', () => {
-    const result: ReadonlySet<Entitlement> = effectiveEntitlements(makeEffective())
+    const result: ReadonlySet<Entitlement> =
+      effectiveEntitlements(makeEffective())
 
     expect(result.has('website')).toBe(true)
     expect(result.has('owner_portal')).toBe(false)
   })
 
   it('produces exactly the core set for a cancelled customer, so every paid grant is refused downstream', () => {
-    const result = effectiveEntitlements(makeEffective({}, { status: 'cancelled' }))
+    const result = effectiveEntitlements(
+      makeEffective({}, { status: 'cancelled' }),
+    )
 
     expect(result.size).toBe(1)
     expect(result.has('core')).toBe(true)

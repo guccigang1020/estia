@@ -27,11 +27,7 @@ export type Agorot = number
 export type BillingInterval = 'monthly' | 'yearly'
 
 export type SubscriptionStatus =
-  | 'trialing'
-  | 'active'
-  | 'past_due'
-  | 'paused'
-  | 'cancelled'
+  'trialing' | 'active' | 'past_due' | 'paused' | 'cancelled'
 
 /**
  * A package in the catalogue. Editable by ESTIA staff holding
@@ -107,7 +103,8 @@ export function effectiveEntitlements(
 
   const result = new Set<Entitlement>(plan.entitlements)
   for (const granted of subscription.entitlementGrants) result.add(granted)
-  for (const revoked of subscription.entitlementRevocations) result.delete(revoked)
+  for (const revoked of subscription.entitlementRevocations)
+    result.delete(revoked)
   result.add('core')
   return result
 }
@@ -124,7 +121,9 @@ export function effectiveEntitlements(
  */
 export function effectiveLimits(effective: EffectivePlan): PlanLimits {
   const limits: PlanLimits = { ...effective.plan.limits }
-  for (const [key, value] of Object.entries(effective.subscription.limitOverrides)) {
+  for (const [key, value] of Object.entries(
+    effective.subscription.limitOverrides,
+  )) {
     if (value !== undefined) {
       limits[key as keyof PlanLimits] = value
     }

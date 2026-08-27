@@ -1,6 +1,6 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import { defineConfig, globalIgnores } from 'eslint/config'
+import nextVitals from 'eslint-config-next/core-web-vitals'
+import nextTs from 'eslint-config-next/typescript'
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -8,11 +8,18 @@ const eslintConfig = defineConfig([
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
+    '.next/**',
+    'out/**',
+    'build/**',
+    'next-env.d.ts',
+    // Generated output. Already git-ignored, but ESLint does not read
+    // .gitignore, so it was linting the coverage reporter's own bundled
+    // scripts and warning about code nobody here wrote.
+    'coverage/**',
+    // The frozen legacy product, kept verbatim as reference. Not ours to
+    // lint, and it must never be reformatted.
+    '_reference/**',
   ]),
-]);
+])
 
-export default eslintConfig;
+export default eslintConfig

@@ -84,7 +84,10 @@ describe('tenant isolation across the entire permission catalogue', () => {
       return decision.allowed || decision.reason !== 'cross_organization'
     })
 
-    expect(leaked, 'grants an organization_owner could reach cross-tenant').toEqual([])
+    expect(
+      leaked,
+      'grants an organization_owner could reach cross-tenant',
+    ).toEqual([])
   })
 
   it('denies every grant in the catalogue to platform staff acting across the tenant boundary', () => {
@@ -98,7 +101,7 @@ describe('tenant isolation across the entire permission catalogue', () => {
     expect(leaked, 'grants platform staff could reach cross-tenant').toEqual([])
   })
 
-  it('denies every grant in the catalogue even when the foreign resource sits inside the actor\'s named scope', () => {
+  it("denies every grant in the catalogue even when the foreign resource sits inside the actor's named scope", () => {
     // The scope lists the same property id the foreign resource carries. Scope
     // agreement must never be mistaken for tenancy agreement.
     const actor = omnipotentActor({
@@ -109,7 +112,9 @@ describe('tenant isolation across the entire permission catalogue', () => {
       (grant) => authorize(actor, grant, foreignResource()).allowed,
     )
 
-    expect(leaked, 'grants reachable through a colliding property id').toEqual([])
+    expect(leaked, 'grants reachable through a colliding property id').toEqual(
+      [],
+    )
   })
 })
 
@@ -130,7 +135,11 @@ describe('tenant isolation is not defeated by seniority, staff status or ownersh
   it('denies platform staff, who bypass scope but never tenancy', () => {
     const staff = omnipotentActor({ isPlatformStaff: true })
 
-    const decision = authorize(staff, 'platform.organization.view', foreignResource())
+    const decision = authorize(
+      staff,
+      'platform.organization.view',
+      foreignResource(),
+    )
 
     expect(decision).toEqual({ allowed: false, reason: 'cross_organization' })
   })
@@ -162,7 +171,11 @@ describe('tenant isolation is not defeated by seniority, staff status or ownersh
   })
 
   it('reports cross_organization without naming a grant, because the refusal is not about a missing right', () => {
-    const decision = authorize(omnipotentActor(), 'booking.view', foreignResource())
+    const decision = authorize(
+      omnipotentActor(),
+      'booking.view',
+      foreignResource(),
+    )
 
     expect(decision.allowed).toBe(false)
     if (decision.allowed) return
@@ -206,7 +219,9 @@ describe('organization identity is compared exactly', () => {
 
 describe('every entry point into the engine enforces tenant isolation', () => {
   it('returns false from can() for a cross-organization resource', () => {
-    expect(can(omnipotentActor(), 'booking.view', foreignResource())).toBe(false)
+    expect(can(omnipotentActor(), 'booking.view', foreignResource())).toBe(
+      false,
+    )
   })
 
   it('throws AuthorizationError from assertCan() for a cross-organization resource', () => {
@@ -218,7 +233,9 @@ describe('every entry point into the engine enforces tenant isolation', () => {
   it('carries the cross_organization reason on the thrown AuthorizationError', () => {
     try {
       assertCan(omnipotentActor(), 'guest.export', foreignResource())
-      expect.unreachable('assertCan must throw for a cross-organization resource')
+      expect.unreachable(
+        'assertCan must throw for a cross-organization resource',
+      )
     } catch (error) {
       expect(error).toBeInstanceOf(AuthorizationError)
       const authError = error as AuthorizationError
@@ -236,7 +253,10 @@ describe('the tenant check sits above everything except membership', () => {
 
     const decision = authorize(suspended, 'booking.view', foreignResource())
 
-    expect(decision).toEqual({ allowed: false, reason: 'membership_not_active' })
+    expect(decision).toEqual({
+      allowed: false,
+      reason: 'membership_not_active',
+    })
   })
 
   it('reports cross_organization before missing_permission when the actor also lacks the grant', () => {
@@ -248,7 +268,9 @@ describe('the tenant check sits above everything except membership', () => {
   })
 
   it('reports cross_organization before plan_does_not_include when the plan also lacks the feature', () => {
-    const actor = omnipotentActor({ entitlements: new Set<Entitlement>(['core']) })
+    const actor = omnipotentActor({
+      entitlements: new Set<Entitlement>(['core']),
+    })
 
     const decision = authorize(actor, 'site.publish', foreignResource())
 

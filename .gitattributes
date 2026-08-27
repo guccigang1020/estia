@@ -1,0 +1,31 @@
+# Line endings.
+#
+# The repository is uniformly LF and Prettier pins `endOfLine: "lf"`. Windows
+# checkouts would otherwise convert on checkout and convert back on commit,
+# which mostly works until it doesn't — a stray CRLF turns a one-line change
+# into a whole-file diff and buries the actual edit.
+#
+# Normalising here means the rule travels with the repository instead of
+# depending on every developer's local git configuration.
+* text=auto eol=lf
+
+# Binary files must never be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# The frozen legacy product. Kept byte-for-byte as the reference it is, and
+# excluded from diffs so it never drowns a review — it is one 400KB line.
+_reference/** -diff linguist-vendored
+
+# Generated, and noise in review.
+package-lock.json -diff linguist-generated

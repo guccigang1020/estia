@@ -45,7 +45,10 @@ function makeActor(overrides: Partial<Actor> = {}): Actor {
 }
 
 /** An actor holding exactly the listed grants. */
-function actorWith(grants: readonly Grant[], overrides: Partial<Actor> = {}): Actor {
+function actorWith(
+  grants: readonly Grant[],
+  overrides: Partial<Actor> = {},
+): Actor {
   return makeActor({ grants: new Set<Grant>(grants), ...overrides })
 }
 
@@ -70,7 +73,10 @@ describe('membership status', () => {
 
       const decision = authorize(actor, 'booking.view', resource())
 
-      expect(decision).toEqual({ allowed: false, reason: 'membership_not_active' })
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'membership_not_active',
+      })
     },
   )
 
@@ -86,7 +92,9 @@ describe('membership status', () => {
   it('allows an active member holding the grant, so the inactive cases are not passing vacuously', () => {
     const actor = actorWith(['booking.view'], { membershipStatus: 'active' })
 
-    expect(authorize(actor, 'booking.view', resource())).toEqual({ allowed: true })
+    expect(authorize(actor, 'booking.view', resource())).toEqual({
+      allowed: true,
+    })
   })
 
   it('reports membership_not_active without naming a grant, because the person is not an actor at all', () => {
@@ -106,7 +114,11 @@ describe('membership status', () => {
 
 describe('holding the permission', () => {
   it('denies an actor who does not hold the grant, and names the grant that was missing', () => {
-    const decision = authorize(actorWith(['booking.view']), 'booking.cancel', resource())
+    const decision = authorize(
+      actorWith(['booking.view']),
+      'booking.cancel',
+      resource(),
+    )
 
     expect(decision).toEqual({
       allowed: false,
@@ -116,13 +128,19 @@ describe('holding the permission', () => {
   })
 
   it('allows an actor who holds the grant', () => {
-    expect(can(actorWith(['booking.cancel']), 'booking.cancel', resource())).toBe(true)
+    expect(
+      can(actorWith(['booking.cancel']), 'booking.cancel', resource()),
+    ).toBe(true)
   })
 
   it('denies a grant that merely shares a prefix with one the actor holds', () => {
     // `booking.view` must not imply `booking.view_price`. Grants are compared
     // whole, never by prefix.
-    const decision = authorize(actorWith(['booking.view']), 'booking.view_price', resource())
+    const decision = authorize(
+      actorWith(['booking.view']),
+      'booking.view_price',
+      resource(),
+    )
 
     expect(decision).toMatchObject({ reason: 'missing_permission' })
   })
@@ -140,13 +158,19 @@ describe('scope: properties', () => {
   })
 
   it('allows a resource belonging to a listed property', () => {
-    expect(authorize(actor, 'booking.view', resource({ propertyId: 'prop-2' }))).toEqual({
+    expect(
+      authorize(actor, 'booking.view', resource({ propertyId: 'prop-2' })),
+    ).toEqual({
       allowed: true,
     })
   })
 
   it('denies a resource belonging to an unlisted property, out of scope', () => {
-    const decision = authorize(actor, 'booking.view', resource({ propertyId: 'prop-9' }))
+    const decision = authorize(
+      actor,
+      'booking.view',
+      resource({ propertyId: 'prop-9' }),
+    )
 
     expect(decision).toEqual({
       allowed: false,
@@ -162,7 +186,11 @@ describe('scope: properties', () => {
   })
 
   it('denies a resource located only by unit, ignoring the unit as a substitute for the property', () => {
-    const decision = authorize(actor, 'booking.view', resource({ unitId: 'unit-1' }))
+    const decision = authorize(
+      actor,
+      'booking.view',
+      resource({ unitId: 'unit-1' }),
+    )
 
     expect(decision).toMatchObject({ reason: 'out_of_scope' })
   })
@@ -172,7 +200,9 @@ describe('scope: properties', () => {
       scope: { kind: 'properties', propertyIds: [] },
     })
 
-    expect(can(empty, 'booking.view', resource({ propertyId: 'prop-1' }))).toBe(false)
+    expect(can(empty, 'booking.view', resource({ propertyId: 'prop-1' }))).toBe(
+      false,
+    )
   })
 })
 
@@ -186,7 +216,9 @@ describe('scope: units', () => {
   })
 
   it('denies a resource belonging to an unlisted unit, out of scope', () => {
-    expect(authorize(actor, 'task.view', resource({ unitId: 'unit-9' }))).toMatchObject({
+    expect(
+      authorize(actor, 'task.view', resource({ unitId: 'unit-9' })),
+    ).toMatchObject({
       reason: 'out_of_scope',
     })
   })
@@ -226,11 +258,15 @@ describe('scope: own_records', () => {
   const actor = actorWith(['task.view'], { scope: { kind: 'own_records' } })
 
   it('allows a record assigned to the actor', () => {
-    expect(can(actor, 'task.view', resource({ assignedToUserId: USER }))).toBe(true)
+    expect(can(actor, 'task.view', resource({ assignedToUserId: USER }))).toBe(
+      true,
+    )
   })
 
   it('allows a record created by the actor', () => {
-    expect(can(actor, 'task.view', resource({ createdByUserId: USER }))).toBe(true)
+    expect(can(actor, 'task.view', resource({ createdByUserId: USER }))).toBe(
+      true,
+    )
   })
 
   it('denies a record assigned to and created by somebody else', () => {
@@ -249,7 +285,7 @@ describe('scope: own_records', () => {
     })
   })
 
-  it('denies a record located in the actor\'s property but owned by another person', () => {
+  it("denies a record located in the actor's property but owned by another person", () => {
     expect(
       can(
         actor,
@@ -261,10 +297,15 @@ describe('scope: own_records', () => {
 })
 
 describe('scope: all_organization', () => {
-  const actor = actorWith(['booking.view'], { scope: { kind: 'all_organization' } })
+  const actor = actorWith(['booking.view'], {
+    scope: { kind: 'all_organization' },
+  })
 
   const anywhere: ReadonlyArray<{ label: string; res: Resource }> = [
-    { label: 'a resource with no location at all', res: { organizationId: ORG } },
+    {
+      label: 'a resource with no location at all',
+      res: { organizationId: ORG },
+    },
     {
       label: 'a resource in an arbitrary property',
       res: { organizationId: ORG, propertyId: 'prop-anything' },
@@ -323,7 +364,9 @@ describe('a resource with no location is reachable only by an organization-wide 
   )
 
   it('allows an unlocated resource to an actor scoped to the whole organization', () => {
-    const wide = actorWith(['booking.view'], { scope: { kind: 'all_organization' } })
+    const wide = actorWith(['booking.view'], {
+      scope: { kind: 'all_organization' },
+    })
 
     expect(isWithinScope(wide, unlocated)).toBe(true)
   })
@@ -368,7 +411,9 @@ describe('plan entitlements', () => {
   })
 
   it('allows the same actor a core action such as booking.view', () => {
-    expect(authorize(coreOnly, 'booking.view', resource())).toEqual({ allowed: true })
+    expect(authorize(coreOnly, 'booking.view', resource())).toEqual({
+      allowed: true,
+    })
   })
 
   it('denies task.view to an actor whose plan does not include the operations module', () => {
@@ -383,7 +428,9 @@ describe('plan entitlements', () => {
       entitlements: new Set<Entitlement>(['core', 'website']),
     })
 
-    expect(authorize(withWebsite, 'site.publish', resource())).toEqual({ allowed: true })
+    expect(authorize(withWebsite, 'site.publish', resource())).toEqual({
+      allowed: true,
+    })
   })
 
   it('gates a field permission by the plan as well, denying owner.view_commission without the owner portal', () => {
@@ -391,10 +438,12 @@ describe('plan entitlements', () => {
       entitlements: new Set<Entitlement>(['core']),
     })
 
-    expect(authorize(actor, 'owner.view_commission', resource())).toMatchObject({
-      reason: 'plan_does_not_include',
-      entitlement: 'owner_portal',
-    })
+    expect(authorize(actor, 'owner.view_commission', resource())).toMatchObject(
+      {
+        reason: 'plan_does_not_include',
+        entitlement: 'owner_portal',
+      },
+    )
   })
 
   it('denies a plan-gated action to platform staff too, since staff bypass scope only', () => {
@@ -420,7 +469,9 @@ describe('reason precedence when several checks fail at once', () => {
       scope: { kind: 'properties', propertyIds: ['prop-1'] },
     })
 
-    expect(authorize(actor, 'site.publish', { organizationId: 'org-b' })).toEqual({
+    expect(
+      authorize(actor, 'site.publish', { organizationId: 'org-b' }),
+    ).toEqual({
       allowed: false,
       reason: 'membership_not_active',
     })
@@ -444,7 +495,9 @@ describe('reason precedence when several checks fail at once', () => {
       scope: { kind: 'properties', propertyIds: ['prop-1'] },
     })
 
-    expect(authorize(actor, 'booking.view', resource({ propertyId: 'prop-9' }))).toEqual({
+    expect(
+      authorize(actor, 'booking.view', resource({ propertyId: 'prop-9' })),
+    ).toEqual({
       allowed: false,
       reason: 'missing_permission',
       grant: 'booking.view',
@@ -457,7 +510,9 @@ describe('reason precedence when several checks fail at once', () => {
       scope: { kind: 'properties', propertyIds: ['prop-1'] },
     })
 
-    expect(authorize(actor, 'task.view', resource({ propertyId: 'prop-9' }))).toEqual({
+    expect(
+      authorize(actor, 'task.view', resource({ propertyId: 'prop-9' })),
+    ).toEqual({
       allowed: false,
       reason: 'plan_does_not_include',
       grant: 'task.view',
@@ -470,7 +525,9 @@ describe('reason precedence when several checks fail at once', () => {
       scope: { kind: 'properties', propertyIds: ['prop-1'] },
     })
 
-    expect(authorize(actor, 'task.view', resource({ propertyId: 'prop-9' }))).toEqual({
+    expect(
+      authorize(actor, 'task.view', resource({ propertyId: 'prop-9' })),
+    ).toEqual({
       allowed: false,
       reason: 'out_of_scope',
       grant: 'task.view',
@@ -511,11 +568,15 @@ describe('assertCan()', () => {
   it('carries the full decision on the error so a caller can explain the refusal', () => {
     try {
       assertCan(
-        actorWith(['site.publish'], { entitlements: new Set<Entitlement>(['core']) }),
+        actorWith(['site.publish'], {
+          entitlements: new Set<Entitlement>(['core']),
+        }),
         'site.publish',
         resource(),
       )
-      expect.unreachable('assertCan must throw when the plan does not include the feature')
+      expect.unreachable(
+        'assertCan must throw when the plan does not include the feature',
+      )
     } catch (error) {
       const authError = error as AuthorizationError
       expect(authError.name).toBe('AuthorizationError')

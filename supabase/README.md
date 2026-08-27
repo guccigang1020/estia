@@ -1,0 +1,184 @@
+# מיגרציות — ESTIA
+
+התשתית של מסד הנתונים. חמישה קבצים, שרצים לפי הסדר על מסד ריק.
+
+פרויקט Supabase: **`shcauvnepnaemmnvahgy`** (eu-central-1, PostgreSQL 17.6).
+
+| קובץ                | מה בפנים                                                                                                                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `0001_identity.sql` | `organizations` · `user_profiles` · `memberships` · `invitations`, טיפוסי ה-enum המשותפים, וטריגר `version` / `updated_at` |
+| `0002_authz.sql`    | `permissions` · `roles` · `role_permissions` · `membership_roles` · `membership_scopes`, וזריעת 105 ההרשאות ו-18 התפקידים  |
+| `0003_plans.sql`    | `plans` · `organization_subscriptions`, וזריעת ארבע החבילות                                                                |
+| `0004_rls.sql`      | Row Level Security על כל הטבלאות שנוצרו עד כה — פונקציות עזר, מדיניות ואינדקסים                                            |
+| `0005_audit.sql`    | `audit_events` — נספח בלבד, בלי עדכון ובלי מחיקה                                                                           |
+
+**הסדר אינו ניתן להחלפה.** `0004` הוא מה שהופך את המסד לבטוח לחשיפה; עד שהוא רץ, אין בידוד דיירים.
+
+---
+
+## הרצה
+
+מול פרויקט מקושר:
+
+```bash
+supabase db push
+```
+
+ובלי ה-CLI, מול חיבור ישיר — לפי הסדר:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f supabase/migrations/0001_identity.sql \
+  -f supabase/migrations/0002_authz.sql \
+  -f supabase/migrations/0003_plans.sql \
+  -f supabase/migrations/0004_rls.sql \
+  -f supabase/migrations/0005_audit.sql
+```
+
+## איפוס
+
+הקבצים אידמפוטנטיים ואפשר להריץ אותם שוב, אבל לאיפוס אמיתי מוחקים את הסכימה ומחזירים
+את ההרשאות שלה — `create schema public` מחזיר בעלות ל-`postgres` וללא ה-`grant`
+ה-API של Supabase מפסיק לעבוד:
+
+```sql
+drop schema public cascade;
+create schema public;
+alter schema public owner to pg_database_owner;
+grant usage on schema public to public;
+grant usage on schema public to postgres, anon, authenticated, service_role;
+```
+
+ואז מריצים מחדש את חמשת הקבצים לפי הסדר.
+
+## בדיקת הבידוד
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/isolation.sql
+```
+
+הקובץ בונה שני ארגונים ושלושה משתמשים, מתחזה ל-`authenticated` אמיתי
+(`set local role authenticated` + `request.jwt.claims`), ומריץ 52 בדיקות. הכול רץ
+בתוך טרנזקציה אחת שמסתיימת ב-`ROLLBACK` — הוא אינו משאיר שורות. הפלט הוא שורה
+לכל בדיקה ושורת `TOTAL`; כל `passed = false` הוא פגם אבטחה, לא בדיקה רועדת.
+
+הקובץ כולל גם **בקרות חיוביות**: אותן פקודות עצמן, מכוונות לארגון של המשתמש,
+חייבות להשפיע על שורה אחת. בלעדיהן `0 rows` היה יכול לנבוע מהרשאה חסרה ולא מבידוד,
+וכל הבדיקות היו עוברות סרק.
+
+---
+
+## מה נאכף במסד ולא בקוד
+
+- **בידוד דיירים** — כל מדיניות קריאה היא `organization_id IN (SELECT public.my_organizations())`. אין `USING (true)` על נתוני לקוח.
+- **מדיניות נפרדת לכל פקודה** — `select` / `insert` / `update` / `delete` בנפרד, וב-`insert` תמיד `WITH CHECK`.
+- **חברוּת מושעית אינה חברוּת** — `my_organizations()` מחזירה `active` בלבד.
+- **`audit_events` הוא נספח בלבד** — הרשאות `update` ו-`delete` נשללו, וטריגר ברמת ה-statement זורק חריגה. הטריגר הוא ההגנה האמיתית: ל-`service_role` ול-`postgres` יש `BYPASSRLS`, כך ש-RLS לבדו אינו עוצר אותם.
+- **תפקידי פלטפורמה** אינם ניתנים לשיוך לחברות בארגון לקוח, וטריגר אוכף זאת.
+- **הסרת עובד אינה מוחקת היסטוריה** — הסטטוס עובר ל-`removed`.
+
+## ממצאי ה-Linter שנשארו במכוון
+
+שלוש אזהרות `0029_authenticated_security_definer_function_executable` — על
+`my_organizations()`, `has_permission()` ו-`shares_organization_with()`.
+
+הן לא ניתנות לתיקון בלי לשבור את ה-RLS: ביטוי מדיניות מוערך בהרשאות של התפקיד
+השואל, כך שחבר שאין לו `EXECUTE` על `my_organizations()` אינו יכול לקרוא אפילו את
+הארגון שלו — כל מדיניות נופלת ב-`42501` במקום להחזיר אפס שורות. נבדק בפועל.
+
+לעומת זאת `anon` **כן** נשלל: `REVOKE ... FROM PUBLIC` לא הספיק, כי Supabase מעניקה
+ל-`anon` הרשאת `EXECUTE` ישירה דרך `ALTER DEFAULT PRIVILEGES`. ב-`0004` יש
+`REVOKE ... FROM public, anon` מפורש.
+
+## מה עוד לא כאן
+
+`properties`, `units` ו-`teams` יגיעו במיגרציה הבאה. עד אז
+`memberships.default_property_id`, `memberships.team_id`, `audit_events.property_id`
+ומערכי ה-scope הם `uuid` בלי מפתח זר — ההגבלות יתווספו יחד עם הטבלאות.
+
+---
+
+## `0006_idempotency.sql` — ריטריי שלא עולה כסף
+
+שתי פערים שהשכבה שמעל כבר הניחה שסגורים.
+
+**`idempotency_keys`** — האחסון העמיד להזמנת המפתח הדו-שלבית שמתוארת ב-
+`src/lib/service/idempotency.ts`. תשלום שנשלח פעמיים, webhook שנמסר פעמיים וטלפון
+שאיבד קליטה אחרי שהבקשה יצאה — שלושתם אותו אירוע מצד השרת, ושלושתם חייבים להסתיים
+בחיוב אחד.
+
+הכול נשען על אילוץ ייחודיות אחד: `unique (organization_id, operation, key)` —
+בדיוק שלוש עמודות, לא חלקי. `begin()` הוא משפט אחד,
+`insert … on conflict do nothing returning`: או שהשורה נוצרת והקורא מחזיק את
+המפתח, או שלא — ואז `select` באותה טרנזקציה מסווג `mismatch` / `in_flight` /
+`replayed`. אין חלון בין קריאה לכתיבה כי אין קריאה. `select` ואז `insert` היה
+מחזיר בדיוק את התחרות שהטבלה נועדה לסגור.
+
+הטווח הוא `(organization_id, operation, key)` ולעולם לא המפתח לבדו: מפתחות נבחרים
+בידי הלקוח, ושני ארגונים ששולחים `retry-1` הם מקרה רגיל ולא תיאורטי. זהו כלל בידוד
+דיירים בתחפושת, והוא נאכף פעמיים — באילוץ וב-RLS.
+
+הבקשה עצמה אינה נשמרת, רק `fingerprint` (טביעת FNV-1a של 64 ביט כמחרוזת). שורת
+אידמפוטנטיות שורדת את הבקשה בכוונה, ואין סיבה שתחזיק פרטי אורח חודש אחרי.
+
+**תפוגה.** `expires_at` הוא חלון אחד עם שני אורכי חיים: הזמנה מוחזקת שעה, ובעת
+השלמה טריגר `idempotency_keys_extend` מרחיב אותה ל-24 שעות — כדי שריטריי של מחר
+יקבל את התשובה של אתמול ולא יזמין פעמיים. שעה ולא דקות: אילו החוזה היה פג בזמן
+שהפעולה המקורית עדיין רצה, ניסיון שני היה משתלט על המפתח ומחייב את הכרטיס פעמיים.
+תהליך שקרס אינו חוסם את המפתח לנצח, ותיקון אינו ממתין ל-cron: `begin()` יכול
+להשתמש בצורת ההשתלטות (`on conflict … do update … where expires_at <= now()`),
+שהיא עדיין משפט אחד. `purge_expired_idempotency_keys()` רק מפנה מקום, ומיועדת
+לתזמון שעתי דרך pg_cron — היא **אינה** מתוזמנת על ידי המיגרציה, כי הפעלת pg_cron
+היא החלטה תפעולית. הרשאת ההרצה שלה ניתנה ל-`service_role` בלבד.
+
+**`audit_events.on_behalf_of_user_id`** — העמודה ש-`AuditActor` נשא מאז ומעולם.
+בלעדיה "ESTIA כתבה את הכותרת, ודניאל אישר" מתמוטט ל"המערכת עשתה", וזו בדיוק
+התשובה שיומן הביקורת קיים כדי למנוע. `null` הוא המקרה הרגיל, ו-`ON DELETE SET NULL`
+כמו `actor_user_id`: מחיקת חשבון אינה מוחקת את ההיסטוריה שנעשתה בשמו.
+
+מדיניות ה-`insert` של `0005` סירבה לתת לחבר לחתום אירוע בשמו של אחר. `0006` מרחיבה
+את אותו משפט לאישור של אחר: חבר אינו יכול לכתוב "הבעלים אישר". המקרים הלגיטימיים
+נשארים — מי שמאשר טיוטה של ה-AI הוא המחובר (`= auth.uid()`), וסוכן שפועל בתוך
+משימת רקע נכתב ב-`service_role` שממילא עוקף RLS.
+
+### הרצת הבדיקה
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/idempotency.sql
+```
+
+40 בדיקות בטרנזקציה אחת שמסתיימת ב-`ROLLBACK`, בסגנון `isolation.sql` ועם **בקרות
+חיוביות** לכל טענת בידוד. הן מכסות: שתי קריאות `begin` על אותו מפתח (אחת מנצחת,
+השנייה רואה את השורה הקיימת), אותו מפתח בשני ארגונים בלי התנגשות, `fingerprint`
+שונה שמזוהה כ-`mismatch`, הזמנה שהושלמה שמחזירה את התוצאה השמורה, `abandon` שמשחרר
+את המפתח, השתלטות על הזמנה שפגה, ובידוד דיירים מלא (`select` / `insert` / `update`
+/ `delete`). בנוסף היא מוכיחה מחדש שהערבות של `audit_events` שרדה את הוספת העמודה,
+ושאפשר להכניס אירוע עם `on_behalf_of_user_id`.
+
+**מה הבדיקה אינה מוכיחה:** בו-זמניות אמיתית. הכול רץ בטרנזקציה אחת על חיבור אחד,
+כך ששתי ה-`begin` הן משפטים עוקבים. מה שכן מוכח הוא מסלול המפסיד — המשפט השני אינו
+מכניס דבר ונופל לקריאת השורה הקיימת — ובנוסף שהאילוץ עצמו זורק `23505` על כפילות
+גולמית, כלומר המנגנון שטרנזקציה מקבילה הייתה מתנגשת בו.
+
+### ממצאי linter נוספים
+
+`0006` הוסיפה שלושה ממצאי `INFO` מסוג `0001_unindexed_foreign_keys` —
+`idempotency_keys.created_by`, `idempotency_keys.updated_by` ו-
+`audit_events.on_behalf_of_user_id`. הם מתקבלים מאותה סיבה שנרשמה ב-`0004`: איש
+אינו שואל לפיהם, כולם `ON DELETE SET NULL`, והמחיר היחיד הוא מחיקה נדירה של שורה
+ב-`auth.users`. `audit_events.actor_user_id` נמצא באותו מצב בדיוק מאז `0005`.
+
+אזהרת `auth_leaked_password_protection` היא הגדרת Auth ברמת הפרויקט ולא סכימה;
+היא אינה נובעת מ-`0006` ולא שונתה כאן.
+
+### הוספה לסדר ההרצה
+
+`0006` מצטרפת בסוף הרשימה שבראש הקובץ. בהרצה ידנית מוסיפים אותה כשלב אחרון:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f supabase/migrations/0006_idempotency.sql
+```
+
+היא תלויה ב-`0001` (`organizations`, `tg_touch_row`), ב-`0004` (`my_organizations`)
+וב-`0005` (`audit_events`), ואינה משנה דבר בקבצים שלפניה.

@@ -99,7 +99,8 @@ export function diffFields<T extends Record<string, unknown>>(
 
 function isEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
-  if (a === null || b === null || a === undefined || b === undefined) return false
+  if (a === null || b === null || a === undefined || b === undefined)
+    return false
   if (typeof a !== 'object' || typeof b !== 'object') return false
   return JSON.stringify(a) === JSON.stringify(b)
 }

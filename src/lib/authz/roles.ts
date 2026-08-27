@@ -35,7 +35,10 @@ export const SYSTEM_ROLES = [
 export type SystemRole = (typeof SYSTEM_ROLES)[number]
 
 /** Roles held by ESTIA's own staff. Never assignable inside a customer org. */
-export const PLATFORM_ROLES = ['platform_super_admin', 'platform_support'] as const
+export const PLATFORM_ROLES = [
+  'platform_super_admin',
+  'platform_support',
+] as const
 
 export type PlatformRole = (typeof PLATFORM_ROLES)[number]
 

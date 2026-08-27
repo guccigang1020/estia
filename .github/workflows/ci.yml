@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  gate:
+    name: Quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Single source of truth for the version — see .nvmrc and the
+          # "engines" field in package.json.
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Each gate is its own step so a red run names the failure in the job
+      # list, without anyone opening the log. The order matches the charter:
+      # format, lint, typecheck, test, security, build.
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Coverage thresholds
+        run: npm run test:coverage
+
+      - name: Build
+        # The suite and the build are deliberately database-free. These are
+        # placeholders, not secrets: the publishable key is public by design,
+        # and nothing here contacts Supabase. They exist only because
+        # src/lib/env.ts fails fast on a missing variable, which is the
+        # behaviour we want everywhere else.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-not-a-real-key
+        run: npm run build

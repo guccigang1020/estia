@@ -1,0 +1,141 @@
+/**
+ * EXECUTION CONTEXT — PROXY ONLY (`src/proxy.ts`).
+ *
+ * Next.js 16 renamed Middleware to Proxy; the file convention is `proxy.ts`
+ * and the exported function is `proxy`. See
+ * `node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md`.
+ * Proxy runs on the Node.js runtime, so `@supabase/ssr` works here unchanged.
+ *
+ * Why this exists at all
+ * ---------------------
+ * A Supabase access token is short-lived. Something has to spend the refresh
+ * token and write the new pair back as cookies, and it has to happen BEFORE
+ * rendering starts — once Next.js begins streaming a Server Component, no
+ * `Set-Cookie` can be added. That is precisely what a proxy is for, and it is
+ * why `src/lib/supabase/server.ts` is allowed to swallow its cookie-write
+ * error. Remove this and sessions expire silently after an hour.
+ *
+ * The refresh is the load-bearing part. The redirect below it is an
+ * OPTIMISTIC check only — the Next.js authentication guide is explicit that
+ * proxy runs on prefetches too and must not be the only gate. The real gate is
+ * `getCurrentUser()` inside the protected layout, which revalidates the JWT
+ * against the auth server.
+ */
+
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+
+import { env } from '@/lib/env'
+
+/** Paths a signed-out visitor may reach. Everything else needs a session. */
+const PUBLIC_PREFIXES = [
+  '/', // the marketing home page
+  '/sign-in',
+  '/sign-up',
+  '/magic-link',
+  '/forgot-password',
+  '/reset-password',
+  '/auth', // the callback route handler
+]
+
+/** Auth screens a signed-in visitor should be moved off. */
+const GUEST_ONLY_PREFIXES = [
+  '/sign-in',
+  '/sign-up',
+  '/magic-link',
+  '/forgot-password',
+]
+
+/** Where a signed-in user lands when they have no better destination. */
+export const AFTER_SIGN_IN = '/account'
+
+/** Where a signed-out user is sent from a protected route. */
+export const SIGN_IN_PATH = '/sign-in'
+
+function matches(pathname: string, prefixes: string[]) {
+  return prefixes.some(
+    (prefix) =>
+      pathname === prefix ||
+      (prefix !== '/' && pathname.startsWith(`${prefix}/`)),
+  )
+}
+
+/**
+ * Refreshes the session and applies the optimistic redirects.
+ *
+ * The response object is rebuilt inside `setAll` rather than mutated at the
+ * end, because the refreshed cookies must be visible both to the outgoing
+ * response (so the browser stores them) and to `request.cookies` (so the
+ * render that follows in this same pass reads the NEW token, not the expired
+ * one it arrived with).
+ */
+export async function updateSession(request: NextRequest) {
+  let response = NextResponse.next({ request })
+
+  const supabase = createServerClient(
+    env.supabaseUrl,
+    env.supabasePublishableKey,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet, headers) {
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value)
+          }
+          response = NextResponse.next({ request })
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options)
+          }
+          // `Cache-Control: private, no-store` and friends. A response that
+          // carries a rotated session token must never be cached by a CDN, or a
+          // second visitor is handed the first one's session.
+          for (const [key, value] of Object.entries(headers)) {
+            response.headers.set(key, value)
+          }
+        },
+      },
+    },
+  )
+
+  // Must be awaited before any response is returned: this is the call that
+  // triggers the refresh and therefore the `setAll` above.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const { pathname, search } = request.nextUrl
+
+  if (!user && !matches(pathname, PUBLIC_PREFIXES)) {
+    const url = request.nextUrl.clone()
+    url.pathname = SIGN_IN_PATH
+    url.search = ''
+    // Remember where they were headed so sign-in can finish the journey.
+    url.searchParams.set('next', `${pathname}${search}`)
+    return copyCookies(response, NextResponse.redirect(url))
+  }
+
+  if (user && matches(pathname, GUEST_ONLY_PREFIXES)) {
+    const url = request.nextUrl.clone()
+    url.pathname = AFTER_SIGN_IN
+    url.search = ''
+    return copyCookies(response, NextResponse.redirect(url))
+  }
+
+  return response
+}
+
+/**
+ * A redirect is a different response object, so any cookie the refresh just
+ * wrote has to be carried across. Dropping them here is the well-known way to
+ * build an infinite redirect loop: the session is refreshed, thrown away, and
+ * the next request arrives signed out again.
+ */
+function copyCookies(from: NextResponse, to: NextResponse) {
+  for (const cookie of from.cookies.getAll()) {
+    to.cookies.set(cookie)
+  }
+  to.headers.set('Cache-Control', 'private, no-store')
+  return to
+}

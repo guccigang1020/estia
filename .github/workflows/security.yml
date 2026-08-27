@@ -1,0 +1,33 @@
+name: Security invariants
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  invariants:
+    name: Secret and privilege invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # No `npm ci`. The guard is dependency-free on purpose, so this job
+      # stays fast and keeps reporting even when the dependency tree is
+      # broken — which is exactly when a bad commit is most likely to slip in.
+      - name: Check secret and privilege invariants
+        run: node .github/scripts/check-secrets.mjs

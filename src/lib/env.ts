@@ -25,6 +25,21 @@ export const env = {
     'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   ),
+  /**
+   * The canonical origin of this deployment.
+   *
+   * Every link we email — confirmation, magic link, password reset — is built
+   * from this and from nothing else. Deriving it from the incoming request
+   * would let a caller choose the `Host` header and therefore choose where a
+   * recovery link points; Supabase's redirect allow-list would catch it, but a
+   * security-critical URL should not depend on a header a stranger controls.
+   *
+   * No trailing slash, so callers can concatenate a path without doubling it.
+   */
+  siteUrl: required(
+    'NEXT_PUBLIC_SITE_URL',
+    process.env.NEXT_PUBLIC_SITE_URL,
+  ).replace(/\/+$/, ''),
 } as const
 
 /**
@@ -39,5 +54,8 @@ export function serviceRoleKey(): string {
   if (typeof window !== 'undefined') {
     throw new Error('The service role key must never be read in the browser.')
   }
-  return required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY)
+  return required(
+    'SUPABASE_SERVICE_ROLE_KEY',
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+  )
 }

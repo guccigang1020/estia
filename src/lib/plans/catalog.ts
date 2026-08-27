@@ -36,7 +36,8 @@ export const SEED_PLANS: readonly SeedPlan[] = [
   {
     code: 'basic',
     name: 'Basic',
-    description: 'ניהול צימר או וילה בודדת — הזמנות, יומן, חוזה, תשלומים וחשבוניות.',
+    description:
+      'ניהול צימר או וילה בודדת — הזמנות, יומן, חוזה, תשלומים וחשבוניות.',
     monthlyPrice: 14900,
     yearlyPrice: yearly(14900),
     limits: { properties: 1, units: 2, members: 2, storageGb: 2 },

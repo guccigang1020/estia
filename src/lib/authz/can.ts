@@ -25,11 +25,7 @@ import { ENTITLEMENT_FOR_GRANT } from '../plans/entitlements'
 // ── Inputs ────────────────────────────────────────────────────────────────
 
 export type MembershipStatus =
-  | 'invited'
-  | 'pending'
-  | 'active'
-  | 'suspended'
-  | 'removed'
+  'invited' | 'pending' | 'active' | 'suspended' | 'removed'
 
 /**
  * Where a membership's permissions apply.
@@ -164,7 +160,12 @@ export function authorize(
 
   const entitlement = missingEntitlementFor(actor, grant)
   if (entitlement) {
-    return { allowed: false, reason: 'plan_does_not_include', grant, entitlement }
+    return {
+      allowed: false,
+      reason: 'plan_does_not_include',
+      grant,
+      entitlement,
+    }
   }
 
   if (resource && !isWithinScope(actor, resource)) {

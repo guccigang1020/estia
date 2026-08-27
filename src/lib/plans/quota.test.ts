@@ -41,7 +41,12 @@ function limitFor(key: QuotaKey, value: number | null): PlanLimits {
   return { ...PRO_LIMITS, [key]: value }
 }
 
-const ALL_KEYS: readonly QuotaKey[] = ['properties', 'units', 'members', 'storageGb']
+const ALL_KEYS: readonly QuotaKey[] = [
+  'properties',
+  'units',
+  'members',
+  'storageGb',
+]
 
 // ── Unlimited ─────────────────────────────────────────────────────────────
 
@@ -64,7 +69,9 @@ describe('an unlimited allowance', () => {
   })
 
   it('never blocks an action on an unlimited allowance, even for a blocking key', () => {
-    expect(isBlockedByQuota(checkQuota('members', 10_000, UNLIMITED))).toBe(false)
+    expect(isBlockedByQuota(checkQuota('members', 10_000, UNLIMITED))).toBe(
+      false,
+    )
   })
 })
 
@@ -105,14 +112,22 @@ describe('the three states of a limited allowance', () => {
 describe('the approaching warning', () => {
   it('warns once the customer reaches 80 percent of the allowance', () => {
     // Ten members: the warning is due at eight.
-    expect(checkQuota('members', 8, limits({ members: 10 })).approaching).toBe(true)
+    expect(checkQuota('members', 8, limits({ members: 10 })).approaching).toBe(
+      true,
+    )
   })
 
   it('stays quiet just below 80 percent of the allowance', () => {
-    expect(checkQuota('members', 7, limits({ members: 10 })).approaching).toBe(false)
+    expect(checkQuota('members', 7, limits({ members: 10 })).approaching).toBe(
+      false,
+    )
   })
 
-  const ratios: ReadonlyArray<{ limit: number; current: number; expected: boolean }> = [
+  const ratios: ReadonlyArray<{
+    limit: number
+    current: number
+    expected: boolean
+  }> = [
     { limit: 15, current: 11, expected: false },
     { limit: 15, current: 12, expected: true },
     { limit: 15, current: 15, expected: true },
@@ -125,9 +140,9 @@ describe('the approaching warning', () => {
   it.each(ratios)(
     'reports approaching=$expected at $current of $limit',
     ({ limit, current, expected }) => {
-      expect(checkQuota('units', current, limits({ units: limit })).approaching).toBe(
-        expected,
-      )
+      expect(
+        checkQuota('units', current, limits({ units: limit })).approaching,
+      ).toBe(expected)
     },
   )
 
@@ -141,7 +156,7 @@ describe('the approaching warning', () => {
 
 // ── The commercial guarantee ──────────────────────────────────────────────
 
-describe('overage never stops the day\'s work', () => {
+describe("overage never stops the day's work", () => {
   it('does not block a business that is over its unit allowance', () => {
     const state = checkQuota('units', 20, PRO_LIMITS)
 
@@ -184,9 +199,12 @@ describe('overage never stops the day\'s work', () => {
     expect(isBlockedByQuota(state)).toBe(blocks)
   })
 
-  it.each(ALL_KEYS)('never blocks "%s" while the customer is within the limit', (key) => {
-    expect(isBlockedByQuota(checkQuota(key, 1, PRO_LIMITS))).toBe(false)
-  })
+  it.each(ALL_KEYS)(
+    'never blocks "%s" while the customer is within the limit',
+    (key) => {
+      expect(isBlockedByQuota(checkQuota(key, 1, PRO_LIMITS))).toBe(false)
+    },
+  )
 
   it.each(ALL_KEYS)(
     'never blocks "%s" merely because the limit is being approached',
@@ -201,7 +219,9 @@ describe('overage never stops the day\'s work', () => {
 
 describe('the blocking table', () => {
   it('states a decision for every quota key, so a new limit cannot default silently', () => {
-    expect(Object.keys(QUOTA_BLOCKS_ACTION).sort()).toEqual([...ALL_KEYS].sort())
+    expect(Object.keys(QUOTA_BLOCKS_ACTION).sort()).toEqual(
+      [...ALL_KEYS].sort(),
+    )
   })
 
   it('leaves the two growth limits non-blocking', () => {
@@ -239,8 +259,12 @@ describe('edges of the allowance arithmetic', () => {
   })
 
   it('treats a limit of one as crossed only at two', () => {
-    expect(checkQuota('properties', 1, limits({ properties: 1 })).inOverage).toBe(false)
-    expect(checkQuota('properties', 2, limits({ properties: 1 })).inOverage).toBe(true)
+    expect(
+      checkQuota('properties', 1, limits({ properties: 1 })).inOverage,
+    ).toBe(false)
+    expect(
+      checkQuota('properties', 2, limits({ properties: 1 })).inOverage,
+    ).toBe(true)
   })
 
   it('reports a limit of zero as immediately approached but not exceeded at zero', () => {

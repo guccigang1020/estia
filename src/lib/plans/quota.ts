@@ -57,7 +57,8 @@ export function checkQuota(
     limit,
     withinLimit,
     inOverage: !withinLimit,
-    approaching: withinLimit && current >= Math.floor(limit * APPROACHING_RATIO),
+    approaching:
+      withinLimit && current >= Math.floor(limit * APPROACHING_RATIO),
   }
 }
 

@@ -1,5 +1,5 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -7,163 +7,163 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { cn } from "@/components/ui/cn";
+} from '@/components/ui/card'
+import { cn } from '@/components/ui/cn'
 
 /* The one layout measure the page repeats. The width itself is a theme token
    (`max-w-shell`), so only the gutter rhythm lives here. */
-const SHELL = "mx-auto w-full max-w-shell px-5 sm:px-8 lg:px-10";
+const SHELL = 'mx-auto w-full max-w-shell px-5 sm:px-8 lg:px-10'
 
 /* -------------------------------------------------------------- content -- */
 
 type Capability = {
-  title: string;
-  body: string;
-  icon: keyof typeof ICON_PATHS;
-};
+  title: string
+  body: string
+  icon: keyof typeof ICON_PATHS
+}
 
 const CAPABILITIES: Capability[] = [
   {
-    icon: "calendar",
-    title: "יומן והזמנות",
-    body: "לוח שנה עברי עם חגים ומועדים, הזמנות שלא מתנגשות, וצ׳ק-אין שלא תלוי בזיכרון של אף אחד.",
+    icon: 'calendar',
+    title: 'יומן והזמנות',
+    body: 'לוח שנה עברי עם חגים ומועדים, הזמנות שלא מתנגשות, וצ׳ק-אין שלא תלוי בזיכרון של אף אחד.',
   },
   {
-    icon: "globe",
-    title: "אתר שמייצר הכנסה",
-    body: "אתר עסקי עם הזמנה ישירה. כל הזמנה שלא עוברת דרך ערוץ חיצוני היא עמלה שנשארת אצלך.",
+    icon: 'globe',
+    title: 'אתר שמייצר הכנסה',
+    body: 'אתר עסקי עם הזמנה ישירה. כל הזמנה שלא עוברת דרך ערוץ חיצוני היא עמלה שנשארת אצלך.',
   },
   {
-    icon: "payment",
-    title: "כסף וניירת",
-    body: "סליקה, פיקדון והחזרים, חוזה חתום דיגיטלית, וחשבונית אוטומטית לכל תשלום.",
+    icon: 'payment',
+    title: 'כסף וניירת',
+    body: 'סליקה, פיקדון והחזרים, חוזה חתום דיגיטלית, וחשבונית אוטומטית לכל תשלום.',
   },
   {
-    icon: "team",
-    title: "צוות ותפעול",
-    body: "שיבוצי ניקיון, משימות ותחזוקה, ותפקידים שנאכפים בשרת — לא בהסתרת כפתור.",
+    icon: 'team',
+    title: 'צוות ותפעול',
+    body: 'שיבוצי ניקיון, משימות ותחזוקה, ותפקידים שנאכפים בשרת — לא בהסתרת כפתור.',
   },
-];
+]
 
 type PackageCard = {
-  id: string;
-  name: string;
-  tagline: string;
-  price: string;
-  capacity: string;
-  inherits: string | null;
-  features: string[];
-  featured?: boolean;
-  note?: string;
-};
+  id: string
+  name: string
+  tagline: string
+  price: string
+  capacity: string
+  inherits: string | null
+  features: string[]
+  featured?: boolean
+  note?: string
+}
 
 const PACKAGES: PackageCard[] = [
   {
-    id: "basic",
-    name: "Basic",
-    tagline: "ניהול בלבד",
-    price: "149",
-    capacity: "נכס אחד · 2 יחידות · 2 משתמשים",
+    id: 'basic',
+    name: 'Basic',
+    tagline: 'ניהול בלבד',
+    price: '149',
+    capacity: 'נכס אחד · 2 יחידות · 2 משתמשים',
     inherits: null,
     features: [
-      "הזמנות, אורחים ויומן עברי",
-      "עמוד אורח, חוזה וחתימה דיגיטלית",
-      "סליקה, פיקדון והחזרים",
-      "חשבוניות אוטומטיות ותבניות WhatsApp",
+      'הזמנות, אורחים ויומן עברי',
+      'עמוד אורח, חוזה וחתימה דיגיטלית',
+      'סליקה, פיקדון והחזרים',
+      'חשבוניות אוטומטיות ותבניות WhatsApp',
     ],
   },
   {
-    id: "direct",
-    name: "Direct",
-    tagline: "ניהול + אתר",
-    price: "299",
-    capacity: "נכס אחד · 4 יחידות · 3 משתמשים",
-    inherits: "Basic",
+    id: 'direct',
+    name: 'Direct',
+    tagline: 'ניהול + אתר',
+    price: '299',
+    capacity: 'נכס אחד · 4 יחידות · 3 משתמשים',
+    inherits: 'Basic',
     featured: true,
     features: [
-      "אתר עסקי עם SEO",
-      "הזמנה ישירה באתר, בלי עמלת ערוץ",
-      "תוכן שיווקי שנכתב ב-AI",
-      "תת-דומיין משלך",
+      'אתר עסקי עם SEO',
+      'הזמנה ישירה באתר, בלי עמלת ערוץ',
+      'תוכן שיווקי שנכתב ב-AI',
+      'תת-דומיין משלך',
     ],
-    note: "הזמנה ישירה אחת של ₪2,000 חוסכת כ-₪300 עמלה. החבילה מחזירה את עצמה בהזמנה אחת בחודש.",
+    note: 'הזמנה ישירה אחת של ₪2,000 חוסכת כ-₪300 עמלה. החבילה מחזירה את עצמה בהזמנה אחת בחודש.',
   },
   {
-    id: "pro",
-    name: "Pro",
-    tagline: "מתחמים",
-    price: "649",
-    capacity: "5 נכסים · 15 יחידות · 10 משתמשים",
-    inherits: "Direct",
+    id: 'pro',
+    name: 'Pro',
+    tagline: 'מתחמים',
+    price: '649',
+    capacity: '5 נכסים · 15 יחידות · 10 משתמשים',
+    inherits: 'Direct',
     features: [
-      "יומן רב-יחידתי",
-      "צוות, תפקידים ושיבוצים",
-      "ניקיון, משימות ותחזוקה",
-      "ערוצי הפצה ותמחור דינמי",
+      'יומן רב-יחידתי',
+      'צוות, תפקידים ושיבוצים',
+      'ניקיון, משימות ותחזוקה',
+      'ערוצי הפצה ותמחור דינמי',
     ],
   },
   {
-    id: "management",
-    name: "Management",
-    tagline: "חברות ניהול",
-    price: "1,490",
-    capacity: "25 נכסים · 60 יחידות · משתמשים ללא הגבלה",
-    inherits: "Pro",
+    id: 'management',
+    name: 'Management',
+    tagline: 'חברות ניהול',
+    price: '1,490',
+    capacity: '25 נכסים · 60 יחידות · משתמשים ללא הגבלה',
+    inherits: 'Pro',
     features: [
-      "פורטל בעלי נכסים",
-      "דוחות בעלים ועמלות",
-      "אישורים, תקלות ומלאי",
-      "תפקידים מותאמים וריבוי מותגים",
+      'פורטל בעלי נכסים',
+      'דוחות בעלים ועמלות',
+      'אישורים, תקלות ומלאי',
+      'תפקידים מותאמים וריבוי מותגים',
     ],
   },
-];
+]
 
 const STEPS = [
   {
-    title: "14 יום ניסיון",
-    body: "בלי כרטיס אשראי. מקימים נכס, מזינים הזמנה אמיתית, ורואים אם זה מתאים.",
+    title: '14 יום ניסיון',
+    body: 'בלי כרטיס אשראי. מקימים נכס, מזינים הזמנה אמיתית, ורואים אם זה מתאים.',
   },
   {
-    title: "אשף הקמת אתר",
-    body: "חינם בכל חבילה שכוללת אתר. האתר עולה לאוויר עם תוכן ותמונות — לא כשלד ריק.",
+    title: 'אשף הקמת אתר',
+    body: 'חינם בכל חבילה שכוללת אתר. האתר עולה לאוויר עם תוכן ותמונות — לא כשלד ריק.',
   },
   {
-    title: "מחיר נעול",
-    body: "לקוחות מוקדמים נועלים את המחיר שלהם לתמיד, גם כשהמחירון יעלה.",
+    title: 'מחיר נעול',
+    body: 'לקוחות מוקדמים נועלים את המחיר שלהם לתמיד, גם כשהמחירון יעלה.',
   },
-];
+]
 
 /* ---------------------------------------------------------------- icons -- */
 
 const ICON_PATHS = {
   calendar: [
-    "M8 2.5v4M16 2.5v4M3.5 10.5h17",
-    "M5.5 4.5h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z",
+    'M8 2.5v4M16 2.5v4M3.5 10.5h17',
+    'M5.5 4.5h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z',
   ],
   globe: [
-    "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z",
-    "M3.6 9.2h16.8M3.6 14.8h16.8",
-    "M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9",
-    "M12 3c-2.4 2.6-3.6 5.6-3.6 9s1.2 6.4 3.6 9",
+    'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
+    'M3.6 9.2h16.8M3.6 14.8h16.8',
+    'M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9',
+    'M12 3c-2.4 2.6-3.6 5.6-3.6 9s1.2 6.4 3.6 9',
   ],
   payment: [
-    "M3 7.5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z",
-    "M3 10.5h18M6.5 15h4",
+    'M3 7.5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z',
+    'M3 10.5h18M6.5 15h4',
   ],
   team: [
-    "M15.5 20v-1.5a3.5 3.5 0 0 0-3.5-3.5H7a3.5 3.5 0 0 0-3.5 3.5V20",
-    "M9.5 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z",
-    "M20.5 20v-1.5a3.5 3.5 0 0 0-2.7-3.4",
-    "M15.5 4.7a3.5 3.5 0 0 1 0 6.6",
+    'M15.5 20v-1.5a3.5 3.5 0 0 0-3.5-3.5H7a3.5 3.5 0 0 0-3.5 3.5V20',
+    'M9.5 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+    'M20.5 20v-1.5a3.5 3.5 0 0 0-2.7-3.4',
+    'M15.5 4.7a3.5 3.5 0 0 1 0 6.6',
   ],
-} as const;
+} as const
 
 function Icon({
   name,
   className,
 }: {
-  name: keyof typeof ICON_PATHS;
-  className?: string;
+  name: keyof typeof ICON_PATHS
+  className?: string
 }) {
   return (
     <svg
@@ -181,7 +181,7 @@ function Icon({
         <path key={d} d={d} />
       ))}
     </svg>
-  );
+  )
 }
 
 function CheckIcon() {
@@ -199,7 +199,7 @@ function CheckIcon() {
     >
       <path d="m4 10.5 4 4 8-9" />
     </svg>
-  );
+  )
 }
 
 /* ----------------------------------------------------------------- page -- */
@@ -215,7 +215,7 @@ export default function Home() {
       </a>
 
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
-        <div className={cn(SHELL, "flex h-16 items-center justify-between")}>
+        <div className={cn(SHELL, 'flex h-16 items-center justify-between')}>
           <span className="flex items-center gap-2.5">
             <span
               aria-hidden="true"
@@ -244,7 +244,7 @@ export default function Home() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(75%_60%_at_70%_0%,var(--color-primary-soft),transparent_70%)]"
           />
-          <div className={cn(SHELL, "relative py-16 sm:py-24 lg:py-32")}>
+          <div className={cn(SHELL, 'relative py-16 sm:py-24 lg:py-32')}>
             <Badge tone="accent">14 יום ניסיון · בלי כרטיס אשראי</Badge>
 
             <h1 id="hero-title" className="mt-6">
@@ -279,7 +279,7 @@ export default function Home() {
             <p className="mt-8 max-w-prose text-sm text-muted-foreground">
               <span className="font-semibold text-accent-strong">
                 אין עמלה על תשלומים.
-              </span>{" "}
+              </span>{' '}
               כל עסק מחבר את חשבון הסליקה שלו, והכסף עובר ישירות אליו.
             </p>
           </div>
@@ -291,7 +291,7 @@ export default function Home() {
           aria-labelledby="capabilities-title"
           className="scroll-mt-20 border-b border-border bg-muted/40"
         >
-          <div className={cn(SHELL, "py-16 sm:py-20 lg:py-24")}>
+          <div className={cn(SHELL, 'py-16 sm:py-20 lg:py-24')}>
             <h2
               id="capabilities-title"
               className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
@@ -327,7 +327,7 @@ export default function Home() {
           aria-labelledby="packages-title"
           className="scroll-mt-20 border-b border-border"
         >
-          <div className={cn(SHELL, "py-16 sm:py-20 lg:py-24")}>
+          <div className={cn(SHELL, 'py-16 sm:py-20 lg:py-24')}>
             <h2
               id="packages-title"
               className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
@@ -343,8 +343,8 @@ export default function Home() {
               {PACKAGES.map((pkg) => (
                 <li key={pkg.id} className="flex">
                   <Card
-                    tone={pkg.featured ? "featured" : "default"}
-                    className={cn("w-full", pkg.featured && "xl:-mt-4")}
+                    tone={pkg.featured ? 'featured' : 'default'}
+                    className={cn('w-full', pkg.featured && 'xl:-mt-4')}
                   >
                     <CardHeader>
                       <span className="flex flex-wrap items-center gap-2">
@@ -379,7 +379,7 @@ export default function Home() {
                       <p className="text-xs font-semibold text-foreground">
                         {pkg.inherits
                           ? `כל מה שבחבילת ${pkg.inherits}, ובנוסף:`
-                          : "כל מה שצריך כדי לנהל צימר בודד:"}
+                          : 'כל מה שצריך כדי לנהל צימר בודד:'}
                       </p>
                       <ul className="mt-3 flex flex-col gap-2.5">
                         {pkg.features.map((feature) => (
@@ -419,7 +419,7 @@ export default function Home() {
           aria-labelledby="start-title"
           className="scroll-mt-20"
         >
-          <div className={cn(SHELL, "py-16 sm:py-20 lg:py-24")}>
+          <div className={cn(SHELL, 'py-16 sm:py-20 lg:py-24')}>
             <h2
               id="start-title"
               className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
@@ -461,7 +461,7 @@ export default function Home() {
         <div
           className={cn(
             SHELL,
-            "flex flex-col gap-3 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
+            'flex flex-col gap-3 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between',
           )}
         >
           <span dir="ltr" className="font-display font-bold tracking-[0.22em]">
@@ -471,5 +471,5 @@ export default function Home() {
         </div>
       </footer>
     </>
-  );
+  )
 }
