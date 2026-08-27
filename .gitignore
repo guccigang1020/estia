@@ -1,0 +1,19 @@
+# תלויות
+node_modules/
+
+# משתני סביבה — מפתחות סודיים, לעולם לא נכנסים ל-git
+.env
+.env.*
+!.env.example
+
+# קבצי בנייה
+dist/
+build/
+.vercel/
+.next/
+
+# מערכת הפעלה / עורך
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
