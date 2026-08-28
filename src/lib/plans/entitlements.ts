@@ -24,6 +24,7 @@ export const ENTITLEMENTS = [
   'channels', // Airbnb / Booking.com synchronisation
   'dynamic_pricing',
   'owner_portal', // external property owners and their statements
+  'agent_network', // external sales agents, agencies, commissions and payouts
   'approvals',
   'automation',
   'custom_roles',
@@ -88,6 +89,35 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   'owner_statement.view': 'owner_portal',
   'owner_statement.issue': 'owner_portal',
   'owner.view_commission': 'owner_portal',
+
+  // Agent network
+  //
+  // Only the grants that exist because external sellers do. The tools an agent
+  // happens to use — availability, holds, quotes, leads, payment links — are
+  // deliberately absent from this map: a single-cabin owner on the cheapest
+  // package holds a room for a telephone caller and sends them a quote, and
+  // charging for that would be gating the core product behind an add-on.
+  //
+  // The agent and net rates are here, though. They are not prices that exist
+  // in a business without a network to sell through.
+  'agent.view': 'agent_network',
+  'agent.invite': 'agent_network',
+  'agent.manage': 'agent_network',
+  'agent.scope.manage': 'agent_network',
+  'agency.manage': 'agent_network',
+  'agent_agreement.view': 'agent_network',
+  'agent_agreement.manage': 'agent_network',
+  'agent_limits.manage': 'agent_network',
+  'agent_booking.approve': 'agent_network',
+  'agent.audit.view': 'agent_network',
+  'commission.view': 'agent_network',
+  'commission.approve': 'agent_network',
+  'commission.payout': 'agent_network',
+  'agent_statement.view': 'agent_network',
+  'agent_statement.issue': 'agent_network',
+  'report.agent.view': 'agent_network',
+  'rate.view_agent': 'agent_network',
+  'rate.view_net': 'agent_network',
 
   // Governance
   'approval.request': 'approvals',

@@ -458,6 +458,285 @@ describe('plan entitlements', () => {
   })
 })
 
+// ── The agent network is a paid capability ────────────────────────────────
+
+describe('the agent network as a plan feature', () => {
+  /** Holds every agent right, in an organization that never bought the network. */
+  const withoutTheNetwork = actorWith(
+    [
+      'agent.view',
+      'agent.manage',
+      'agent.invite',
+      'agent.scope.manage',
+      'agency.manage',
+      'agent_agreement.view',
+      'agent_agreement.manage',
+      'agent_limits.manage',
+      'agent_booking.approve',
+      'agent.audit.view',
+      'commission.view',
+      'commission.approve',
+      'commission.payout',
+      'agent_statement.view',
+      'agent_statement.issue',
+      'report.agent.view',
+      'rate.view_agent',
+      'rate.view_net',
+      // Core selling tools, held by the same actor.
+      'booking.view',
+      'availability.view',
+      'hold.create',
+      'quote.create',
+      'quote.send',
+      'lead.create',
+      'rate.view_public',
+      'payment.request_link',
+    ],
+    { entitlements: new Set<Entitlement>(['core']) },
+  )
+
+  const gatedGrants: readonly Grant[] = [
+    'agent.view',
+    'agent.manage',
+    'agent.invite',
+    'agent.scope.manage',
+    'agency.manage',
+    'agent_agreement.view',
+    'agent_agreement.manage',
+    'agent_limits.manage',
+    'agent_booking.approve',
+    'agent.audit.view',
+    'commission.view',
+    'commission.approve',
+    'commission.payout',
+    'agent_statement.view',
+    'agent_statement.issue',
+    'report.agent.view',
+    'rate.view_agent',
+    'rate.view_net',
+  ]
+
+  it.each(gatedGrants)(
+    'refuses "%s" with plan_does_not_include when the organization has no agent network',
+    (grant) => {
+      expect(authorize(withoutTheNetwork, grant, resource())).toEqual({
+        allowed: false,
+        reason: 'plan_does_not_include',
+        grant,
+        entitlement: 'agent_network',
+      })
+    },
+  )
+
+  const coreSelling: readonly Grant[] = [
+    'booking.view',
+    'availability.view',
+    'hold.create',
+    'quote.create',
+    'quote.send',
+    'lead.create',
+    'rate.view_public',
+    'payment.request_link',
+  ]
+
+  it.each(coreSelling)(
+    'still allows "%s", because a business holds a room and sends a quote without buying anything',
+    (grant) => {
+      expect(authorize(withoutTheNetwork, grant, resource())).toEqual({
+        allowed: true,
+      })
+    },
+  )
+
+  it('allows the same agent actions once the organization buys the network', () => {
+    const withTheNetwork = actorWith(
+      ['agent.manage', 'commission.approve', 'rate.view_net'],
+      { entitlements: new Set<Entitlement>(['core', 'agent_network']) },
+    )
+
+    expect(authorize(withTheNetwork, 'agent.manage', resource())).toEqual({
+      allowed: true,
+    })
+    expect(authorize(withTheNetwork, 'commission.approve', resource())).toEqual(
+      {
+        allowed: true,
+      },
+    )
+    expect(authorize(withTheNetwork, 'rate.view_net', resource())).toEqual({
+      allowed: true,
+    })
+  })
+
+  it('withholds the agent and net rates from a record as well as refusing the action, so the two cannot disagree', () => {
+    const row = {
+      id: 'u-1',
+      publicRate: 90_000,
+      agentRate: 81_000,
+      netRate: 72_000,
+    }
+
+    const result = redact(withoutTheNetwork, row, [
+      { key: 'publicRate', requires: 'rate.view_public' },
+      { key: 'agentRate', requires: 'rate.view_agent' },
+      { key: 'netRate', requires: 'rate.view_net' },
+    ])
+
+    expect(result.publicRate).toBe(90_000)
+    expect(result).not.toHaveProperty('agentRate')
+    expect(result).not.toHaveProperty('netRate')
+  })
+})
+
+// ── The rate ladder, at the level of a single grant ───────────────────────
+
+describe('the three rates are three separate grants', () => {
+  it('does not let the public rate imply the agent rate', () => {
+    const actor = actorWith(['rate.view_public'])
+
+    expect(can(actor, 'rate.view_public', resource())).toBe(true)
+    expect(authorize(actor, 'rate.view_agent', resource())).toMatchObject({
+      reason: 'missing_permission',
+      grant: 'rate.view_agent',
+    })
+  })
+
+  it('does not let the agent rate imply the net rate', () => {
+    const actor = actorWith(['rate.view_public', 'rate.view_agent'])
+
+    expect(can(actor, 'rate.view_agent', resource())).toBe(true)
+    expect(authorize(actor, 'rate.view_net', resource())).toMatchObject({
+      reason: 'missing_permission',
+      grant: 'rate.view_net',
+    })
+  })
+
+  it('shows a seller the two rates they hold and hides the third from the same record', () => {
+    const seller = actorWith(['rate.view_public', 'rate.view_agent'])
+    const row = {
+      unit: 'Suite 2',
+      publicRate: 90_000,
+      agentRate: 81_000,
+      netRate: 72_000,
+    }
+
+    const result = redact(seller, row, [
+      { key: 'publicRate', requires: 'rate.view_public' },
+      { key: 'agentRate', requires: 'rate.view_agent' },
+      { key: 'netRate', requires: 'rate.view_net' },
+    ])
+
+    expect(result.publicRate).toBe(90_000)
+    expect(result.agentRate).toBe(81_000)
+    expect(result).not.toHaveProperty('netRate')
+  })
+})
+
+// ── What an external seller is handed when they look at a booking ─────────
+
+describe('the booking row an external seller receives', () => {
+  interface AgentBookingRow {
+    id: string
+    unitName: string
+    checkIn: string
+    guestName?: string
+    guestPhone?: string
+    guestEmail?: string
+    amountPaid?: number
+    paymentStatus?: string
+    source?: string
+    internalNotes?: string
+  }
+
+  const row: AgentBookingRow = {
+    id: 'bk-9',
+    unitName: 'Suite 2',
+    checkIn: '2026-09-01',
+    guestName: 'דניאל כהן',
+    guestPhone: '050-0000000',
+    guestEmail: 'daniel@example.com',
+    amountPaid: 145_000,
+    paymentStatus: 'deposit_paid',
+    source: 'agent',
+    internalNotes: 'Repeat guest, complained about the boiler last time.',
+  }
+
+  const fields = [
+    { key: 'guestName', requires: 'guest.view_name' },
+    { key: 'guestPhone', requires: 'guest.view_phone' },
+    { key: 'guestEmail', requires: 'guest.view_email' },
+    { key: 'amountPaid', requires: 'booking.view_price' },
+    { key: 'paymentStatus', requires: 'booking.view_payment_status' },
+    { key: 'source', requires: 'booking.view_source' },
+    { key: 'internalNotes', requires: 'booking.note.internal' },
+  ] as const
+
+  it('strips the guest, the money and the source for a sales agent, leaving the stay itself', () => {
+    const sales = actorWith([
+      'booking.view',
+      'availability.view',
+      'rate.view_public',
+      'rate.view_agent',
+    ])
+
+    expect(redact(sales, row, fields)).toEqual({
+      id: 'bk-9',
+      unitName: 'Suite 2',
+      checkIn: '2026-09-01',
+    })
+  })
+
+  it('hands a senior agent the coarse payment status and still no amount', () => {
+    const senior = actorWith(['booking.view', 'booking.view_payment_status'])
+
+    const result = redact(senior, row, fields)
+
+    expect(result.paymentStatus).toBe('deposit_paid')
+    expect(result).not.toHaveProperty('amountPaid')
+    expect(result).not.toHaveProperty('guestName')
+  })
+
+  it('never hands an external seller the internal notes, whatever else they hold', () => {
+    const agency = actorWith([
+      'booking.view',
+      'guest.view_name',
+      'guest.view_phone',
+      'booking.view_payment_status',
+      'rate.view_net',
+    ])
+
+    const result = redact(agency, row, fields)
+
+    expect(result.guestName).toBe('דניאל כהן')
+    expect(result.guestPhone).toBe('050-0000000')
+    expect(result).not.toHaveProperty('guestEmail')
+    expect(result).not.toHaveProperty('internalNotes')
+  })
+
+  it('hands the desk the whole row, so the redactions above are not passing vacuously', () => {
+    const reception = actorWith([
+      'guest.view_name',
+      'guest.view_phone',
+      'guest.view_email',
+      'booking.view_price',
+      'booking.view_payment_status',
+      'booking.view_source',
+      'booking.note.internal',
+    ])
+
+    expect(redact(reception, row, fields)).toEqual(row)
+  })
+
+  it('keeps the guest name apart from the contact fields, which one combined grant could not do', () => {
+    const nameOnly = actorWith(['guest.view_name'])
+
+    const result = redact(nameOnly, row, fields)
+
+    expect(result.guestName).toBe('דניאל כהן')
+    expect(result).not.toHaveProperty('guestPhone')
+    expect(result).not.toHaveProperty('guestEmail')
+  })
+})
+
 // ── Reason precedence ─────────────────────────────────────────────────────
 
 describe('reason precedence when several checks fail at once', () => {
@@ -607,7 +886,7 @@ describe('redact()', () => {
   }
 
   const sensitive = [
-    { key: 'guestPhone', requires: 'guest.view_contact' },
+    { key: 'guestPhone', requires: 'guest.view_phone' },
     { key: 'price', requires: 'booking.view_price' },
     { key: 'profitability', requires: 'booking.view_profitability' },
   ] as const
@@ -623,7 +902,7 @@ describe('redact()', () => {
   })
 
   it('keeps fields whose required grant the actor holds', () => {
-    const reception = actorWith(['guest.view_contact', 'booking.view_price'])
+    const reception = actorWith(['guest.view_phone', 'booking.view_price'])
 
     const result = redact(reception, row, sensitive)
 
@@ -634,7 +913,7 @@ describe('redact()', () => {
 
   it('keeps every field for an actor holding all of the required grants', () => {
     const manager = actorWith([
-      'guest.view_contact',
+      'guest.view_phone',
       'booking.view_price',
       'booking.view_profitability',
     ])
@@ -659,7 +938,7 @@ describe('redact()', () => {
   })
 
   it('returns a new object rather than the record itself', () => {
-    const result = redact(actorWith(['guest.view_contact']), row, [])
+    const result = redact(actorWith(['guest.view_phone']), row, [])
 
     expect(result).not.toBe(row)
     expect(result).toEqual(row)

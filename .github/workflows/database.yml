@@ -1,0 +1,160 @@
+name: Database proofs
+
+# supabase/tests/ holds the SQL proofs. isolation.sql is the floor the whole
+# security model stands on — 52 assertions that Postgres itself refuses to hand
+# organization A a row belonging to organization B, whatever the application
+# does. Until this workflow existed, no gate ran any of them: OPEN_GAPS.md
+# closed G-007 on the strength of a single manual run, which means the
+# guarantee could have broken on any Tuesday and nothing would have said so.
+#
+# Two jobs, because the proofs answer two different questions.
+#
+#   `ephemeral` answers "did this change break tenant isolation?" It builds a
+#   throwaway PostgreSQL 17 inside the job, applies the shim and all twelve
+#   migrations, runs every proof, and dies with the runner. It needs no
+#   credentials and touches nothing shared, so it can run on every push and
+#   every pull request without hammering anybody's database — there is no
+#   database to hammer. This is the guard.
+#
+#   `live` answers a different question: "is the throwaway still telling the
+#   truth?" The shim reproduces the few Supabase objects the migrations assume,
+#   and the day Supabase changes one of them the ephemeral job would keep
+#   passing while production quietly diverged. So the same proofs also run
+#   against a real Supabase project — but on a schedule and on demand, never on
+#   push, because that project is a single shared instance and a per-push
+#   trigger would serialise every branch behind it for no gain. Drift is a
+#   slow-moving question and a weekly answer is the right resolution for it.
+#
+# Deliberately separate from ci.yml. The main gate is database-free on purpose
+# and must stay that way; the credentials this workflow can use have no
+# business being in scope for a job that runs `npm run build`.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Mondays, 04:07 UTC. Off the hour because every scheduled workflow on
+    # GitHub fires at :00 and the queue there is long.
+    - cron: '7 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      run_live:
+        description: 'Also run the proofs against the live Supabase CI project'
+        type: boolean
+        default: false
+
+concurrency:
+  # The event name is part of the group so a push to main cannot cancel a
+  # scheduled run that is already talking to the live project. Two pushes to
+  # the same branch still supersede each other, which is the behaviour ci.yml
+  # has and the one that saves runner minutes.
+  group: database-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ephemeral:
+    name: Proofs on a throwaway Postgres
+    # Skipped on the weekly run: the point of the schedule is the live project,
+    # and this job has already run on the commit that produced this ref.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        # 17 to match the live project, which reports PostgreSQL 17.6.
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Local, ephemeral, and destroyed with the runner. `postgres` is not a
+      # credential here in any meaningful sense — there is nothing behind it and
+      # nothing reaches it from outside the job.
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # No `npm ci`, for the same reason security.yml skips it: the runner is
+      # dependency-free on purpose, so this job keeps reporting even when the
+      # dependency tree is broken — which is exactly when a bad commit is most
+      # likely to slip through.
+      - name: Check psql is present
+        run: psql --version
+
+      - name: Apply the schema and run every proof
+        run: node scripts/run-db-proofs.mjs --migrate
+
+  live:
+    name: Proofs on the Supabase CI project
+    # Scheduled, or asked for explicitly. Never on push — see the header.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # One at a time across the whole repository. The target is a single shared
+    # project, and two runs impersonating `authenticated` on it at once would
+    # produce a red that means nothing. Not cancel-in-progress: a half-finished
+    # proof run is worse than a queued one.
+    concurrency:
+      group: database-live
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check psql is present
+        run: psql --version
+
+      - name: Run every proof against the CI project
+        env:
+          # From repository secrets, never from a file in the repo. The runner
+          # parses this and hands psql PG* variables, so it never reaches argv
+          # and cannot be read out of the process list.
+          #
+          # The secret is deliberately named for a test project. It must point
+          # at the CI Supabase project and never at production — and
+          # --require-empty is what enforces that rather than trusting it: the
+          # run refuses to start unless organizations, bookings, guests,
+          # payments and invoices are all empty. A database with no
+          # organization in it has no tenant, and therefore no customer data to
+          # put at risk.
+          DATABASE_URL: ${{ secrets.SUPABASE_TEST_DATABASE_URL }}
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::notice title=Skipped::SUPABASE_TEST_DATABASE_URL is not set."
+            echo
+            echo "The live fidelity check needs a connection string for a"
+            echo "dedicated Supabase CI project — one with no customer in it."
+            echo "Add it as a repository secret named SUPABASE_TEST_DATABASE_URL."
+            echo
+            echo "Until then the ephemeral job is the guard, and it is running."
+            exit 0
+          fi
+          node scripts/run-db-proofs.mjs --require-empty

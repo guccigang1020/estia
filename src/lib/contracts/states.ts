@@ -75,6 +75,47 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
  * window passed, stay completed — and only then can a person approve it and
  * pay it. Paying on `estimated` means paying for stays that never happened.
  */
+/**
+ * What a commission percentage is a percentage *of*.
+ *
+ * This was defined twice, in two modules, with different members — the agent
+ * domain offered "whole booking or accommodation only", the finance domain
+ * "stay total, gross or net". Both readings are real deals, and neither list
+ * contained the other, so the same rule would have paid two different amounts
+ * depending on which module happened to evaluate it. That is the single most
+ * expensive kind of drift this file exists to stop.
+ *
+ * The union of the two, stated once. The distinction is not academic: on a
+ * ₪9,500 booking with ₪1,500 of extras, ten percent is ₪800 or ₪950 or less
+ * again after channel fees, and an agent who expected one and received another
+ * has a grievance nobody can settle from the record.
+ */
+export const COMMISSION_BASES = [
+  /** Room revenue alone — excludes extras, cleaning, taxes and the deposit. */
+  'accommodation_only',
+  /** Accommodation plus extras, before tax. */
+  'stay_total',
+  /** Everything the guest paid. */
+  'gross_revenue',
+  /** Gross less channel fees, so an OTA booking pays commission on less. */
+  'net_revenue',
+  /** Gross less the direct operating costs of the stay. */
+  'net_of_direct_costs',
+  /** What the stay actually contributed, after direct and allocated costs. */
+  'net_contribution',
+] as const
+
+export type CommissionBase = (typeof COMMISSION_BASES)[number]
+
+export const COMMISSION_BASE_LABEL: Record<CommissionBase, string> = {
+  accommodation_only: 'לינה בלבד',
+  stay_total: 'סך השהות',
+  gross_revenue: 'הכנסה ברוטו',
+  net_revenue: 'הכנסה נטו',
+  net_of_direct_costs: 'הכנסה בניכוי עלויות ישירות',
+  net_contribution: 'תרומה נטו',
+}
+
 export const COMMISSION_STATUSES = [
   'estimated',
   'pending',

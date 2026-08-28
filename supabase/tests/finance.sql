@@ -61,6 +61,7 @@ declare
   pay_a   uuid; pay_b   uuid;
   sched_a uuid;
   inv_a   uuid;
+  inv_b   uuid;
   cn_a    uuid;
   rule_a  uuid; rule_b uuid;
   stmt_a  uuid;
@@ -707,11 +708,11 @@ begin
   insert into public.invoices
     (organization_id, property_id, booking_id, status, customer_name,
      subtotal_agorot, tax_agorot, total_agorot, created_by)
-  values (org_b, prop_b, bk_b, 'draft', 'B Guest', 1000, 170, 1170, user_b);
+  values (org_b, prop_b, bk_b, 'draft', 'B Guest', 1000, 170, 1170, user_b)
+  returning id into inv_b;
 
   insert into public.invoice_lines (organization_id, invoice_id, kind, label, amount_agorot)
-  select org_b, i.id, 'accommodation', 'B line', 1170
-    from public.invoices i where i.organization_id = org_b limit 1;
+  values (org_b, inv_b, 'accommodation', 'B line', 1170);
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', user_a::text, 'role', 'authenticated')::text, true);
@@ -895,8 +896,7 @@ begin
   begin
     execute 'set local role authenticated';
     insert into public.invoice_lines (organization_id, invoice_id, kind, label, amount_agorot)
-      select org_b, i.id, 'accommodation', 'smuggled', 1
-        from public.invoices i where i.organization_id = org_b limit 1;
+      values (org_b, inv_b, 'accommodation', 'smuggled', 1);
     err := 'NO ERROR — ROW WAS WRITTEN';
   exception when others then err := sqlstate;
   end;
