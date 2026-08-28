@@ -42,38 +42,50 @@
  * a guess.
  *
  * ============================================================================
- * WHAT IS NOT IMPLEMENTED, AND EXACTLY WHY
+ * TWO THINGS 0018 AND 0022 CHANGED HERE
  * ============================================================================
  *
- * **`loadCommissionsForBooking` and `updateCommission` are blocked on an enum.**
- * Not on a missing table — `commissions` has every column these need. On
- * `public.commission_base`, which 0015 created with two members,
- * `whole_booking` and `accommodation_only`. `COMMISSION_BASES` in
- * `src/lib/contracts/states.ts` now has six, and `whole_booking` is not among
- * them: it was unified out when four modules were found to be declaring the
- * list differently. So the type in the database and the type in the code no
- * longer describe the same set in either direction — `stay_total` cannot be
- * stored, and a stored `whole_booking` is not a value any TypeScript union
- * accepts. Reading one and calling it a `CommissionBase` would put a value in
- * the domain that the domain has no meaning for, on the record that decides
- * what an agent is paid.
+ * **The commission methods are no longer blocked on an enum.** 0015 created
+ * `public.commission_base` with `whole_booking` and `accommodation_only`, and
+ * the unified `COMMISSION_BASES` in `src/lib/contracts/states.ts` grew to six
+ * members with no `whole_booking` at all — so the database's type and the
+ * code's described different sets in both directions, on the record that
+ * decides what an agent is paid. 0018 rebuilt the type with exactly those six
+ * and rewrote every stored `whole_booking` as `stay_total`.
  *
- * The migration is small and is not this work's to write:
+ * What `commissions` still has no column for is `Commission.rule` — the
+ * `{ basis, kind, value, label }` value object the domain carries beside the
+ * amount. It is written to `commissions.metadata` under `rule`, the same way
+ * `approvals.metadata` carries the frozen `DiscountApprovalView`, and read back
+ * from there. When it is absent — a row written before this, or by another
+ * writer — it is **derived from the real columns** rather than invented:
+ * `basis` is the `base` column, `kind` follows whether `rate_bps` is set,
+ * `value` comes from `rate_bps` or `amount_agorot`, and `label` from
+ * `explanation`. Those are the columns that reproduce the money, so a derived
+ * rule agrees with the amount sitting beside it by construction — which an
+ * invented one would not.
  *
- *     alter type public.commission_base add value 'stay_total';
- *     -- …and the remaining four, then migrate the `whole_booking` rows.
+ * **`Invoice.paymentIds` is a join table now.** 0022 created
+ * `public.invoice_payments`, carrying `booking_id` so that both composite
+ * foreign keys name it — which is what refuses a link between an invoice for
+ * one stay and a payment against another, and what an array of ids could never
+ * check. `invoices.metadata.payment_ids` is no longer written and no longer
+ * read.
  *
- * Both methods therefore raise `SchemaNotProvisionedError` — loudly, and never
- * an empty array, because an agent statement that renders zero commissions is
- * indistinguishable from an agent who earned none.
+ * The order matters, and 0022's own header states it: **backfill first, then
+ * stop writing.** Dropping the write before the rows are copied loses the link
+ * between an invoice and the payments that settled it, and nothing else records
+ * it. A deployment that has not run the backfill reads invoices with no
+ * payments rather than invoices with the wrong ones.
  *
- * **`Invoice.paymentIds` has no storage.** There is no `invoice_payments` join
- * table in any migration to 0017. It is carried in `invoices.metadata` under
- * `payment_ids` so that nothing is lost and an invoice round-trips, and that
- * is a stopgap rather than a design: a join table is what makes "which
- * invoice accounts for this payment" answerable from the payment's side, and
- * a jsonb array cannot be indexed into that question usefully. Flagged here
- * rather than quietly normalised.
+ * `updateInvoice` reconciles the links rather than replacing them.
+ * `invoice_payments` has no UPDATE — no grant and no policy, two independent
+ * refusals — because the row *is* its key: a changed set is a delete of what
+ * left and an insert of what arrived, and both are separately visible.
+ *
+ * ============================================================================
+ * WHAT IS STILL NOT CLOSED
+ * ============================================================================
  *
  * **`Invoice` and `CreditNote` carry no `version`**, so `updateInvoice` locks
  * on nothing. The column exists and the trigger maintains it; the port has no
@@ -84,6 +96,8 @@
 import { PRICE_LINE_KINDS, type PriceLine } from '../booking/types'
 import {
   APPROVAL_STATUSES,
+  COMMISSION_BASES,
+  COMMISSION_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
 } from '../contracts/states'
@@ -107,7 +121,6 @@ import {
 } from '../finance/types'
 import type { TransactionHandle } from '../service'
 import type { Db, Row } from './client'
-import { SchemaNotProvisionedError } from './errors'
 import {
   asAgorot,
   asBoolean,
@@ -542,8 +555,10 @@ export class SupabaseFinanceRepository implements FinanceRepository {
         cancellation_reason: invoice.cancellationReason,
         archived_at: iso(invoice.archivedAt),
         snapshot_captured_at: invoice.snapshotCapturedAt,
-        // The stopgap named in the header. A join table is what this wants.
-        metadata: { payment_ids: [...invoice.paymentIds] },
+        // `metadata` is not written. The payment ids that used to live in it
+        // are rows in `invoice_payments` now, and writing both would leave two
+        // answers to "which payments settled this" with nothing to keep them
+        // in step.
       })
       .select(INVOICE_COLUMNS)
       .single()
@@ -558,7 +573,16 @@ export class SupabaseFinanceRepository implements FinanceRepository {
       tx,
     })
 
-    return { ...toInvoice(toRow(data)), lines: invoice.lines }
+    await this.linkPayments(db, invoice, invoice.paymentIds, tx)
+
+    return {
+      ...toInvoice(toRow(data)),
+      lines: invoice.lines,
+      // The row came back before the links were written, so its embed is
+      // empty. Reporting what was just stored is more honest than a second
+      // round trip that could only agree with it.
+      paymentIds: [...invoice.paymentIds],
+    }
   }
 
   async updateInvoice(
@@ -577,7 +601,10 @@ export class SupabaseFinanceRepository implements FinanceRepository {
         cancelled_at: iso(invoice.cancelledAt),
         cancellation_reason: invoice.cancellationReason,
         archived_at: iso(invoice.archivedAt),
-        metadata: { payment_ids: [...invoice.paymentIds] },
+        // `metadata` is deliberately absent. It used to be overwritten whole
+        // with `{ payment_ids: … }` on every update, which also discarded
+        // anything else stored under it; the links live in `invoice_payments`
+        // now and this column is left to whoever else uses it.
       })
       .eq('id', invoice.id)
       .eq('organization_id', invoice.organizationId)
@@ -594,7 +621,15 @@ export class SupabaseFinanceRepository implements FinanceRepository {
     }
 
     recordWrite(tx, `invoices(${invoice.id})`)
-    return { ...toInvoice(rows[0] as Row), lines: invoice.lines }
+
+    const stored = toInvoice(rows[0] as Row)
+    await this.reconcilePayments(db, invoice, stored.paymentIds, tx)
+
+    return {
+      ...stored,
+      lines: invoice.lines,
+      paymentIds: [...invoice.paymentIds],
+    }
   }
 
   async insertCreditNote(
@@ -740,14 +775,89 @@ export class SupabaseFinanceRepository implements FinanceRepository {
 
   // ── Commissions ─────────────────────────────────────────────────────────
 
-  /** Blocked on `public.commission_base`. See the header. */
-  async loadCommissionsForBooking(): Promise<readonly Commission[]> {
-    throw commissionBaseBlocked()
+  /**
+   * Every commission on this booking, cancelled ones included.
+   *
+   * No status filter. A cancelled commission and a clawed-back one are both
+   * part of what a booking owes and both appear on the statement that explains
+   * it; filtering here would make an agent's total silently disagree with the
+   * bookings it was computed from.
+   */
+  async loadCommissionsForBooking(
+    organizationId: string,
+    bookingId: string,
+  ): Promise<readonly Commission[]> {
+    const { data, error } = await this.db
+      .from('commissions')
+      .select(COMMISSION_COLUMNS)
+      .eq('organization_id', organizationId)
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: true })
+
+    if (error) throw error
+    return toRows(data).map(toCommission)
   }
 
-  /** Blocked on `public.commission_base`. See the header. */
-  async updateCommission(): Promise<Commission> {
-    throw commissionBaseBlocked()
+  /**
+   * Save a commission, on the version it was read at.
+   *
+   * `version = commission.version - 1`, for the reason note 2 in the header
+   * gives about payments: `commissions.ts` returns `version + 1` before the
+   * record reaches this file and `tg_touch_row` increments the stored value
+   * again, so the predicate is one behind what the record carries. `version`
+   * itself is never sent.
+   *
+   * The four timestamps are written from the record and not synthesised.
+   * `tg_commissions_stamp_status` fills them when they are null and the status
+   * says they should be set, which means a `null` here is "the domain did not
+   * decide when" rather than "clear it" — and the trigger is what keeps
+   * `paid_at` and `status = 'paid'` from disagreeing.
+   */
+  async updateCommission(
+    commission: Commission,
+    tx?: TransactionHandle,
+  ): Promise<Commission> {
+    const db = clientFor(tx, this.db)
+
+    const { data, error } = await db
+      .from('commissions')
+      .update({
+        agent_user_id: commission.agentUserId,
+        agency_id: commission.agencyId,
+        status: commission.status,
+        base: commission.rule.basis,
+        basis_agorot: commission.basisAgorot,
+        rate_bps: commission.rateBps,
+        amount_agorot: commission.amountAgorot,
+        statement_id: commission.statementId,
+        payout_batch_id: commission.payoutBatchId,
+        eligible_at: iso(commission.becameEligibleAt),
+        approved_by: commission.approvedByUserId,
+        paid_at: iso(commission.paidAt),
+        cancellation_reason: commission.cancelledReason,
+        clawback_required: commission.clawbackRequired,
+        // The rule has no columns of its own. See the header: this is the
+        // same move `approvals.metadata` makes for the frozen view.
+        metadata: { rule: commission.rule },
+      })
+      .eq('id', commission.id)
+      .eq('organization_id', commission.organizationId)
+      .eq('version', commission.version - 1)
+      .select(COMMISSION_COLUMNS)
+
+    if (error) throw error
+
+    const rows = toRows(data)
+    if (rows.length === 0) {
+      throw new ConflictError({
+        resourceType: 'commission',
+        resourceId: commission.id,
+        expectedVersion: commission.version - 1,
+      })
+    }
+
+    recordWrite(tx, `commissions(${commission.id})`)
+    return toCommission(rows[0] as Row)
   }
 
   // ── Internals ───────────────────────────────────────────────────────────
@@ -839,6 +949,71 @@ export class SupabaseFinanceRepository implements FinanceRepository {
     return { propertyId: asString(toRow(data), 'property_id') }
   }
 
+  /**
+   * Record which payments account for this invoice.
+   *
+   * `booking_id` is carried on every row, not derived, because it is what both
+   * composite foreign keys are checked against: a link between an invoice for
+   * one stay and a payment against another is refused by the database rather
+   * than discovered during an audit, and neither end can be a row from
+   * another organization.
+   */
+  private async linkPayments(
+    db: Db,
+    invoice: Invoice,
+    paymentIds: readonly string[],
+    tx?: TransactionHandle,
+  ): Promise<void> {
+    if (paymentIds.length === 0) return
+
+    const { error } = await db.from('invoice_payments').insert(
+      paymentIds.map((paymentId) => ({
+        invoice_id: invoice.id,
+        payment_id: paymentId,
+        organization_id: invoice.organizationId,
+        booking_id: invoice.bookingId,
+      })),
+    )
+
+    if (error) throw error
+    recordWrite(tx, `invoice_payments(${paymentIds.length} × ${invoice.id})`)
+  }
+
+  /**
+   * Bring the stored links in line with the record, by difference.
+   *
+   * Not a delete-then-reinsert of the whole set. `invoice_payments` has no
+   * UPDATE by design, and clearing every link to rewrite an unchanged one
+   * would make each save look like a reallocation in anything watching the
+   * table — while briefly leaving an issued invoice accounting for nothing.
+   * Only what actually left is deleted and only what actually arrived is
+   * inserted.
+   */
+  private async reconcilePayments(
+    db: Db,
+    invoice: Invoice,
+    stored: readonly string[],
+    tx?: TransactionHandle,
+  ): Promise<void> {
+    const wanted = new Set(invoice.paymentIds)
+    const removed = stored.filter((id) => !wanted.has(id))
+    const added = invoice.paymentIds.filter((id) => !stored.includes(id))
+
+    if (removed.length > 0) {
+      const { error } = await db
+        .from('invoice_payments')
+        .delete()
+        .eq('invoice_id', invoice.id)
+        .eq('organization_id', invoice.organizationId)
+        .in('payment_id', removed)
+
+      if (error) throw error
+      recordWrite(tx, `invoice_payments(-${removed.length} × ${invoice.id})`)
+    }
+
+    await this.linkPayments(db, invoice, added, tx)
+  }
+
   private async writeLines(
     db: Db,
     table: 'invoice_lines' | 'credit_note_lines',
@@ -913,7 +1088,13 @@ const INVOICE_COLUMNS =
   'tax_agorot, total_agorot, tax_rate_bps, tourist_vat_exempt, currency, ' +
   'issued_at, cancelled_at, cancellation_reason, archived_at, ' +
   'snapshot_captured_at, metadata, invoice_lines(kind, label, amount_agorot, ' +
-  'quantity, line_date, sort_order)'
+  'quantity, line_date, sort_order), invoice_payments(payment_id)'
+
+const COMMISSION_COLUMNS =
+  'id, organization_id, property_id, booking_id, agent_user_id, agency_id, ' +
+  'status, base, basis_agorot, rate_bps, amount_agorot, explanation, ' +
+  'statement_id, payout_batch_id, eligible_at, approved_by, paid_at, ' +
+  'cancellation_reason, clawback_required, metadata, created_at, version'
 
 const CREDIT_NOTE_COLUMNS =
   'id, organization_id, property_id, invoice_id, booking_id, status, series, ' +
@@ -1049,8 +1230,6 @@ function toLines(row: Row, column: string): PriceLine[] {
 }
 
 function toInvoice(row: Row): Invoice {
-  const metadata = asJsonRecord(row, 'metadata')
-  const paymentIds = metadata.payment_ids
   return {
     id: asString(row, 'id'),
     organizationId: asString(row, 'organization_id'),
@@ -1075,10 +1254,78 @@ function toInvoice(row: Row): Invoice {
     cancelledAt: asDateOrNull(row, 'cancelled_at'),
     cancellationReason: asStringOrNull(row, 'cancellation_reason'),
     archivedAt: asDateOrNull(row, 'archived_at'),
-    paymentIds: Array.isArray(paymentIds)
-      ? paymentIds.filter((id): id is string => typeof id === 'string')
-      : [],
+    // `invoice_payments`, not `metadata.payment_ids`. An empty list is a real
+    // answer — an issued invoice nothing has settled yet — and is why nothing
+    // here falls back to the array 0022 replaced: a stale copy in `metadata`
+    // would resurrect a link somebody deliberately removed.
+    paymentIds: toPaymentIds(row),
     snapshotCapturedAt: asTimestamp(row, 'snapshot_captured_at'),
+  }
+}
+
+function toPaymentIds(row: Row): readonly string[] {
+  const embedded = row.invoice_payments
+  if (!Array.isArray(embedded)) return []
+  return embedded.map((entry) => asString(toRow(entry), 'payment_id'))
+}
+
+function toCommission(row: Row): Commission {
+  return {
+    id: asString(row, 'id'),
+    organizationId: asString(row, 'organization_id'),
+    propertyId: asString(row, 'property_id'),
+    bookingId: asString(row, 'booking_id'),
+    // Both nullable, and the domain says one of the two is always there: an
+    // agency keeps the relationship when the individual leaves. Neither is
+    // invented here — a commission with no owner at all is a row somebody
+    // should look at, not one this layer should paper over.
+    agentUserId: asStringOrNull(row, 'agent_user_id'),
+    agencyId: asStringOrNull(row, 'agency_id'),
+    status: asEnum(row, 'status', COMMISSION_STATUSES),
+    basisAgorot: asAgorot(row, 'basis_agorot'),
+    rateBps: asNumberOrNull(row, 'rate_bps'),
+    amountAgorot: asAgorot(row, 'amount_agorot'),
+    rule: toCommissionRule(row),
+    statementId: asStringOrNull(row, 'statement_id'),
+    payoutBatchId: asStringOrNull(row, 'payout_batch_id'),
+    becameEligibleAt: asDateOrNull(row, 'eligible_at'),
+    approvedByUserId: asStringOrNull(row, 'approved_by'),
+    paidAt: asDateOrNull(row, 'paid_at'),
+    cancelledReason: asStringOrNull(row, 'cancellation_reason'),
+    clawbackRequired: asBoolean(row, 'clawback_required'),
+    createdAt: asDate(row, 'created_at'),
+    version: asNumber(row, 'version'),
+  }
+}
+
+/**
+ * The rule a commission was computed under.
+ *
+ * Stored in `metadata.rule` and read back whole, because that is the value the
+ * domain wrote and re-deriving it would be a second calculation of a settled
+ * number. When it is absent, it is rebuilt from the columns that *reproduce
+ * the money* — the base, the rate and the amount — rather than guessed at, so
+ * a derived rule cannot contradict the figure beside it. `basis` always comes
+ * from the `base` column, which is the constrained one; a `basis` stored in
+ * jsonb that disagreed with it would be the drift 0018 has just finished
+ * removing.
+ */
+function toCommissionRule(row: Row): Commission['rule'] {
+  const basis = asEnum(row, 'base', COMMISSION_BASES)
+  const stored = asJsonRecord(row, 'metadata').rule
+
+  if (stored !== null && typeof stored === 'object' && !Array.isArray(stored)) {
+    return { ...(stored as Commission['rule']), basis }
+  }
+
+  const rateBps = asNumberOrNull(row, 'rate_bps')
+  return {
+    basis,
+    kind: rateBps === null ? 'fixed' : 'percent',
+    // Percentage points for `percent`, agorot for `fixed` — the units the
+    // domain's own type declares.
+    value: rateBps === null ? asAgorot(row, 'amount_agorot') : rateBps / 100,
+    label: asStringOrNull(row, 'explanation') ?? '',
   }
 }
 
@@ -1139,17 +1386,6 @@ function toSnapshot(row: Row): FinanceSnapshot {
       ? row.expense_rules
       : []) as FinanceSnapshot['expenseRules'],
   }
-}
-
-function commissionBaseBlocked(): SchemaNotProvisionedError {
-  return new SchemaNotProvisionedError(
-    'public.commission_base with the six members of COMMISSION_BASES',
-    'reading or writing a commission through the finance port. The enum has ' +
-      "'whole_booking' and 'accommodation_only'; the unified contract in " +
-      "src/lib/contracts/states.ts has 'accommodation_only', 'stay_total', " +
-      "'gross_revenue', 'net_revenue', 'net_of_direct_costs' and " +
-      "'net_contribution', and does not have 'whole_booking' at all",
-  )
 }
 
 // ── Vocabularies ──────────────────────────────────────────────────────────

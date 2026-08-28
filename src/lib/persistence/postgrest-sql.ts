@@ -127,12 +127,23 @@ interface Relation {
  * avoid — so embeds are declared, not discovered, and an undeclared one
  * throws.
  *
- * Only one is needed today. `BOOKING_COLUMNS` in `booking.ts` carries
- * `guests(full_name)`, and `insertBooking` re-reads the booking through it
- * while the transaction is open. Everything else this directory embeds —
- * `roles!inner(…)` in `actor.ts`, the four in `metrics.ts` — belongs to a
- * read-only source that runs before an operation opens its unit of work, and
- * would throw here rather than quietly return a booking with no price lines.
+ * Every one below appears in a select an adapter issues *while a transaction is
+ * open* — the re-read after a write. `BOOKING_COLUMNS` in `booking.ts` carries
+ * `guests(full_name)`; `INVOICE_COLUMNS` in `finance.ts` carries its lines and,
+ * since 0022, `invoice_payments(payment_id)`; `SETTINGS_COLUMNS` in `agents.ts`
+ * carries `memberships(status)`, which is not a column on that row and never
+ * will be — 0019 keeps the agent's status on the membership.
+ *
+ * Everything else this directory embeds — `roles!inner(…)` in `actor.ts`, the
+ * four in `metrics.ts` — belongs to a read-only source that runs before an
+ * operation opens its unit of work, and would throw here rather than quietly
+ * return a booking with no price lines.
+ *
+ * Note that the composite foreign keys 0022 and 0019 declare are not
+ * reproduced: a join on the owning column alone is equivalent here, because
+ * each of those keys includes a column that is already unique on the parent.
+ * The extra columns exist to make a *write* impossible, not to disambiguate a
+ * read, and the write is still checked by the database.
  */
 const RELATIONS: Readonly<Record<string, Relation>> = {
   'bookings.guests': {
@@ -153,11 +164,23 @@ const RELATIONS: Readonly<Record<string, Relation>> = {
     foreignColumn: 'invoice_id',
     cardinality: 'many',
   },
+  'invoices.invoice_payments': {
+    table: 'invoice_payments',
+    localColumn: 'id',
+    foreignColumn: 'invoice_id',
+    cardinality: 'many',
+  },
   'credit_notes.credit_note_lines': {
     table: 'credit_note_lines',
     localColumn: 'id',
     foreignColumn: 'credit_note_id',
     cardinality: 'many',
+  },
+  'agent_organization_settings.memberships': {
+    table: 'memberships',
+    localColumn: 'membership_id',
+    foreignColumn: 'id',
+    cardinality: 'one',
   },
 }
 

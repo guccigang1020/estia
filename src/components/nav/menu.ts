@@ -134,19 +134,19 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['booking.view', 'availability.view'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/calendar' },
       },
       {
         id: 'bookings',
         label: 'רשימת הזמנות',
         requires: { kind: 'grant', anyOf: ['booking.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/bookings' },
       },
       {
         id: 'availability',
         label: 'זמינות וחסימות',
         requires: { kind: 'grant', anyOf: ['availability.view', 'hold.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/calendar/check' },
       },
       {
         id: 'guests',
@@ -369,7 +369,7 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'properties',
         label: 'נכסים',
         requires: { kind: 'grant', anyOf: ['property.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/properties' },
       },
       {
         id: 'units',

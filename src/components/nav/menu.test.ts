@@ -239,10 +239,12 @@ describe('buildMenu and the plan', () => {
     // Locked is visible but never navigable.
     expect(tasks?.href).toBeNull()
 
-    // The booking list is core, so it is unaffected by the same plan.
+    // The booking list is core, so it is unaffected by the same plan. It is
+    // now built, so this reads `available` rather than `planned` — what the
+    // assertion is really about is that the operations lock did not reach it.
     const bookings = menu.find((section) => section.id === 'bookings')
     expect(bookings?.items.find((item) => item.id === 'bookings')?.state).toBe(
-      'planned',
+      'available',
     )
   })
 

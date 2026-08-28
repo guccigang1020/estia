@@ -45,6 +45,14 @@
  *   4. An update against a stale version raises `ConflictError` and changes
  *      nothing.
  *   5. A user of another organization cannot read the booking at all.
+ *
+ * The second block covers what 0018–0023 provisioned: that every column the
+ * agent, preparation and finance adapters name exists, that PostgREST resolves
+ * `memberships(status)` and `invoice_payments(payment_id)`, that
+ * `find_user_id_by_phone` answers across an organization boundary, and that an
+ * agent's terms round-trip with their status read off the membership. Its
+ * header says which paths it deliberately leaves alone, and why leaving them
+ * alone is not an oversight.
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -54,8 +62,12 @@ import { defineBookingOperations } from '../booking'
 import type { Actor } from '../authz/can'
 import { ConflictError } from '../errors'
 import { InMemoryAuditWriter } from '../audit/pipeline'
+import type { AgentOrganizationSettings } from '../agents/types'
+import { SupabaseAgentRepository } from './agents'
 import { SupabaseBookingRepository } from './booking'
 import type { Db } from './client'
+import { SupabaseFinanceRepository } from './finance'
+import { SupabasePreparationPorts } from './preparation'
 import { sequentialUnitOfWork } from './transaction'
 
 // ── Gate ──────────────────────────────────────────────────────────────────
@@ -368,6 +380,336 @@ describe.skipIf(!CREDENTIALS)('live: booking persistence', () => {
     expect(throughAdapter).toBeNull()
   }, 60_000)
 })
+
+/**
+ * The storage 0018–0023 provisioned, against the real project.
+ *
+ * Its own world, because the block above tears its own down in `afterAll` and
+ * a second `describe` would otherwise run against the wreckage.
+ *
+ * ── What is deliberately not tested here ──────────────────────────────────
+ *
+ * `saveSnapshot`, `savePlan`, and anything that writes an invoice or a
+ * payment. Each of them makes its booking undeletable, and therefore its
+ * organization:
+ *
+ *   · `preparation_snapshots` refuses `DELETE` by statement-level trigger —
+ *     for `service_role` and `postgres` too, which is the point — and
+ *     `preparation_snapshots_booking_fkey` is `ON DELETE RESTRICT`. A booking
+ *     that has been costed cannot be erased out from under the record that
+ *     explains what it cost, and a cascade from `organizations` hits the same
+ *     wall. `work_plans` needs a snapshot to point at, so it follows.
+ *   · `invoices` and `payments` have no `DELETE` grant for any role and are
+ *     `RESTRICT` against their booking, for the reason 0010 gives about money:
+ *     an entry that moved is corrected with another entry, never erased.
+ *
+ * This is the caveat `tearDownWorld` already records for `finance_snapshots`,
+ * arrived at from three more directions. Exercising those paths needs a
+ * fixture project dropped wholesale rather than cleaned row by row; doing it
+ * here would leak an organization on every run instead.
+ *
+ * What is proved without writing any of that is the half a fake client cannot
+ * reach: that every column these adapters name exists, and that PostgREST
+ * resolves both embeds 0019 and 0022 made necessary.
+ */
+describe.skipIf(!CREDENTIALS)('live: the storage 0018–0023 provisioned', () => {
+  /**
+   * A well-formed uuid that matches nothing.
+   *
+   * Not a malformed one: `22P02` from a bad literal would satisfy a "did it
+   * error" assertion for the wrong reason and prove nothing about the columns.
+   */
+  const ABSENT = '00000000-0000-4000-8000-000000000000'
+  const UNHELD_PHONE = '+972500000001'
+  const TEST_PHONE = '+972500000002'
+  const INVITED_PHONE = '+972500000003'
+
+  let stage: World
+  let stageAdmin: Db
+  let originalPhone: string | null = null
+
+  beforeAll(async () => {
+    stageAdmin = createClient(ENV.url as string, ENV.serviceRoleKey as string, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    stage = await seedWorld(stageAdmin, ENV)
+
+    const { data } = await stageAdmin
+      .from('user_profiles')
+      .select('phone')
+      .eq('id', stage.userB)
+      .single()
+    originalPhone = (data as { phone: string | null } | null)?.phone ?? null
+  }, 60_000)
+
+  afterAll(async () => {
+    if (!stage) return
+    // The number goes back first. It is a real person's profile, and the one
+    // thing here that is not ours to leave changed.
+    await stageAdmin
+      .from('user_profiles')
+      .update({ phone: originalPhone })
+      .eq('id', stage.userB)
+    await tearDownWorld(stageAdmin, stage)
+  }, 60_000)
+
+  it('resolves every select these adapters issue, embeds included', async () => {
+    // The one thing `fake-client.ts` says it cannot prove: a column spelled
+    // wrongly there is spelled wrongly consistently. Each read below names
+    // every column its adapter names and asks for a row that does not exist,
+    // so an unknown column or an unresolvable embed comes back as a PostgREST
+    // error rather than as an empty result.
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+
+    const agents = new SupabaseAgentRepository(db)
+    expect(await agents.loadSettings(stage.organizationA, ABSENT)).toBeNull()
+    expect(
+      await agents.findPendingInvitation(stage.organizationA, UNHELD_PHONE),
+    ).toBeNull()
+
+    const preparation = new SupabasePreparationPorts(db)
+    expect(
+      await preparation.loadCatalogue(stage.organizationA, ABSENT),
+    ).toBeNull()
+    expect(await preparation.loadSnapshot(ABSENT)).toBeNull()
+    expect(await preparation.loadPlan(ABSENT)).toBeNull()
+    expect(await preparation.loadStock(ABSENT)).toEqual([])
+
+    const finance = new SupabaseFinanceRepository(db)
+    // `invoice_payments(payment_id)` — the embed 0022 made necessary. If
+    // PostgREST cannot resolve it, this raises rather than returning [].
+    expect(
+      await finance.loadInvoicesForBooking(stage.organizationA, ABSENT),
+    ).toEqual([])
+    expect(
+      await finance.loadCommissionsForBooking(stage.organizationA, ABSENT),
+    ).toEqual([])
+  }, 60_000)
+
+  it('answers a number nobody holds with null, through the definer function', async () => {
+    // Proves the function exists under that name, takes an argument called
+    // `phone_e164`, and returns something this adapter reads as a uuid. None
+    // of that is checkable without a database.
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+
+    expect(
+      await new SupabaseAgentRepository(db).findUserByPhone(UNHELD_PHONE),
+    ).toBeNull()
+  }, 60_000)
+
+  it('finds a user in another organization by their normalised number', async () => {
+    // The whole point of `find_user_id_by_phone`: this caller shares no
+    // organization with that person, so `user_profiles_select` can tell them
+    // nothing — and answering "no such user" is what creates a second identity
+    // for somebody who already has one.
+    await stageAdmin
+      .from('user_profiles')
+      .update({ phone: TEST_PHONE })
+      .eq('id', stage.userB)
+
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+
+    const found = await new SupabaseAgentRepository(db).findUserByPhone(
+      TEST_PHONE,
+    )
+
+    // The id, which is all the function returns and all the identity decision
+    // needs. The name is read separately, through RLS, and is legitimately
+    // null for a stranger.
+    expect(found?.userId).toBe(stage.userB)
+  }, 60_000)
+
+  it('attaches an existing user as an agent, and reads the status off the membership', async () => {
+    // The middle branch of `identity.ts`: a membership, never a second user.
+    // The status comes back from `memberships` through the embed, because 0019
+    // deliberately does not put it on the terms row.
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+    const agents = new SupabaseAgentRepository(db)
+
+    const attached = await agents.attachExistingUser(
+      {
+        organizationId: stage.organizationA,
+        userId: stage.userB,
+        settings: agentSettings(stage.organizationA, stage.userB),
+      },
+      undefined,
+    )
+
+    expect(attached.status).toBe('active')
+    expect(attached.membershipId).not.toBe('')
+
+    const loaded = await agents.loadSettings(stage.organizationA, stage.userB)
+    expect(loaded).toMatchObject({
+      status: 'active',
+      access: { calendar: 'availability_price', price: 'agent' },
+      inventory: { kind: 'all_properties' },
+      discountCap: { maxPercent: 7.5 },
+    })
+    // `numeric(6,3)` arrives as a string over the wire. This is the assertion
+    // that would catch it being carried into the domain as one.
+    expect(typeof loaded?.discountCap.maxPercent).toBe('number')
+  }, 60_000)
+
+  it('refuses a settings save against a version somebody else moved', async () => {
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+    const agents = new SupabaseAgentRepository(db)
+
+    const current = await agents.loadSettings(stage.organizationA, stage.userB)
+    if (!current)
+      throw new Error('The previous test should have created these.')
+
+    const saved = await agents.saveSettings(
+      { ...current, reputationScore: 42 },
+      current.version,
+      undefined,
+    )
+    expect(saved.reputationScore).toBe(42)
+    // `tg_touch_row` owns the column and the adapter never sends it.
+    expect(saved.version).toBeGreaterThan(current.version)
+
+    const stale = agents.saveSettings(
+      { ...saved, reputationScore: 7 },
+      // Deliberately behind. Somebody else wrote first.
+      saved.version - 1,
+      undefined,
+    )
+    await expect(stale).rejects.toBeInstanceOf(ConflictError)
+  }, 60_000)
+
+  it('round-trips an invitation through the generated phone column', async () => {
+    // `phone_e164` is `generated always`. The adapter writes only `phone`, and
+    // finding the row back *by the generated column* is what proves the
+    // normaliser ran on the way in and that no writer can skip it.
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+    const agents = new SupabaseAgentRepository(db)
+
+    const now = new Date()
+    const written = await agents.insertInvitation(
+      {
+        id: crypto.randomUUID(),
+        organizationId: stage.organizationA,
+        phoneE164: INVITED_PHONE,
+        displayName: 'סוכן ניסיון',
+        email: null,
+        invitedByUserId: stage.userA,
+        access: {
+          calendar: 'availability_price',
+          price: 'agent',
+          guestData: 'none',
+        },
+        inventory: { kind: 'all_properties' },
+        status: 'pending',
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 86_400_000).toISOString(),
+        acceptedAt: null,
+      },
+      undefined,
+    )
+
+    expect(written.phoneE164).toBe(INVITED_PHONE)
+
+    const found = await agents.findPendingInvitation(
+      stage.organizationA,
+      INVITED_PHONE,
+    )
+    expect(found?.id).toBe(written.id)
+    expect(found?.access).toEqual(written.access)
+  }, 60_000)
+
+  it('round-trips a preparation catalogue, jsonb columns and all', async () => {
+    // Seeded with the admin client because the *shape* of the jsonb is the
+    // domain's business and not this file's. What is under test is that every
+    // column name is right and that an array column comes back an array.
+    const { error } = await stageAdmin.from('preparation_catalogues').insert({
+      organization_id: stage.organizationA,
+      property_id: stage.propertyA,
+      bed_types: [{ id: 'double' }],
+      rules: [{ id: 'rule-1' }],
+      event_templates: [],
+      property_configuration: { label: 'וילת ניסיון' },
+      variable_costs: [],
+      fixed_costs: [],
+      commission_rules: [],
+      complexity: { perGuest: 1 },
+      readiness_policy: {},
+      section_labels: { bedrooms: 'חדרי שינה' },
+    })
+    expect(error).toBeNull()
+
+    const db = await signIn(
+      ENV.userAEmail as string,
+      ENV.userAPassword as string,
+    )
+    const catalogue = await new SupabasePreparationPorts(db).loadCatalogue(
+      stage.organizationA,
+      stage.propertyA,
+    )
+
+    expect(catalogue).toMatchObject({
+      organizationId: stage.organizationA,
+      rules: [{ id: 'rule-1' }],
+      sectionLabels: { bedrooms: 'חדרי שינה' },
+    })
+  }, 60_000)
+})
+
+/**
+ * Preset-shaped terms for the agent fixtures above.
+ *
+ * `membershipId` is empty, which is what `addAgent` passes on the
+ * `attach_existing_user` branch: there is no membership yet, and creating one
+ * is what the adapter is being asked to do.
+ */
+function agentSettings(
+  organizationId: string,
+  agentUserId: string,
+): AgentOrganizationSettings {
+  const now = new Date().toISOString()
+  return {
+    organizationId,
+    agentUserId,
+    membershipId: '',
+    status: 'active',
+    access: {
+      calendar: 'availability_price',
+      price: 'agent',
+      guestData: 'none',
+    },
+    inventory: { kind: 'all_properties' },
+    discountCap: { maxPercent: 7.5, maxAgorot: null },
+    holdLimits: {
+      maxConcurrent: 3,
+      maxPerDay: 10,
+      maxExtensions: 1,
+      defaultMinutes: 30,
+      maxMinutes: 120,
+    },
+    reputationScore: 0,
+    agencyId: null,
+    internalNote: null,
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  }
+}
 
 // ── Fixture plumbing ──────────────────────────────────────────────────────
 

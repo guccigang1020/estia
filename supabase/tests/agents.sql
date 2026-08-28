@@ -138,9 +138,9 @@ begin
     (agency_id, organization_id, status, base, active_from, signed_at,
      rule, payment_terms_days)
   values
-    (agency_a, org_a, 'active', 'whole_booking', current_date, now(),
+    (agency_a, org_a, 'active', 'stay_total', current_date, now(),
      '{"kind":"percentage","percent":10}'::jsonb, 30),
-    (agency_b, org_b, 'active', 'whole_booking', current_date, now(),
+    (agency_b, org_b, 'active', 'stay_total', current_date, now(),
      '{"kind":"percentage","percent":12}'::jsonb, 45);
 
   insert into public.bookings
@@ -162,9 +162,9 @@ begin
   ---------------------------------------------------------------------------
   select array_agg(e.enumlabel::text order by e.enumsortorder) into got
     from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'commission_base';
-  want := array['whole_booking','accommodation_only'];
+  want := array['accommodation_only','stay_total','gross_revenue','net_revenue','net_of_direct_costs','net_contribution'];
   insert into agent_results (area, name, expected, actual, passed) values
-    ('contract', 'commission_base matches src/lib/agents COMMISSION_BASES',
+    ('contract', 'commission_base matches COMMISSION_BASES in src/lib/contracts/states.ts',
      array_to_string(want, ','), array_to_string(got, ','), got = want);
 
   select array_agg(e.enumlabel::text order by e.enumsortorder) into got
@@ -213,7 +213,7 @@ begin
     (organization_id, agent_user_id, name, rule, base, priority, created_by)
   values
     (org_a, agent_1, 'Standard 10%', '{"kind":"percentage","percent":10}'::jsonb,
-     'whole_booking', 10, user_a)
+     'stay_total', 10, user_a)
   returning id into rule_a;
 
   insert into agent_results (area, name, expected, actual, passed) values
@@ -289,7 +289,7 @@ begin
      rule_id, rule_version, base, basis_agorot, rate_bps, amount_agorot,
      explanation, eligibility, created_by)
   values
-    (org_a, prop_a, bk_a, agent_1, agency_a, rule_a, 1, 'whole_booking',
+    (org_a, prop_a, bk_a, agent_1, agency_a, rule_a, 1, 'stay_total',
      500000, 1000, 50000, '10% of 5,000.00',
      '["payment_received","stay_completed"]'::jsonb, user_a)
   returning id into comm_a;
@@ -465,7 +465,7 @@ begin
   -- (d) A draft agreement is not a relationship: it must not reveal the agency.
   insert into public.agency_agreements
     (agency_id, organization_id, status, base, active_from, rule)
-  values (agency_d, org_c, 'draft', 'whole_booking', current_date,
+  values (agency_d, org_c, 'draft', 'stay_total', current_date,
           '{"kind":"percentage","percent":5}'::jsonb);
 
   begin
@@ -684,7 +684,7 @@ begin
     insert into public.agent_commission_rule_versions
       (rule_id, version, organization_id, rule, base, eligibility_conditions, priority)
       values (rule_a, 99, org_a, '{"kind":"percentage","percent":50}'::jsonb,
-              'whole_booking', '{}', 0);
+              'stay_total', '{}', 0);
     err := 'NO ERROR — HISTORY WAS FORGED';
   exception when others then err := sqlstate;
   end;
@@ -783,7 +783,7 @@ begin
     execute 'set local role authenticated';
     insert into public.agency_agreements
       (agency_id, organization_id, status, base, active_from, rule, created_by)
-      values (agency_d, org_a, 'draft', 'whole_booking', current_date,
+      values (agency_d, org_a, 'draft', 'stay_total', current_date,
               '{"kind":"percentage","percent":7}'::jsonb, user_a);
     get diagnostics n_rows = row_count; err := null;
   exception when others then err := sqlstate; n_rows := -1;

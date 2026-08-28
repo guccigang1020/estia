@@ -48,7 +48,7 @@
  *     — which is `AvailabilitySource` + `BookingStore` + `HoldStore`
  *   `MetricSource`       → `SupabaseMetricSource`       (metrics.ts)
  *   `FinanceRepository`  → `SupabaseFinanceRepository`  (finance.ts)
- *   `AgentRepository`    → `SupabaseAgentRepository`    (agents.ts), partly
+ *   `AgentRepository`    → `SupabaseAgentRepository`    (agents.ts)
  *   `PreparationPorts`   → `SupabasePreparationPorts`   (preparation.ts), partly
  *   `TransactionRunner`  → `postgresUnitOfWork`         (atomic-transaction.ts)
  *
@@ -67,6 +67,34 @@
  * made the user runs as the owner, with `BYPASSRLS`, and every policy in
  * `0004_rls` is skipped in silence.
  *
+ * ── What 0018–0023 unblocked ──────────────────────────────────────────────
+ *
+ * Five refusals this file used to list are gone, and each was closed by the
+ * migration it asked for rather than by relaxing the refusal:
+ *
+ *   · **`AgentSettingsStore`** → `agent_organization_settings` (0019). The
+ *     three ladders are enum columns with CHECK constraints, not jsonb, and
+ *     the agent's *status* deliberately stays on `memberships`, named through
+ *     a composite foreign key and read here by embedding it.
+ *   · **`findUserByPhone`** → `user_profiles.phone_e164`, generated and
+ *     globally unique, plus `find_user_id_by_phone(text)` — `security
+ *     definer`, gated on `agent.invite`, returning a bare uuid (0020). Not the
+ *     admin client, which would have handed this layer the whole table.
+ *   · **`findPendingInvitation`** → `agent_invitations` (0019), which is a
+ *     different table from `public.invitations` and always was.
+ *   · **The commission base enum** → rebuilt with the six members of
+ *     `COMMISSION_BASES`, `whole_booking` renamed to `stay_total` (0018). Both
+ *     of the finance port's commission methods and the agent write path are
+ *     open.
+ *   · **`Invoice.paymentIds`** → `public.invoice_payments` (0022), carrying
+ *     `booking_id` so both composite foreign keys name it. The jsonb array in
+ *     `invoices.metadata` is no longer written or read; the rows must be
+ *     backfilled *before* this code runs, or the link is lost.
+ *   · **`WorkPlan`, `PreparationSnapshot`, `PreparationCatalogue`** → three
+ *     tables (0021), not a projection onto `tasks`. `preparation_snapshots` is
+ *     append-only by trigger, which is what keeps a March plan costing what it
+ *     cost in March.
+ *
  * ── Still not implemented, and exactly why ────────────────────────────────
  *
  * Each of these raises `SchemaNotProvisionedError` — never `null` and never an
@@ -74,46 +102,24 @@
  * store the thing at all" need different responses and only one of them is a
  * bug in somebody's data.
  *
- * **`AgentSettingsStore`** — no `agent_organization_settings` table exists in
- * any migration to 0017. `AgentOrganizationSettings` carries the access,
- * inventory, discount and hold ladders plus a reputation score;
- * `public.memberships` holds the relationship and none of the terms. The rest
- * of `AgentRepository` is implemented: the hold ledger is `public.holds` (0015
- * folded it in and deleted the need for a second table), commissions and their
- * rules are real tables, and discount approvals are `public.approvals`.
+ * **`PreparationPorts.loadBooking`.** 0021 added the catalogue, the snapshot
+ * and the plan and deliberately did not touch `bookings`. `PreparationBooking`
+ * needs the event type, the extras and the sleeping arrangement, and there is
+ * no column for any of them. A plan built for the wrong kind of stay is not
+ * noticed until the linen runs out.
  *
- * **`AgentDirectory.findUserByPhone` and `findPendingInvitation`.** The first
- * because `user_profiles.phone` is free text with no E.164 column, and because
- * the question is global while RLS is not — so every answer this layer could
- * give would be a *wrong* "no such user", which sends `identity.ts` down the
- * invite branch and creates a second identity for a person who already has one.
- * It needs a `security definer` lookup that returns a user id and nothing else.
- * The second because `public.invitations` is keyed on email with a role, and
- * carries neither the phone number that is the agent identity nor the ladders
- * acceptance grants.
+ * **`PreparationPorts.loadAllocationContexts`.** What is missing here is the
+ * *rule*, not the storage. `AllocationContext` is six measured facts about a
+ * period, and deciding whether a cancelled booking counts as a booking or
+ * whether revenue means gross or net changes the number on an owner's
+ * statement. A mapping layer must not make those calls.
  *
- * **The commission base enum.** `public.commission_base` has two members,
- * `whole_booking` and `accommodation_only`. `COMMISSION_BASES` in
- * `src/lib/contracts/states.ts` now has six, and `whole_booking` is not one of
- * them. So `stay_total` cannot be stored, and a stored `whole_booking` is not a
- * value any TypeScript union accepts. The finance port's two commission methods
- * are blocked on it outright; the agent side refuses an unstorable base up
- * front rather than letting a raw `22P02` surface from inside a write. One
- * `alter type … add value` per missing member, plus a data migration for the
- * existing rows, closes it.
- *
- * **`PreparationPorts`, except stock.** `WorkPlan`, `PreparationSnapshot` and
- * `PreparationCatalogue` still have no tables. `tasks` is adjacent and is not
- * the same thing: a work plan is a versioned computed artefact with a frozen
- * snapshot beside it, and that snapshot is the entire mechanism preventing
- * historical drift — which is why `operations.ts` deliberately has no
- * `loadCatalogue(bookingId)`. `loadStock` and `loadTransferrableStock` are
- * served from `inventory_items`.
- *
- * **`Invoice.paymentIds`** has no join table and is carried in
- * `invoices.metadata`. That one is a stopgap rather than a refusal, because the
- * alternative was an invoice that silently forgot which payments it accounted
- * for; `finance.ts` flags it and names the table it wants.
+ * **A commission owed to an agency and to no named person.** `commissions.
+ * agent_user_id` is nullable — an agency keeps the relationship when the
+ * individual leaves — and the agent domain's `Commission.agentUserId` is not.
+ * The finance port's `Commission` models it correctly and is fine; the agent
+ * port needs an agency-only variant before `agents.ts` can read such a row.
+ * That is a gap in a domain type, not in the schema.
  *
  * Two things a future implementer should not have to rediscover:
  *
