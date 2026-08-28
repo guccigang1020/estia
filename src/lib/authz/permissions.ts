@@ -28,6 +28,16 @@ export const PERMISSIONS = [
   'booking.view',
   'booking.create',
   'booking.update',
+  // The amendment family. `booking.update` is the staff-level right to edit a
+  // booking as a whole; these name one change each, so an external seller can
+  // be allowed to add a cot without being allowed to move the dates or cut the
+  // price. Every one of them is independently grantable — they are not a
+  // ladder, because no ordering between them is true: a business may well let
+  // an agent change dates and never touch money.
+  'booking.amend_guest_count',
+  'booking.amend_extras',
+  'booking.amend_dates',
+  'booking.amend_price',
   'booking.cancel',
   'booking.delete',
   'booking.change_status',
@@ -37,6 +47,24 @@ export const PERMISSIONS = [
   'booking.assign',
   'booking.note.internal',
 
+  // ── Availability & holds ────────────────────────────────────────────────
+  // `availability.view` is free/busy and nothing else: which dates a unit can
+  // still be sold on, without the booking that occupies them. It exists as its
+  // own permission because an external seller must be told "taken" without
+  // being told by whom, for how much, or through which channel. `booking.view`
+  // is strictly more than this and never a substitute for it.
+  'availability.view',
+  // A hold is inventory removed from sale for a short while without a booking
+  // behind it. Creating one costs the business real money if it is forgotten,
+  // so releasing it is named separately from creating it.
+  'hold.view',
+  'hold.create',
+  'hold.release',
+  // Extending a hold keeps inventory off sale for longer, which is the thing
+  // the concurrent, daily and extension limits exist to bound. The limits
+  // themselves are data; the right to extend at all is this.
+  'hold.extend',
+
   // ── Guest ───────────────────────────────────────────────────────────────
   'guest.view',
   'guest.create',
@@ -44,10 +72,29 @@ export const PERMISSIONS = [
   'guest.delete',
   'guest.export',
 
+  // ── Lead & quote ────────────────────────────────────────────────────────
+  // Both are worked from two sides — the business's desk and an external
+  // seller — so they are first-class here rather than states hidden inside a
+  // booking. Sending a quote is split from writing one for the same reason
+  // publishing a site is split from editing it: it is the moment a price
+  // reaches a customer and stops being reversible.
+  'lead.view',
+  'lead.create',
+  'lead.update',
+  'lead.assign',
+  'quote.view',
+  'quote.create',
+  'quote.update',
+  'quote.send',
+
   // ── Finance ─────────────────────────────────────────────────────────────
   'finance.view',
   'payment.view',
   'payment.create',
+  // Asking the system to send the guest a payment link is not taking money:
+  // it exposes no card, no ledger and no balance. Separated so somebody who
+  // sells can get paid without being given the payment record.
+  'payment.request_link',
   'payment.capture',
   'payment.refund',
   'payment.void',
@@ -121,6 +168,55 @@ export const PERMISSIONS = [
   'owner_statement.view',
   'owner_statement.issue',
 
+  // ── Agent network ───────────────────────────────────────────────────────
+  // External sellers are members of the organization with a narrow role and a
+  // narrow scope — not a second identity system. What is genuinely new is the
+  // business side: the relationship, its commercial terms, and the money it
+  // owes. Those are split finely because they are decided by different people.
+  //
+  //   · `agent.manage` edits who the seller is.
+  //   · `agent.scope.manage` decides which inventory an outsider can see, and
+  //     is therefore the blast radius, not an attribute. It is separated for
+  //     the same reason `permission.edit` is separated from `user.edit`.
+  //   · `agent_agreement.manage` sets the commission rule — the price of a
+  //     sale — and is held by whoever owns the commercial relationship.
+  //   · `commission.approve` and `commission.payout` release the money, and
+  //     are deliberately not held by whoever wrote the rule.
+  'agent.view',
+  'agent.invite',
+  'agent.manage',
+  'agent.scope.manage',
+  'agency.manage',
+  'agent_agreement.view',
+  'agent_agreement.manage',
+  // The guardrails, kept apart from the agreement: a discount cap and the
+  // hold limits are operational ceilings that the revenue side sets, while the
+  // commission rule is the commercial deal. The numbers behind both are data —
+  // this is only the right to choose them.
+  'agent_limits.manage',
+  'agent_booking.approve',
+  'commission.view',
+  /**
+   * Moving a commission along its lifecycle by hand. The
+   * `estimated → pending → eligible` steps happen on their own, but somebody
+   * occasionally has to correct one.
+   *
+   * Separate from `commission.approve` because adjusting a figure and
+   * releasing the money are different acts, and separate from
+   * `agent_agreement.manage` because whoever sets the commercial terms should
+   * not also be quietly changing what one agent is owed this month.
+   */
+  'commission.manage',
+  'commission.approve',
+  'commission.payout',
+  'agent_statement.view',
+  'agent_statement.issue',
+  'report.agent.view',
+  // The agent trail alone, not the organization's whole audit log. Somebody
+  // running the network needs to see what an agent did without being handed
+  // every payroll and guest event in the business.
+  'agent.audit.view',
+
   // ── Governance ──────────────────────────────────────────────────────────
   'audit.view',
   'approval.request',
@@ -154,23 +250,56 @@ export function isPermission(value: string): value is Permission {
  * never by hiding it in the UI.
  */
 export const SENSITIVE_FIELDS = {
-  'guest.contact': ['guest.view_contact'],
+  // The name is its own field. Contact details were never a synonym for it:
+  // a record redacted of phone and email still identified the guest by name to
+  // anyone allowed to see the row at all — a cleaner, and now an external
+  // seller, both of whom must see the stay without seeing the person.
+  // Guest identity, one field at a time and defaulting to nothing. `name`,
+  // `phone` and `email` were previously a single `guest.view_contact`, which
+  // could not express the request an agent network actually makes: give the
+  // seller the phone so they can call their own client, and never the email,
+  // which is the business's channel for the next stay.
+  'guest.name': ['guest.view_name'],
+  'guest.phone': ['guest.view_phone'],
+  'guest.email': ['guest.view_email'],
   'guest.document_id': ['guest.view_document_id'],
   'booking.price': ['booking.view_price'],
+  // Coarse on purpose: not paid · deposit paid · paid. Enough for a seller to
+  // chase their own client, and nothing about the card, the provider or the
+  // ledger. A separate grant from the amount, because knowing that money
+  // arrived is not knowing how much.
+  'booking.payment_status': ['booking.view_payment_status'],
   'booking.source': ['booking.view_source'],
   'booking.deposit': ['booking.view_deposit'],
   'booking.profitability': ['booking.view_profitability'],
+  // Internal notes are guarded by the permission that writes them, so there is
+  // one name for the concept rather than two that can drift apart.
+  'booking.internal_notes': ['booking.note.internal'],
   'owner.commission': ['owner.view_commission'],
+  // Three prices for the same night, and three different circles of trust.
+  // The public rate is what a guest is quoted; the agent rate is what a seller
+  // may offer; the net rate is what the business will actually accept, and
+  // handing it to the wrong person hands away the negotiation. None of the
+  // three implies another — they are separate grants, compared whole.
+  'rate.public': ['rate.view_public'],
+  'rate.agent': ['rate.view_agent'],
+  'rate.net': ['rate.view_net'],
 } as const
 
 export const FIELD_PERMISSIONS = [
-  'guest.view_contact',
+  'guest.view_name',
+  'guest.view_phone',
+  'guest.view_email',
   'guest.view_document_id',
   'booking.view_price',
+  'booking.view_payment_status',
   'booking.view_source',
   'booking.view_deposit',
   'booking.view_profitability',
   'owner.view_commission',
+  'rate.view_public',
+  'rate.view_agent',
+  'rate.view_net',
 ] as const
 
 export type FieldPermission = (typeof FIELD_PERMISSIONS)[number]
@@ -194,4 +323,13 @@ export const SENSITIVE_ACTIONS: ReadonlySet<Grant> = new Set<Grant>([
   'guest.export',
   'integration.manage',
   'platform.impersonate',
+  // Money owed to a third party. Writing the commission rule decides what the
+  // business will pay on every future sale; approving and paying out move it.
+  'agent_agreement.manage',
+  'agent_limits.manage',
+  'commission.approve',
+  'commission.payout',
+  // Widening what an outsider may see is a change to reach, not to a record —
+  // the same class of decision as `permission.edit`.
+  'agent.scope.manage',
 ])

@@ -69,8 +69,17 @@ export const DOMAIN_EVENTS = [
 
   // Money
   'payment.link_sent',
+  'payment.authorized', // reserved on the card, not yet taken
   'payment.received',
   'payment.failed',
+  'payment.cancelled',
+  /**
+   * The processor did not answer, so nobody knows whether the card was
+   * charged. This is a queue a person works, not a log line: it is on
+   * `ALERT_EVENTS` because the alternative to somebody reconciling it is a
+   * guest who paid and has no booking, or one who did not and has one.
+   */
+  'payment.outcome_unknown',
   'payment.refunded',
   'deposit.authorized',
   'deposit.captured',
@@ -177,6 +186,7 @@ export function isDomainEvent(name: string): name is DomainEventName {
  */
 export const ALERT_EVENTS: readonly DomainEventName[] = [
   'payment.failed',
+  'payment.outcome_unknown',
   'invoice.failed',
   'channel.sync_failed',
   'inventory.shortage_detected',
