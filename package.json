@@ -19,7 +19,8 @@
     "test:coverage": "vitest run --coverage",
     "security:check": "node .github/scripts/check-secrets.mjs",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security:check && npm run build",
-    "db:proofs": "node scripts/run-db-proofs.mjs"
+    "db:proofs": "node scripts/run-db-proofs.mjs",
+    "reality": "node scripts/product-reality.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
