@@ -1,63 +1,61 @@
 /**
- * Atomicity, and the fact that this layer does not have it.
+ * Atomicity: the honest runner, and the real one beside it.
  *
  * ############################################################################
- * # READ THIS BEFORE WIRING A BOOKING OR A PAYMENT.                          #
+ * # `sequentialUnitOfWork` IS NOT A TRANSACTION, and is still exported.      #
+ * # A unit of work that fails half way leaves the successful half durable,   #
+ * # and `PartialCommitError` says which half.                                #
  * #                                                                          #
- * # `sequentialUnitOfWork` IS NOT A TRANSACTION. Nothing in this directory   #
- * # is. A unit of work that fails half way leaves the successful half        #
- * # durable, and `PartialCommitError` says which half.                       #
+ * # `postgresUnitOfWork` in `atomic-transaction.ts` IS one. Wire that for    #
+ * # anything that touches a booking or money.                                #
  * ############################################################################
  *
- * ── Why, precisely ────────────────────────────────────────────────────────
+ * ── Why the honest one had to exist first ─────────────────────────────────
  *
  * `TransactionRunner.run(work)` takes a JavaScript closure. Making that closure
  * atomic means running it between a `BEGIN` and a `COMMIT` on one connection.
  * Supabase is reached here over PostgREST, which is stateless HTTP: every
  * request is its own implicit transaction and there is no session to hold a
- * `BEGIN` open across three of them. This is not a gap in `@supabase/supabase-js`
- * that a cleverer call would close — a JavaScript function cannot execute
- * inside a Postgres transaction over HTTP, and no amount of care in this file
- * changes that.
+ * `BEGIN` open across three of them. That is not a gap a cleverer call to
+ * `@supabase/supabase-js` would close — a JavaScript function cannot execute
+ * inside a Postgres transaction over HTTP.
  *
- * There are exactly two real fixes, and both are outside this directory:
+ * Two fixes were possible, and the second was taken:
  *
- *   1. **A Postgres function per operation, invoked by RPC.** The whole unit of
- *      work — insert the booking, insert its price lines, insert the audit row,
- *      complete the idempotency key — becomes one `plpgsql` function and one
- *      `rpc()` call, which is one statement and therefore atomic. This is the
- *      usual answer and the right one. It needs a migration (`supabase/`), and
- *      it needs the operation port to change shape: an operation would declare
- *      an RPC name and its arguments instead of a JavaScript `execute`, because
- *      the body has to live in the database. Both are changes to files this
- *      work does not own, so both are reported rather than made.
+ *   1. **A Postgres function per operation, invoked by RPC.** The usual
+ *      answer, and it works. It was rejected because it splits the business
+ *      rules across two languages and two places: the service pipeline exists
+ *      so that every operation takes one path, and moving half of each
+ *      operation into `plpgsql` dissolves exactly that.
  *
- *   2. **A direct Postgres connection** (`pg`, `postgres.js`) alongside
- *      PostgREST, with real `BEGIN`/`COMMIT` and `set local role` to keep RLS.
- *      This preserves the port exactly as written. It needs a dependency, and
- *      adding one was out of scope here.
+ *   2. **A direct Postgres connection** through the transaction pooler, with a
+ *      real `BEGIN`/`COMMIT` and `set local role` so row level security still
+ *      applies. This is what `atomic-transaction.ts` does. The port is
+ *      unchanged, every adapter is unchanged, and the one new dependency is a
+ *      Postgres driver.
  *
- * ── What is atomic anyway ─────────────────────────────────────────────────
+ * ── What was atomic even before that ──────────────────────────────────────
  *
  * More than nothing, and the most important part. **A single statement is
  * atomic, and it takes its triggers with it.** Inserting one booking row fires
  * `tg_bookings_sync_occupancy`, which projects it into `unit_occupancy`, where
- * the GiST exclusion constraint either accepts it or fails the whole statement.
- * So the double-booking guarantee — the one thing that absolutely must not be
- * racy — is intact regardless of anything in this file, because it lives
- * inside one statement in the database.
+ * the GiST exclusion constraint either accepts it or fails the whole
+ * statement. So the double-booking guarantee — the one thing that absolutely
+ * must not be racy — has always been intact, because it lives inside one
+ * statement in the database.
  *
- * What is *not* atomic is the composition: booking + price lines + audit row +
- * idempotency completion are four statements, and a failure at the third
- * leaves the first two committed.
+ * What was not atomic is the *composition*: booking + price lines + audit row
+ * + idempotency completion are four statements, and a failure at the third
+ * left the first two committed. That is the gap `postgresUnitOfWork` closes.
  *
- * ── So what does this file give you ───────────────────────────────────────
+ * ── So when is the sequential one still right ─────────────────────────────
  *
- * Honesty and a trail. `sequentialUnitOfWork` runs the work with a handle that
- * records each write as it commits, and converts a mid-way failure into a
- * `PartialCommitError` naming exactly what is already durable. That turns the
- * worst version of this failure — silence — into an incident report. It is a
- * consolation prize and it is labelled as one.
+ * When there is no signed-in user to run as. The atomic runner refuses without
+ * one, deliberately — a direct connection with no session runs as the owner
+ * with `BYPASSRLS`. A webhook or a nightly sweep therefore keeps this runner
+ * and its `PartialCommitError`, which turns the worst version of the failure —
+ * silence — into an incident report. It remains a consolation prize, and it
+ * remains labelled as one.
  */
 
 import type { TransactionHandle, TransactionRunner } from '../service'
@@ -87,9 +85,12 @@ export interface SupabaseUnitOfWork {
    */
   record(label: string): void
   /**
-   * True for the honest runner below, and the flag a future atomic runner
-   * would set to `false`. Left readable so a call site that genuinely must not
-   * run without atomicity can refuse rather than hope.
+   * `false` for `sequentialUnitOfWork`, `true` for `postgresUnitOfWork`.
+   *
+   * Readable so a call site that genuinely must not run without atomicity can
+   * refuse rather than hope. Note what it means for `committed`: under the
+   * atomic runner that list is what has been *written so far in this
+   * transaction*, not what is durable — a rollback takes all of it.
    */
   readonly atomic: boolean
 }
@@ -129,6 +130,9 @@ export function recordWrite(handle: TransactionHandle, label: string): void {
  * the service layer names its default `noTransactionRunner` for exactly this
  * reason — a runner that is not one must not be able to pass for one at a call
  * site, and a name is the only thing a reviewer reads.
+ *
+ * Now that `postgresUnitOfWork` exists, reach for this one only where there is
+ * no session to run as.
  */
 export function sequentialUnitOfWork(db: Db): TransactionRunner {
   return {

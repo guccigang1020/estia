@@ -15,15 +15,21 @@
  *       SupabaseAuditWriter,
  *       SupabaseBookingRepository,
  *       SupabaseIdempotencyStore,
- *       sequentialUnitOfWork,
+ *       postgresUnitOfWork,
  *     } from '@/lib/persistence'
  *
  *     const db = await createClient()          // the signed-in user's session
  *     const services = {
  *       audit: new SupabaseAuditWriter(db),
  *       idempotency: new SupabaseIdempotencyStore(db),
- *       transactions: sequentialUnitOfWork(db), // NOT atomic — read below
+ *       transactions: postgresUnitOfWork(db),  // atomic — see below
  *     }
+ *
+ * `postgresUnitOfWork` needs `DATABASE_URL` pointing at the Supabase
+ * **transaction pooler** (port 6543) and refuses to run without a signed-in
+ * user. `sequentialUnitOfWork` is still exported for the cases that genuinely
+ * have no session — a webhook, a nightly sweep — and is still not a
+ * transaction.
  *
  * The client is always passed in. No adapter constructs one and no adapter
  * imports `@/lib/env`, so importing any of this from a test does not require a
@@ -41,57 +47,89 @@
  *   `BookingRepository`  → `SupabaseBookingRepository`  (booking.ts)
  *     — which is `AvailabilitySource` + `BookingStore` + `HoldStore`
  *   `MetricSource`       → `SupabaseMetricSource`       (metrics.ts)
+ *   `FinanceRepository`  → `SupabaseFinanceRepository`  (finance.ts)
+ *   `AgentRepository`    → `SupabaseAgentRepository`    (agents.ts), partly
+ *   `PreparationPorts`   → `SupabasePreparationPorts`   (preparation.ts), partly
+ *   `TransactionRunner`  → `postgresUnitOfWork`         (atomic-transaction.ts)
  *
- * ── Not implemented, and why ──────────────────────────────────────────────
+ * ── Atomicity ─────────────────────────────────────────────────────────────
  *
- * The schema moved during this work — `0013`–`0016` were applied to the live
- * project while these files were being written — so read the note against each
- * one rather than assuming. Where a port is absent because no table existed,
- * that is a gap in the schema and not in the effort: an adapter that stored a
- * domain concept in a `metadata` jsonb blob because no column existed would be
- * deciding the shape of the money schema by the back door.
+ * **There is a real transaction now.** `postgresUnitOfWork` opens a direct
+ * connection through the transaction pooler, runs `BEGIN`, makes the connection
+ * *be* the signed-in user with `set local role authenticated` plus
+ * `set local request.jwt.claims`, and commits or rolls back as one unit.
+ * `postgrest-sql.ts` compiles the same builder every adapter here already uses
+ * into SQL on that connection, so no adapter needed a second implementation and
+ * none can tell which client it is holding.
  *
- * **`TransactionRunner` — no atomic implementation exists, anywhere.**
- * `sequentialUnitOfWork` is exported and is named for what it does. Read the
- * header of `transaction.ts` before wiring a booking or a payment to it: the
- * reason is structural, not lazy, and there are exactly two real fixes.
+ * Read `atomic-transaction.ts` before touching any of it. The failure it guards
+ * against is invisible by construction: a direct connection that has not been
+ * made the user runs as the owner, with `BYPASSRLS`, and every policy in
+ * `0004_rls` is skipped in silence.
  *
- * **`FinanceRepository` and `AgentRepository` — buildable now; they were not
- * when this work started.** Migrations `0013`–`0016` landed while this
- * directory was being written and added, among others, `finance_snapshots`,
- * `invoice_lines`, `credit_note_lines`, `payment_provider_events`,
- * `payment_schedules`, `expense_rules`, `agencies`,
- * `agent_commission_rules` and `commission_statements` — precisely the storage
- * whose absence made these two ports unimplementable. They are the obvious
- * next piece of work and nothing about them is blocked any more; they are
- * absent here because the schema arrived after the plan did, and guessing at
- * fourteen new tables without reading them would be the opposite of what the
- * rest of this directory does.
+ * ── Still not implemented, and exactly why ────────────────────────────────
+ *
+ * Each of these raises `SchemaNotProvisionedError` — never `null` and never an
+ * empty array, because "nothing is configured yet" and "this deployment cannot
+ * store the thing at all" need different responses and only one of them is a
+ * bug in somebody's data.
+ *
+ * **`AgentSettingsStore`** — no `agent_organization_settings` table exists in
+ * any migration to 0017. `AgentOrganizationSettings` carries the access,
+ * inventory, discount and hold ladders plus a reputation score;
+ * `public.memberships` holds the relationship and none of the terms. The rest
+ * of `AgentRepository` is implemented: the hold ledger is `public.holds` (0015
+ * folded it in and deleted the need for a second table), commissions and their
+ * rules are real tables, and discount approvals are `public.approvals`.
+ *
+ * **`AgentDirectory.findUserByPhone` and `findPendingInvitation`.** The first
+ * because `user_profiles.phone` is free text with no E.164 column, and because
+ * the question is global while RLS is not — so every answer this layer could
+ * give would be a *wrong* "no such user", which sends `identity.ts` down the
+ * invite branch and creates a second identity for a person who already has one.
+ * It needs a `security definer` lookup that returns a user id and nothing else.
+ * The second because `public.invitations` is keyed on email with a role, and
+ * carries neither the phone number that is the agent identity nor the ladders
+ * acceptance grants.
+ *
+ * **The commission base enum.** `public.commission_base` has two members,
+ * `whole_booking` and `accommodation_only`. `COMMISSION_BASES` in
+ * `src/lib/contracts/states.ts` now has six, and `whole_booking` is not one of
+ * them. So `stay_total` cannot be stored, and a stored `whole_booking` is not a
+ * value any TypeScript union accepts. The finance port's two commission methods
+ * are blocked on it outright; the agent side refuses an unstorable base up
+ * front rather than letting a raw `22P02` surface from inside a write. One
+ * `alter type … add value` per missing member, plus a data migration for the
+ * existing rows, closes it.
+ *
+ * **`PreparationPorts`, except stock.** `WorkPlan`, `PreparationSnapshot` and
+ * `PreparationCatalogue` still have no tables. `tasks` is adjacent and is not
+ * the same thing: a work plan is a versioned computed artefact with a frozen
+ * snapshot beside it, and that snapshot is the entire mechanism preventing
+ * historical drift — which is why `operations.ts` deliberately has no
+ * `loadCatalogue(bookingId)`. `loadStock` and `loadTransferrableStock` are
+ * served from `inventory_items`.
+ *
+ * **`Invoice.paymentIds`** has no join table and is carried in
+ * `invoices.metadata`. That one is a stopgap rather than a refusal, because the
+ * alternative was an invoice that silently forgot which payments it accounted
+ * for; `finance.ts` flags it and names the table it wants.
  *
  * Two things a future implementer should not have to rediscover:
  *
  *   · **The finance domain pre-increments `version`.** `payments.ts` returns
- *     `version: payment.version + 1` before the record reaches the
- *     repository, and the database increments it *again* in `tg_touch_row`.
- *     The optimistic-lock predicate is therefore
+ *     `version: payment.version + 1` before the record reaches the repository,
+ *     and the database increments it *again* in `tg_touch_row`. The
+ *     optimistic-lock predicate is therefore
  *     `where version = payment.version - 1`, not `= payment.version`. Getting
  *     that backwards produces a repository that conflicts on every update, or
  *     one that never conflicts at all — and the second failure is silent.
  *
- *   · **`finance_snapshots` is insert-only, enforced by a statement-level
- *     trigger.** That means a `DELETE` on `bookings` fails even for a booking
- *     with no snapshot, because the cascade attempts the delete and the
- *     trigger refuses the statement. Anything that creates test bookings has
- *     to plan its teardown around this.
- *
- * **`PreparationPorts` — no storage exists for any of it, still.** `WorkPlan`,
- * `PreparationSnapshot` and `PreparationCatalogue` have no tables in any
- * migration up to `0016`. `tasks`, `task_checklists` and `inventory_items` are
- * adjacent and are not the same things: a work plan is a versioned computed
- * artefact with a frozen snapshot, and projecting it onto a task list would
- * lose the snapshot — which is the entire mechanism preventing historical
- * drift, and the reason `operations.ts` has no `loadCatalogue(bookingId)`.
- * `loadStock` alone could be served from `inventory_items` today.
+ *   · **`finance_snapshots` is insert-only**, enforced by a statement-level
+ *     trigger. A `DELETE` on `bookings` therefore fails even for a booking with
+ *     no snapshot, because the cascade attempts the delete and the trigger
+ *     refuses the statement. Anything that creates test bookings has to plan
+ *     its teardown around this.
  *
  * ── One thing to know before reading any adapter ──────────────────────────
  *
@@ -104,11 +142,14 @@
  * would delete the tenant isolation the whole system rests on.
  */
 
-export { SupabaseActorSource } from './actor'
+export { MEMBERSHIP_STATUSES, SupabaseActorSource } from './actor'
+export { SupabaseAgentRepository } from './agents'
 export { SupabaseAuditWriter } from './audit'
 export { SupabaseBookingRepository } from './booking'
 export { SupabaseIdempotencyStore } from './idempotency'
+export { SupabaseFinanceRepository } from './finance'
 export { SupabaseMetricSource } from './metrics'
+export { SupabasePreparationPorts } from './preparation'
 
 export type { Db, PostgrestError, Row } from './client'
 
@@ -148,6 +189,33 @@ export {
   toRows,
   undefinedToNull,
 } from './mapping'
+
+export {
+  AtomicTransactionUnavailableError,
+  TenantContextError,
+  postgresUnitOfWork,
+  type PostgresUnitOfWorkOptions,
+} from './atomic-transaction'
+
+export {
+  closeAllPostgresPools,
+  closePostgresPool,
+  databaseUrlFromEnv,
+  looksLikeTransactionPooler,
+  postgresPool,
+  type PostgresPoolOptions,
+  type Sql,
+  type TransactionSql,
+} from './postgres'
+
+export {
+  TransactionClient,
+  UnsupportedQuery,
+  compile,
+  parseSelect,
+  type Compiled,
+  type QuerySpec,
+} from './postgrest-sql'
 
 export {
   clientFor,

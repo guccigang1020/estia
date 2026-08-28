@@ -73,6 +73,27 @@ export class FakeSupabaseClient {
     return this as unknown as Db
   }
 
+  /**
+   * A recorded `rpc`, seeded under `"rpc:<name>"`.
+   *
+   * Present because `allocateInvoiceNumber` must be a call to
+   * `next_invoice_number()` and never a read-then-write — so a unit test has
+   * to be able to assert that it really is one, and with which arguments.
+   */
+  async rpc(name: string, args?: unknown): Promise<FakeResponse> {
+    const query: RecordedQuery = {
+      table: `rpc:${name}`,
+      verb: 'select',
+      payload: args,
+      filters: [],
+    }
+    const response = this.respond(query)
+    return {
+      data: response.error ? null : (response.data ?? null),
+      error: response.error ?? null,
+    }
+  }
+
   from(table: string) {
     return new FakeQueryBuilder(this, table)
   }
@@ -182,6 +203,10 @@ class FakeQueryBuilder implements PromiseLike<FakeResponse> {
 
   order(column: string, options?: unknown): this {
     return this.filter('order', column, options)
+  }
+
+  limit(count: number): this {
+    return this.filter('limit', 'limit', count)
   }
 
   single(): this {

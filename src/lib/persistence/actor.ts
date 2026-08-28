@@ -61,7 +61,14 @@ import {
   toRows,
 } from './mapping'
 
-const MEMBERSHIP_STATUSES: readonly MembershipStatus[] = [
+/**
+ * The five, in one place.
+ *
+ * Exported because `agents.ts` reads the same column and a second copy of this
+ * list is a second thing to forget when a status is added — on the field that
+ * decides whether somebody is inside the organization at all.
+ */
+export const MEMBERSHIP_STATUSES: readonly MembershipStatus[] = [
   'invited',
   'pending',
   'active',

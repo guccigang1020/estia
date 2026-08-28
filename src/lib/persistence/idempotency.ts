@@ -54,8 +54,10 @@ import type {
   IdempotencyScope,
   IdempotencyStore,
 } from '../service'
+import type { TransactionHandle } from '../service'
 import type { Db, Row } from './client'
 import { asDate, asDateOrNull, asString, toRow } from './mapping'
+import { clientFor, recordWrite } from './transaction'
 
 const COLUMNS =
   'organization_id, operation, key, fingerprint, result, created_at, completed_at'
@@ -126,12 +128,30 @@ export class SupabaseIdempotencyStore implements IdempotencyStore {
     return { status: 'replayed', record: existing }
   }
 
+  /**
+   * The completion, **inside the caller's transaction**.
+   *
+   * `clientFor(tx, …)` and not `this.db`, and the difference is the whole
+   * point of the pipeline's unit of work. `operation.ts` calls this from
+   * inside `transactions.run` precisely so that the business change and the
+   * key that stops it happening twice commit together. Writing it on the
+   * outer client instead would mark the key finished on a transaction that
+   * then rolled back — and the retry the user was explicitly told to make
+   * would come back "already done", for an operation that never happened.
+   *
+   * `begin` is deliberately *not* transactional and stays on `this.db`: the
+   * reservation has to be durable before the work starts, or two concurrent
+   * requests would both reserve inside their own transactions and neither
+   * would see the other.
+   */
   async complete(
     scope: IdempotencyScope,
     key: string,
     result: unknown,
+    tx?: TransactionHandle,
   ): Promise<void> {
-    const { error } = await this.db
+    const db = clientFor(tx, this.db)
+    const { error } = await db
       .from('idempotency_keys')
       .update({
         // `null`, not `undefined`: an operation returning nothing has still
@@ -144,6 +164,7 @@ export class SupabaseIdempotencyStore implements IdempotencyStore {
       .eq('key', key)
 
     if (error) throw error
+    recordWrite(tx, `idempotency_keys(complete ${scope.operation}/${key})`)
     // No row-count check, matching `InMemoryIdempotencyStore.complete`, which
     // returns quietly when the record is gone. Completing a reservation that
     // has been swept is not a failure worth turning a successful operation

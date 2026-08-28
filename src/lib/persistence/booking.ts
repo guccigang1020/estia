@@ -270,7 +270,28 @@ export class SupabaseBookingRepository implements BookingRepository {
     // cross-tenant read becomes `NotFoundError` rather than `AuthorizationError`.
     // That is the better answer — it does not confirm the booking exists — but
     // it is a different one, and a test asserting the error class will see it.
-    const { data, error } = await this.db
+    return this.loadBookingVia(this.db, organizationId, bookingId)
+  }
+
+  /**
+   * `loadBooking`, against a nominated client.
+   *
+   * Not cosmetic. Inside an atomic unit of work the writes live in an open
+   * transaction, and a read issued over PostgREST is a *different connection*
+   * that cannot see them — so `insertBooking` would write a booking, re-read
+   * it, find nothing, and throw `NotFoundError`, rolling back a booking that
+   * was perfectly valid. Every re-read that follows a write in the same
+   * operation therefore goes through the same handle the write did.
+   *
+   * Outside a transaction the two clients are the same object and this costs
+   * nothing.
+   */
+  private async loadBookingVia(
+    db: Db,
+    organizationId: string,
+    bookingId: string,
+  ): Promise<BookingSnapshot | null> {
+    const { data, error } = await db
       .from('bookings')
       .select(BOOKING_COLUMNS)
       .eq('organization_id', organizationId)
@@ -281,7 +302,7 @@ export class SupabaseBookingRepository implements BookingRepository {
     if (error) throw error
     if (!data) return null
 
-    return this.hydrate(toRow(data))
+    return this.hydrate(db, toRow(data))
   }
 
   async insertBooking(
@@ -352,7 +373,11 @@ export class SupabaseBookingRepository implements BookingRepository {
     // just moved the version and the total, and handing back the pre-line
     // numbers would give the caller an `expectedVersion` that is already
     // wrong — a conflict on the next edit, for no reason.
-    const snapshot = await this.loadBooking(draft.organizationId, bookingId)
+    const snapshot = await this.loadBookingVia(
+      db,
+      draft.organizationId,
+      bookingId,
+    )
     if (!snapshot) {
       // Reachable only when the caller may create a booking but not read one
       // back: `bookings_insert` requires `booking.create`, `bookings_select`
@@ -448,7 +473,7 @@ export class SupabaseBookingRepository implements BookingRepository {
       })
     }
 
-    const snapshot = await this.loadBooking(organizationId, bookingId)
+    const snapshot = await this.loadBookingVia(db, organizationId, bookingId)
     if (!snapshot) throw new NotFoundError('booking', bookingId)
     return snapshot
   }
@@ -573,13 +598,13 @@ export class SupabaseBookingRepository implements BookingRepository {
   // ── Internals ───────────────────────────────────────────────────────────
 
   /** The booking row plus everything that is not on it. */
-  private async hydrate(row: Row): Promise<BookingSnapshot> {
+  private async hydrate(db: Db, row: Row): Promise<BookingSnapshot> {
     const bookingId = asString(row, 'id')
     const organizationId = asString(row, 'organization_id')
 
     const [lines, depositHeldAgorot] = await Promise.all([
-      this.loadPriceLines(bookingId),
-      this.loadDepositHeld(organizationId, bookingId),
+      this.loadPriceLines(db, bookingId),
+      this.loadDepositHeld(db, organizationId, bookingId),
     ])
 
     return {
@@ -639,8 +664,11 @@ export class SupabaseBookingRepository implements BookingRepository {
    * has to require the field permission itself rather than infer it from an
    * empty array.
    */
-  private async loadPriceLines(bookingId: string): Promise<PriceLine[]> {
-    const { data, error } = await this.db
+  private async loadPriceLines(
+    db: Db,
+    bookingId: string,
+  ): Promise<PriceLine[]> {
+    const { data, error } = await db
       .from('booking_price_lines')
       .select(PRICE_LINE_COLUMNS)
       .eq('booking_id', bookingId)
@@ -664,10 +692,11 @@ export class SupabaseBookingRepository implements BookingRepository {
 
   /** What is actually held right now. Zero when no deposit was ever taken. */
   private async loadDepositHeld(
+    db: Db,
     organizationId: string,
     bookingId: string,
   ): Promise<number> {
-    const { data, error } = await this.db
+    const { data, error } = await db
       .from('deposits')
       .select('held_agorot')
       .eq('organization_id', organizationId)
