@@ -76,6 +76,21 @@ const AUTHORIZATION_PRESENTATION: Record<
     message: 'הרשומה המבוקשת לא נמצאה.',
     retryable: false,
   },
+  /**
+   * Held the right, but the value attempted exceeds a limit somebody else must
+   * sign off. Presented as a next step rather than a wall: an agent told only
+   * "not allowed" takes the negotiation to WhatsApp and the sale leaves the
+   * system, while one offered an approval keeps it here.
+   *
+   * `retryable` is true because the identical request genuinely can succeed
+   * once a manager decides — unlike every other refusal in this map.
+   */
+  requires_approval: {
+    code: 'requires_approval',
+    status: 403,
+    message: 'הפעולה חורגת מהמותר לך ודורשת אישור מנהל.',
+    retryable: true,
+  },
   missing_permission: {
     code: 'missing_permission',
     status: 403,

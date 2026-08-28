@@ -43,6 +43,12 @@ export const SEED_PLANS: readonly SeedPlan[] = [
     limits: { properties: 1, units: 2, members: 2, storageGb: 2 },
     // Payments and invoicing are core on every package. A customer who cannot
     // take money in ESTIA is not really using it, and does not stay.
+    // Payments and invoicing are core on every package. A customer who cannot
+    // take money in ESTIA is not really using it, and does not stay.
+    //
+    // `agent_network` is deliberately absent and is sold to Basic as a paid
+    // add-on. That needs no code: `subscription.entitlementGrants` already
+    // grants a feature to one customer without moving them off their plan.
     entitlements: ['core', 'payments', 'invoicing'],
     isPublic: true,
     sortOrder: 1,
@@ -55,7 +61,18 @@ export const SEED_PLANS: readonly SeedPlan[] = [
     monthlyPrice: 29900,
     yearlyPrice: yearly(29900),
     limits: { properties: 1, units: 4, members: 3, storageGb: 10 },
-    entitlements: ['core', 'payments', 'invoicing', 'website', 'ai_content'],
+    entitlements: [
+      'core',
+      'payments',
+      'invoicing',
+      'website',
+      'ai_content',
+      // Included from Direct upward. A cabin owner selling through two
+      // holiday agents is an ordinary case, not a large-operator one, and
+      // agents are a growth channel rather than an enterprise feature.
+      // Basic buys it as an add-on through `subscription.entitlementGrants`.
+      'agent_network',
+    ],
     isPublic: true,
     sortOrder: 2,
   },
@@ -78,6 +95,7 @@ export const SEED_PLANS: readonly SeedPlan[] = [
       'operations',
       'channels',
       'dynamic_pricing',
+      'agent_network',
     ],
     isPublic: true,
     sortOrder: 3,
@@ -101,6 +119,7 @@ export const SEED_PLANS: readonly SeedPlan[] = [
       'operations',
       'channels',
       'dynamic_pricing',
+      'agent_network',
       'owner_portal',
       'approvals',
       'automation',

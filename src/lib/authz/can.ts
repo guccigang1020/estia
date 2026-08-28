@@ -41,6 +41,31 @@ export type Scope =
   | { kind: 'own_records' }
 
 /**
+ * The kind of thing being reached for.
+ *
+ * Scope is not one answer per person. An external sales agent needs *these
+ * properties* to see what is free to sell, and *only their own records* for
+ * bookings, commissions and leads. One value cannot say both: give them
+ * `properties` and they read every agent's commissions; give them
+ * `own_records` and they cannot see availability at all, because a property
+ * belongs to nobody in particular.
+ *
+ * So a membership carries a default scope and may narrow it per family.
+ */
+export const RESOURCE_FAMILIES = [
+  'inventory', // properties, units, availability — what may be sold
+  'booking', // bookings, holds, quotes, leads
+  'guest',
+  'finance', // payments, invoices, commissions, statements
+  'operations', // tasks, incidents, inventory items
+  'team',
+  'website',
+  'settings',
+] as const
+
+export type ResourceFamily = (typeof RESOURCE_FAMILIES)[number]
+
+/**
  * The resolved actor for the active workspace.
  *
  * Built once per request from the session, the membership and the plan. Note
@@ -53,7 +78,17 @@ export interface Actor {
   organizationId: string
   membershipStatus: MembershipStatus
   grants: ReadonlySet<Grant>
+  /** Applies wherever no family below narrows it. */
   scope: Scope
+  /**
+   * Per-family narrowing, for memberships whose reach genuinely differs by
+   * what they are reaching for. Absent for almost everyone — an employee has
+   * one scope and this stays undefined.
+   *
+   * An unlisted family falls back to `scope`. Adding a family here can only
+   * ever narrow, never widen: the default is still checked first.
+   */
+  scopeOverrides?: Partial<Record<ResourceFamily, Scope>>
   /** Features the organization's plan includes. */
   entitlements: ReadonlySet<Entitlement>
   /** ESTIA staff. Bypasses scope, never bypasses tenant isolation or audit. */
@@ -74,6 +109,12 @@ export interface Resource {
   /** Set for records owned by a person, e.g. the assignee of a task. */
   assignedToUserId?: string
   createdByUserId?: string
+  /**
+   * Which family this belongs to, so a per-family scope can apply. Omitted
+   * resources use the actor's default scope, which is the behaviour every
+   * existing call site already relies on.
+   */
+  family?: ResourceFamily
 }
 
 // ── Outputs ───────────────────────────────────────────────────────────────
@@ -84,6 +125,21 @@ export type DenialReason =
   | 'missing_permission'
   | 'plan_does_not_include'
   | 'out_of_scope'
+  /**
+   * Held the right, but the value attempted exceeds a limit somebody else must
+   * sign off — an agent asking for 12% when their cap is 5%.
+   *
+   * `authorize()` never returns this on its own: it cannot see the value being
+   * attempted, and teaching it to would turn an authorization engine into a
+   * business-rule engine. The domain evaluates the limit and returns a
+   * `Decision` carrying this reason, which the service layer composes.
+   *
+   * It is a denial, not a third outcome, so `can()` stays false and every
+   * boolean call site fails closed. Only callers that read the reason can
+   * offer the approval path — and offering it matters: an agent who is simply
+   * refused takes the negotiation to WhatsApp, and the sale leaves the system.
+   */
+  | 'requires_approval'
 
 export type Decision =
   | { allowed: true }
@@ -219,26 +275,47 @@ export function isWithinScope(actor: Actor, resource: Resource): boolean {
   // tenant check above still applies, and every action is audited.
   if (actor.isPlatformStaff) return true
 
-  switch (actor.scope.kind) {
+  return scopeReaches(scopeFor(actor, resource), actor.userId, resource)
+}
+
+/**
+ * Which scope governs this resource.
+ *
+ * A per-family override wins where one is set; otherwise the membership's
+ * default applies. A resource that does not declare a family always uses the
+ * default, which is why adding families to the model cannot change the answer
+ * for any call site that has not opted in.
+ */
+export function scopeFor(actor: Actor, resource: Resource): Scope {
+  if (resource.family === undefined) return actor.scope
+  return actor.scopeOverrides?.[resource.family] ?? actor.scope
+}
+
+function scopeReaches(
+  scope: Scope,
+  userId: string,
+  resource: Resource,
+): boolean {
+  switch (scope.kind) {
     case 'all_organization':
       return true
 
     case 'properties':
       if (resource.propertyId === undefined) return false
-      return actor.scope.propertyIds.includes(resource.propertyId)
+      return scope.propertyIds.includes(resource.propertyId)
 
     case 'units':
       if (resource.unitId === undefined) return false
-      return actor.scope.unitIds.includes(resource.unitId)
+      return scope.unitIds.includes(resource.unitId)
 
     case 'team':
       if (resource.teamId === undefined) return false
-      return actor.scope.teamIds.includes(resource.teamId)
+      return scope.teamIds.includes(resource.teamId)
 
     case 'own_records':
       return (
-        resource.assignedToUserId === actor.userId ||
-        resource.createdByUserId === actor.userId
+        resource.assignedToUserId === userId ||
+        resource.createdByUserId === userId
       )
 
     default:
@@ -263,10 +340,21 @@ export function redact<T extends object>(
   actor: Actor,
   record: T,
   fields: ReadonlyArray<{ key: keyof T; requires: Grant }>,
+  /**
+   * The record being shaped, when a field's visibility depends on whose it is.
+   *
+   * An agent may see the guest they entered themselves and not the one another
+   * agent brought — the same grant, a different answer per row. Omit it and
+   * only the grant decides, which is what every existing call site does.
+   */
+  resource?: Resource,
 ): T {
   const output = { ...record }
   for (const field of fields) {
-    if (!holdsGrant(actor, field.requires)) {
+    const allowed =
+      holdsGrant(actor, field.requires) &&
+      (resource === undefined || isWithinScope(actor, resource))
+    if (!allowed) {
       delete output[field.key]
     }
   }

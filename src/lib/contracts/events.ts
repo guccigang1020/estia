@@ -19,7 +19,17 @@
 
 export const DOMAIN_EVENTS = [
   // Booking
+  //
+  // The lifecycle is here in full rather than as a single
+  // `booking.status_changed`, because these are the moments automations
+  // genuinely hang off: preparation is created a set time before arrival, the
+  // door code goes out when housekeeping has signed the unit off, and the
+  // review request follows the stay. A subscriber filtering one generic event
+  // by an inner field is a subscriber that runs on every transition and
+  // discards most of them.
   'booking.created',
+  'booking.optioned', // dates held for a named guest, not yet committed
+  'booking.deposit_paid',
   'booking.confirmed',
   'booking.dates_changed',
   'booking.guests_changed',
@@ -27,9 +37,15 @@ export const DOMAIN_EVENTS = [
   'booking.price_changed',
   'booking.cancelled',
   'booking.no_show',
+  'booking.pre_arrival',
+  'booking.ready_for_check_in', // housekeeping has signed off; keys may go out
   'booking.checked_in',
+  'booking.in_house',
+  'booking.checkout_pending',
   'booking.checked_out',
+  'booking.inspection',
   'booking.completed',
+  'booking.review_requested',
 
   // Availability
   'hold.created',

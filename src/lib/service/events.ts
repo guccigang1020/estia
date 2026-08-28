@@ -13,7 +13,25 @@
  * resend an email.
  */
 
-export type DomainEventName = `${string}.${string}`
+/**
+ * The event catalogue, re-exported rather than restated.
+ *
+ * This was once a permissive `` `${string}.${string}` ``, and the cost was
+ * concrete: fifteen event names were emitted that no subscriber could ever
+ * hear, and every one of them passed a clean typecheck.
+ *
+ * Two engineers wrote this kind of code at the same time. The one who took
+ * the type from here invented twelve names; the one who took it from
+ * `contracts/events` found the catalogue lacked what they needed and left a
+ * note asking for it instead. The only difference between them was which file
+ * the type came from — which is the entire argument for a single source.
+ *
+ * Adding an event now means adding it to `contracts/events.ts`, where
+ * automations, notification routing and `ALERT_EVENTS` can all see it.
+ */
+import type { DomainEventName } from '../contracts/events'
+
+export type { DomainEventName }
 
 /** What an operation declares. The pipeline stamps the rest. */
 export interface DomainEventDraft<T = unknown> {

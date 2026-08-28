@@ -225,7 +225,9 @@ const updateBooking = defineOperation({
   },
 
   events({ result }) {
-    return [{ name: 'booking.updated', payload: { bookingId: result.id } }]
+    return [
+      { name: 'booking.dates_changed', payload: { bookingId: result.id } },
+    ]
   },
 })
 
@@ -883,7 +885,7 @@ describe('domain events', () => {
 
     expect(services.events.published).toEqual([
       {
-        name: 'booking.updated',
+        name: 'booking.dates_changed',
         organizationId: ORG,
         propertyId: 'prop-1',
         correlationId: CORRELATION,
@@ -900,7 +902,7 @@ describe('domain events', () => {
     // confirming. One flaky integration cannot roll back a guest's stay.
     seedBooking()
     const services = wiring()
-    services.events.subscribe('booking.updated', () => {
+    services.events.subscribe('booking.dates_changed', () => {
       throw new Error('SMTP relay unavailable')
     })
 
@@ -955,7 +957,7 @@ describe('domain events', () => {
     seedBooking()
     const services = wiring()
     const seen = vi.fn()
-    services.events.subscribe('booking.updated', seen)
+    services.events.subscribe('booking.dates_changed', seen)
 
     await updateBooking.run({
       request: updateRequest(),
