@@ -145,7 +145,7 @@ interface Relation {
  * The extra columns exist to make a *write* impossible, not to disambiguate a
  * read, and the write is still checked by the database.
  */
-const RELATIONS: Readonly<Record<string, Relation>> = {
+export const RELATIONS: Readonly<Record<string, Relation>> = {
   'bookings.guests': {
     table: 'guests',
     localColumn: 'guest_id',

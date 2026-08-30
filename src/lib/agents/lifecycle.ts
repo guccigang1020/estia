@@ -33,6 +33,7 @@
 
 import type { MembershipStatus, ResourceFamily, Scope } from '../authz/can'
 import type { Grant } from '../authz/permissions'
+import type { SystemRole } from '../authz/roles'
 import { BusinessRuleError } from '../errors'
 import { agentRoleAssignment, type AgentAccess } from './access'
 import { formatIsraeliPhone } from './phone'
@@ -204,15 +205,25 @@ export function reinstateAgent(
  * This is also the mechanism behind "a permission change takes effect
  * immediately". Nothing is cached: the ladders are read and flattened on each
  * request, so narrowing one narrows it for the very next call.
+ *
+ * `seededRoles` are the preset system roles this membership actually holds, so
+ * the parts of a preset the ladders cannot express survive the replacement.
+ * `agentRoleAssignment` in `access.ts` states the split; it is not repeated
+ * here. `SupabaseActorSource.loadRoles` is the caller — and until it was, this
+ * function computed the right answer for nobody, which is what made an owner's
+ * narrowing a change to the screen and not to the grants.
  */
-export function agentActorRoleAssignments(access: AgentAccess): readonly [
+export function agentActorRoleAssignments(
+  access: AgentAccess,
+  seededRoles: readonly SystemRole[] = [],
+): readonly [
   {
     code: string
     kind: 'custom'
     grants: readonly Grant[]
   },
 ] {
-  return [agentRoleAssignment(access)]
+  return [agentRoleAssignment(access, seededRoles)]
 }
 
 /**

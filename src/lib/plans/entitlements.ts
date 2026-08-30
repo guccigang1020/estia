@@ -103,6 +103,11 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   'agent.view': 'agent_network',
   'agent.invite': 'agent_network',
   'agent.manage': 'agent_network',
+  // The membership behind the seller. Every operation that asserts it also
+  // asserts one of the gated grants above, so it changes no answer today —
+  // which is exactly why it was easy to leave out, and exactly why leaving it
+  // out would not have stayed harmless the first time it was asserted alone.
+  'agent.membership.manage': 'agent_network',
   'agent.scope.manage': 'agent_network',
   'agency.manage': 'agent_network',
   'agent_agreement.view': 'agent_network',
@@ -111,6 +116,10 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   'agent_booking.approve': 'agent_network',
   'agent.audit.view': 'agent_network',
   'commission.view': 'agent_network',
+  // The other three commission grants are gated and this one was not, which
+  // would have let a business with no agent network write a commission
+  // statement it could then neither read, approve nor pay.
+  'commission.manage': 'agent_network',
   'commission.approve': 'agent_network',
   'commission.payout': 'agent_network',
   'agent_statement.view': 'agent_network',

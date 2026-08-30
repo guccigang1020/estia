@@ -51,12 +51,19 @@
 
 import type { Grant } from '../authz/permissions'
 import {
+  AGENT_BASE,
+  AMENDMENT_GRANTS,
+  CALENDAR_LEVELS,
+  GUEST_DATA_LEVELS,
+  PRICE_LEVELS,
   grantsForCalendarLevel,
   grantsForGuestDataLevel,
   grantsForPriceLevel,
+  grantsForSystemRole,
   type CalendarLevel,
   type GuestDataLevel,
   type PriceLevel,
+  type SystemRole,
 } from '../authz/roles'
 
 // ── The rungs, as this module constrains them ─────────────────────────────
@@ -223,15 +230,13 @@ export function canSeeAvailability(access: AgentAccess): boolean {
  * reading the whole network and an agent reading one line, because the scope
  * answers "whose".
  *
- * This repeats a list that `roles.ts` holds privately as `AGENT_BASE`. It is
- * duplication and it should not survive: see the note at the foot of this file.
+ * This used to be a hand-copied second list beside `AGENT_BASE` in `roles.ts`,
+ * and the two had already drifted: `approval.request` was added there and not
+ * here, so an agent resolving through this module could not raise the discount
+ * approval the whole flow depends on. The copy is gone — it is the same
+ * constant now, re-exported under the name this module's callers use.
  */
-export const AGENT_BASELINE_GRANTS: readonly Grant[] = [
-  'lead.view',
-  'lead.create',
-  'commission.view',
-  'agent_statement.view',
-]
+export const AGENT_BASELINE_GRANTS: readonly Grant[] = AGENT_BASE
 
 /**
  * The flat grant set for a position on the ladders.
@@ -268,6 +273,27 @@ export function grantsForAgentAccess(access: AgentAccess): Set<Grant> {
 }
 
 /**
+ * Every grant an `AgentAccess` is capable of deciding, at any position.
+ *
+ * The top of each ladder, plus the three booking-rung switches. Read it as the
+ * *surface of the settings screen*: `agent.access.update` writes exactly this
+ * union and nothing else, so these are the grants an owner is entitled to
+ * expect a narrowing to actually remove.
+ *
+ * Computed from the ladders rather than listed, so a rung added to `roles.ts`
+ * next year joins this set without anybody remembering to.
+ */
+export const AGENT_LADDER_CONTROLLED_GRANTS: ReadonlySet<Grant> =
+  new Set<Grant>([
+    ...grantsForCalendarLevel(CALENDAR_LEVELS[CALENDAR_LEVELS.length - 1]),
+    ...grantsForPriceLevel(PRICE_LEVELS[PRICE_LEVELS.length - 1]),
+    ...grantsForGuestDataLevel(GUEST_DATA_LEVELS[GUEST_DATA_LEVELS.length - 1]),
+    ...AMENDMENT_GRANTS,
+    'booking.cancel',
+    'payment.request_link',
+  ])
+
+/**
  * The agent's membership, as the actor resolver consumes it.
  *
  * A **custom** role assignment, deliberately, and not one of the four system
@@ -277,20 +303,48 @@ export function grantsForAgentAccess(access: AgentAccess): Set<Grant> {
  * it is chosen. Carrying the resolved grants makes the stored ladders
  * authoritative, which is what "there is no `agent.type`" means in practice.
  *
+ * ── `seededRoles`, and why the projection is not the whole answer ─────────
+ *
+ * An agent's membership was given one of the four preset system roles when
+ * they were admitted, and those roles carry more than the ladders can express:
+ * `lead.update` for a sales agent, `booking.view_payment_status` for a senior
+ * one, and for an agency manager the running of the agents underneath it —
+ * `agent.view`, `agent.invite`, `agent_agreement.view`, `report.agent.view`,
+ * `lead.assign`. None of those has a field on `AgentAccess`, no screen edits
+ * them, and a projection that dropped them would silently uninstall the agency
+ * feature the day this wiring landed.
+ *
+ * So the seeded role is **replaced in the part the owner controls and kept in
+ * the part they do not**:
+ *
+ *     (what the role grants, minus everything the ladders can decide)
+ *   ∪ (what the stored ladders decide right now)
+ *
+ * Everything on the settings screen is therefore live, and everything that is
+ * not on the settings screen is unchanged. Pass no roles and this is the pure
+ * ladder projection, which is what a caller with no membership in hand wants.
+ *
  * Shaped as `RoleAssignment` from `actor/source.ts` without importing it: this
  * module has no business depending on the actor layer to describe its own
  * output, and the shape is checked structurally where the two meet.
  */
-export function agentRoleAssignment(access: AgentAccess): {
+export function agentRoleAssignment(
+  access: AgentAccess,
+  seededRoles: readonly SystemRole[] = [],
+): {
   code: string
   kind: 'custom'
   grants: readonly Grant[]
 } {
-  return {
-    code: 'agent',
-    kind: 'custom',
-    grants: [...grantsForAgentAccess(access)],
+  const grants = grantsForAgentAccess(access)
+
+  for (const role of seededRoles) {
+    for (const grant of grantsForSystemRole(role)) {
+      if (!AGENT_LADDER_CONTROLLED_GRANTS.has(grant)) grants.add(grant)
+    }
   }
+
+  return { code: 'agent', kind: 'custom', grants: [...grants] }
 }
 
 // ── The four presets ──────────────────────────────────────────────────────
@@ -357,6 +411,77 @@ export const AGENT_PRESETS = {
     paymentLink: true,
   },
 } as const satisfies Record<AgentPresetName, AgentAccess>
+
+/**
+ * The role a preset seeds the *membership* with.
+ *
+ * ── Why this exists at all ────────────────────────────────────────────────
+ *
+ * Everything above describes what an agent may see. None of it reaches the
+ * authorization engine on its own: an actor is built from `membership_roles`,
+ * so a membership created with no role in that table resolves with no grants
+ * whatsoever. The agent signs in, every screen is empty, and nothing in the
+ * record says why. Choosing a preset therefore has to assign a role in the
+ * same act as creating the membership, and this table is the mapping used to
+ * do it.
+ *
+ * ── Why a system role and not a role built from the ladders ───────────────
+ *
+ * The four codes below are the ones `roles.ts` composes from the same three
+ * ladders as `AGENT_PRESETS`, seeded globally by `0012`, so the grants a new
+ * agent starts with are the grants the chosen preset describes.
+ *
+ * The alternative — minting a custom role per agent whose `role_permissions`
+ * are `grantsForAgentAccess(access)` — would be closer to this module's
+ * intent, because the stored ladders would then stay authoritative after an
+ * owner edits them. It is not what is written here, for one blunt reason:
+ * `role_permissions_insert` requires `permission.edit`, which is owner-only,
+ * so a general manager adding an agent could not create the role and the
+ * feature would be unusable by the role that owns it. Assigning an existing
+ * system role needs only `role.assign`.
+ *
+ * ── What the row means now that resolution projects it ───────────────────
+ *
+ * It used to mean everything: a system role is re-resolved from the catalogue
+ * on every request, so an owner who narrowed `access` afterwards narrowed what
+ * the agent *screens* showed and did not narrow the membership's grants. The
+ * settings screen said one thing and the engine did another, and the
+ * disagreement pointed the wrong way — an intended narrowing that never took
+ * effect.
+ *
+ * `SupabaseActorSource.loadRoles` now replaces one of these four codes with
+ * `agentActorRoleAssignments(access, [code])` whenever the membership has
+ * stored terms. What the row still decides is the part of the preset the
+ * ladders cannot express — `lead.update`, `booking.view_payment_status`, the
+ * agency manager's own network rights — and what it no longer decides is
+ * anything the settings screen can edit. Deleting the row instead would take
+ * those with it; see `agentRoleAssignment` above for the split.
+ */
+export const AGENT_PRESET_ROLE: Record<AgentPresetName, SystemRole> = {
+  referral: 'referral_agent',
+  sales: 'sales_agent',
+  senior: 'senior_agent',
+  agency: 'agency_manager',
+}
+
+/**
+ * The four codes as a set, for the one question actor resolution asks:
+ * *is this assignment a seeded agent preset, and therefore the thing the
+ * stored ladders are entitled to speak for?*
+ *
+ * Derived from the table above so a fifth preset cannot be added without the
+ * resolver learning about it — which would otherwise produce an agent whose
+ * screen edits silently did nothing, i.e. this gap again.
+ */
+export const AGENT_PRESET_ROLE_CODES: ReadonlySet<SystemRole> =
+  new Set<SystemRole>(Object.values(AGENT_PRESET_ROLE))
+
+/** Narrow a `roles.code` to one of the four, or `null`. */
+export function asAgentPresetRole(code: string): SystemRole | null {
+  return AGENT_PRESET_ROLE_CODES.has(code as SystemRole)
+    ? (code as SystemRole)
+    : null
+}
 
 // ── The one door from untyped data ────────────────────────────────────────
 
@@ -497,11 +622,15 @@ function parseCancellation(value: unknown): AgentCancellationPolicy | null {
 }
 
 /**
- * ── A note for whoever owns `src/lib/authz/roles.ts` ──────────────────────
+ * ── The note that used to be here, and what became of it ──────────────────
  *
- * `AGENT_BASELINE_GRANTS` above is a copy of the private `AGENT_BASE` constant
- * in that file. Two lists of what every external seller holds will drift, and
- * the drift is a grant somebody has and nobody granted. Exporting `AGENT_BASE`
- * would let this module delete its copy and import the original; nothing else
- * about `roles.ts` needs to change.
+ * It asked `roles.ts` to export `AGENT_BASE` so this module could delete its
+ * hand-copied second list, and warned that two lists of what every external
+ * seller holds would drift. They had already: `approval.request` was in one
+ * and not the other, so an agent resolving through this module could not raise
+ * the discount approval that keeps a negotiation inside the product.
+ *
+ * `AGENT_BASE` is exported now and `AGENT_BASELINE_GRANTS` is that constant
+ * rather than a copy of it, which is why the drift is not a bug that has to be
+ * found again — there is one list.
  */

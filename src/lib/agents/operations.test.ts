@@ -12,7 +12,14 @@
 import { describe, expect, it } from 'vitest'
 import { defineAgentOperations } from './operations'
 import type { AgentRepository } from './repository'
-import { AGENT_PRESETS, grantsForAgentAccess, type AgentAccess } from './access'
+import {
+  AGENT_PRESETS,
+  AGENT_PRESET_ROLE,
+  grantsForAgentAccess,
+  type AgentAccess,
+} from './access'
+import { grantsForAssignments } from '../actor/resolve'
+import { grantsForSystemRole } from '../authz/roles'
 import type { AgentOrganizationSettings } from './types'
 import type { Commission } from './commission'
 import { createCommission } from './commission'
@@ -41,6 +48,8 @@ interface RepoState {
     string,
     { membershipId: string; userId: string; status: 'active' | 'removed' }
   >
+  /** membership id → the role codes it holds. This is `membership_roles`. */
+  membershipRoles: Map<string, string[]>
   invitations: AgentInvitation[]
   ledger: AgentHoldLedgerEntry[]
   approvals: Map<string, DiscountApproval>
@@ -52,6 +61,7 @@ function makeRepo(seed: Partial<RepoState> = {}) {
     settings: seed.settings ?? new Map(),
     users: seed.users ?? new Map(),
     memberships: seed.memberships ?? new Map(),
+    membershipRoles: seed.membershipRoles ?? new Map(),
     invitations: seed.invitations ?? [],
     ledger: seed.ledger ?? [],
     approvals: seed.approvals ?? new Map(),
@@ -90,12 +100,23 @@ function makeRepo(seed: Partial<RepoState> = {}) {
       state.invitations.push(invitation)
       return invitation
     },
-    async attachExistingUser({ settings }) {
-      state.settings.set(
-        `${settings.organizationId}:${settings.agentUserId}`,
-        settings,
-      )
-      return settings
+    // Models the contract the adapter is held to, not just the settings row:
+    // a membership, and a role on it, in the same act. A double that wrote
+    // only the terms would let the defect this file now guards against pass.
+    async attachExistingUser({ organizationId, userId, preset, settings }) {
+      const key = `${organizationId}:${userId}`
+      const existing = state.memberships.get(key)
+      const membershipId = existing?.membershipId ?? `membership-for-${userId}`
+      state.memberships.set(key, { membershipId, userId, status: 'active' })
+
+      const held = state.membershipRoles.get(membershipId) ?? []
+      const code = AGENT_PRESET_ROLE[preset]
+      if (!held.includes(code)) held.push(code)
+      state.membershipRoles.set(membershipId, held)
+
+      const stored = { ...settings, membershipId }
+      state.settings.set(key, stored)
+      return stored
     },
     async loadHoldLedger(organizationId, agentUserId) {
       return state.ledger.filter(
@@ -170,6 +191,15 @@ function agentActor(
   })
 }
 
+/**
+ * The owner, who holds the agent grants *and* the membership grants.
+ *
+ * The second half is not padding. `memberships_insert` is policed by
+ * `user.invite`, `memberships_update` by `user.edit` and
+ * `membership_roles_insert` by `role.assign` — none of which `agent.invite` or
+ * `agent.manage` implies. An actor missing them is a real case with its own
+ * tests below; this one is the actor for whom the happy path is happy.
+ */
 const ownerActor = () =>
   actorWith([
     'agent.invite',
@@ -177,6 +207,9 @@ const ownerActor = () =>
     'agent.scope.manage',
     'approval.decide',
     'commission.approve',
+    'user.invite',
+    'user.edit',
+    'role.assign',
   ])
 
 function makeServices() {
@@ -307,6 +340,89 @@ describe('agent.invite', () => {
     expect(state.invitations).toHaveLength(0)
     // No event, because nothing happened.
     expect(outcome.events).toHaveLength(0)
+  })
+
+  it('adds an agent who resolves with a non-empty grant set', async () => {
+    // The regression for the defect that made this whole path a trap: the
+    // membership was created, the flow reported success, and the person
+    // resolved with *no grants at all* — they signed in, every screen was
+    // empty, and nothing in the record explained why.
+    //
+    // The chain proved here is the real one end to end: the operation threads
+    // the chosen preset down to the store, the store puts the role the preset
+    // names on the membership, and `grantsForAssignments` — the same function
+    // `resolveActor` uses to build every actor in the product — turns that
+    // into the grant set the agent acts with.
+    const { repo, state } = makeRepo({
+      users: new Map([
+        ['+972501234567', { userId: 'user-7', displayName: 'דוד' }],
+      ]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    await ops.invite.run({
+      request: {
+        input: {
+          phone: '0501234567',
+          invitationId: 'invite-1',
+          preset: 'senior',
+        },
+      },
+      context: context(ownerActor()),
+      services,
+    })
+
+    const membership = state.memberships.get(`${ORG}:user-7`)
+    expect(membership).toBeDefined()
+
+    const codes = state.membershipRoles.get(
+      membership?.membershipId as string,
+    ) as string[]
+    expect(codes).toEqual(['senior_agent'])
+
+    const grants = grantsForAssignments(
+      codes.map((code) => ({ code, kind: 'system' as const })),
+    )
+    expect(grants.size).toBeGreaterThan(0)
+    // Not merely non-empty: the grants are the ones the chosen preset means.
+    expect(grants.has('availability.view')).toBe(true)
+    expect(grants.has('booking.create')).toBe(true)
+  })
+
+  it('refuses an actor who cannot write the membership, naming the grant', async () => {
+    // `agent.invite` opens the operation and does not open `memberships`.
+    // Letting this through reached the adapter, which reported a
+    // `NotFoundError` about a membership that plainly existed — or, on the
+    // role, added an agent who could do nothing.
+    const { repo, state } = makeRepo({
+      users: new Map([
+        ['+972501234567', { userId: 'user-7', displayName: 'דוד' }],
+      ]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    const withoutRoleAssign = actorWith([
+      'agent.invite',
+      'user.invite',
+      // and deliberately neither `role.assign` nor `agent.membership.manage`
+    ])
+
+    await expect(
+      ops.invite.run({
+        request: { input: { phone: '0501234567', invitationId: 'invite-1' } },
+        context: context(withoutRoleAssign),
+        services,
+      }),
+      // The agent-specific grant is the one named, because it is the one
+      // somebody running the agent screen should be given. `role.assign`
+      // still satisfies the check — see the general manager test below.
+    ).rejects.toMatchObject({ grant: 'agent.membership.manage' })
+
+    // Nothing was written. An agent half-added is the outcome being refused.
+    expect(state.settings.size).toBe(0)
+    expect(state.memberships.size).toBe(0)
   })
 
   it('refuses somebody without agent.invite before reading anything', async () => {
@@ -546,6 +662,156 @@ describe('agent.set_status', () => {
         services,
       }),
     ).rejects.toThrow(AuthorizationError)
+  })
+
+  it('refuses agent.manage alone, before writing anything', async () => {
+    // The status lives on the membership, and `memberships_update` is policed
+    // by `user.edit` — or, since 0025, by `agent.membership.manage`. Without
+    // this the terms row was updated, the membership matched zero rows, and
+    // the caller was told the *membership* did not exist — a suspension that
+    // silently did not take effect, which is the exact failure the button
+    // exists to prevent.
+    const { repo, state } = makeRepo({
+      settings: new Map([[`${ORG}:${AGENT}`, settings()]]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    await expect(
+      ops.setStatus.run({
+        request: {
+          input: { agentUserId: AGENT, status: 'suspended' },
+          expectedVersion: 1,
+        },
+        context: context(actorWith(['agent.manage']), 'סיבה'),
+        services,
+      }),
+    ).rejects.toMatchObject({ grant: 'agent.membership.manage' })
+
+    expect(state.settings.get(`${ORG}:${AGENT}`)?.status).toBe('active')
+  })
+
+  it('still accepts an actor holding the organization-wide user.edit', async () => {
+    // `agent.membership.manage` is an addition, never a substitution. An
+    // administrator holds `user.edit` and no agent-specific grant, and their
+    // path must be exactly the one it was.
+    const { repo, state } = makeRepo({
+      settings: new Map([[`${ORG}:${AGENT}`, settings()]]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    await ops.setStatus.run({
+      request: {
+        input: { agentUserId: AGENT, status: 'suspended' },
+        expectedVersion: 1,
+      },
+      context: context(actorWith(['agent.manage', 'user.edit']), 'סיבה'),
+      services,
+    })
+
+    expect(state.settings.get(`${ORG}:${AGENT}`)?.status).toBe('suspended')
+  })
+})
+
+// ── The role that owns the agent network ──────────────────────────────────
+
+/**
+ * A general manager, using the feature the role catalogue says they own.
+ *
+ * The defect these guard was not subtle once you looked at the grants: the
+ * catalogue gives `general_manager` `agent.view/invite/manage/scope.manage`
+ * and describes them as the owner of the network — and both *adding* an agent
+ * and *suspending* one write `memberships` and `membership_roles`, which are
+ * policed by `user.edit` and `role.assign`. The GM holds neither. So the two
+ * acts at the centre of the feature were owner-and-administrator-only, while
+ * every screen and every comment said otherwise.
+ *
+ * Driven through `run()` rather than by asserting on the grant set, because
+ * "the GM holds a permission" is not the claim. The claim is that the
+ * operation completes and the rows move.
+ */
+describe('general_manager, the role the catalogue says owns the agent network', () => {
+  const gm = () => actorWith(grantsForSystemRole('general_manager'))
+
+  it('is still refused the organization-wide team grants, which is the point', () => {
+    // Adding `user.edit` to this role would have been the easy fix and the
+    // wrong one: `memberships_update` guards *every* membership, so it would
+    // let whoever runs the sellers change an administrator's membership.
+    const grants = new Set<Grant>(grantsForSystemRole('general_manager'))
+
+    expect(grants.has('user.edit')).toBe(false)
+    expect(grants.has('role.assign')).toBe(false)
+    expect(grants.has('agent.membership.manage')).toBe(true)
+  })
+
+  it('adds an agent — membership, role and terms — without user.edit or role.assign', async () => {
+    const { repo, state } = makeRepo({
+      users: new Map([
+        ['+972501234567', { userId: 'user-7', displayName: 'דוד' }],
+      ]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    const outcome = await ops.invite.run({
+      request: { input: { phone: '0501234567', invitationId: 'invite-1' } },
+      context: context(gm()),
+      services,
+    })
+
+    expect(outcome.data.plan.branch).toBe('attach_existing_user')
+    expect(state.memberships.get(`${ORG}:user-7`)?.status).toBe('active')
+    // And the role, without which the agent signs in to empty screens.
+    expect(state.membershipRoles.get('membership-for-user-7')).toEqual([
+      'sales_agent',
+    ])
+  })
+
+  it('suspends an agent, which is the button that has to work the moment it is pressed', async () => {
+    const { repo, state } = makeRepo({
+      settings: new Map([[`${ORG}:${AGENT}`, settings()]]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    await ops.setStatus.run({
+      request: {
+        input: { agentUserId: AGENT, status: 'suspended' },
+        expectedVersion: 1,
+      },
+      context: context(gm(), 'חשד לשימוש לרעה'),
+      services,
+    })
+
+    expect(state.settings.get(`${ORG}:${AGENT}`)?.status).toBe('suspended')
+  })
+
+  it('reinstates a removed agent, which is the reactivate branch', async () => {
+    const { repo, state } = makeRepo({
+      users: new Map([
+        ['+972501234567', { userId: 'user-7', displayName: 'דוד' }],
+      ]),
+      memberships: new Map([
+        [
+          `${ORG}:user-7`,
+          { membershipId: 'm-7', userId: 'user-7', status: 'removed' },
+        ],
+      ]),
+    })
+    const ops = defineAgentOperations(repo)
+    const { services } = makeServices()
+
+    const outcome = await ops.invite.run({
+      request: { input: { phone: '0501234567', invitationId: 'invite-2' } },
+      context: context(gm()),
+      services,
+    })
+
+    // The branch that needed `user.edit` specifically, because it updates a
+    // membership rather than inserting one.
+    expect(outcome.data.plan.branch).toBe('reactivate_membership')
+    expect(state.memberships.get(`${ORG}:user-7`)?.status).toBe('active')
   })
 })
 

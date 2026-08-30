@@ -43,8 +43,6 @@ export const SEED_PLANS: readonly SeedPlan[] = [
     limits: { properties: 1, units: 2, members: 2, storageGb: 2 },
     // Payments and invoicing are core on every package. A customer who cannot
     // take money in ESTIA is not really using it, and does not stay.
-    // Payments and invoicing are core on every package. A customer who cannot
-    // take money in ESTIA is not really using it, and does not stay.
     //
     // `agent_network` is deliberately absent and is sold to Basic as a paid
     // add-on. That needs no code: `subscription.entitlementGrants` already

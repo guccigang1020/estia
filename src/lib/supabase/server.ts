@@ -32,6 +32,21 @@ import type { User } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 import { env } from '@/lib/env'
+import { isDemoMode } from '@/lib/demo/flag'
+
+/**
+ * The demo, loaded only when it is on.
+ *
+ * A dynamic import rather than a static one, so that with the flag off nothing
+ * in `src/lib/demo` is ever evaluated: not the dataset, not the in-memory
+ * client, not the persona cookies. The two functions below are the only place
+ * in the application where the database and the signed-in person are chosen,
+ * which is exactly why the demo is wired here and nowhere else — one branch,
+ * twice, and every screen above it is untouched.
+ */
+async function demo() {
+  return import('@/lib/demo')
+}
 
 function assertServer() {
   if (typeof window !== 'undefined') {
@@ -47,9 +62,43 @@ function assertServer() {
  * one client would then be shared by every concurrent request, and with it one
  * user's session.
  */
-export async function createClient() {
+export async function createClient(): Promise<ServerClient> {
   assertServer()
 
+  if (isDemoMode()) {
+    // The rows come from memory and the person comes from a cookie. Everything
+    // above this line — every adapter, every page query, every embed — is the
+    // code a paying customer runs, and cannot tell the difference. The cast is
+    // the same one `fake-client.ts` and `TransactionClient` make.
+    const {
+      createDemoClient,
+      currentDemoPersona,
+      demoUser,
+      sharedDemoDatabase,
+    } = await demo()
+    const persona = await currentDemoPersona()
+    return createDemoClient(
+      sharedDemoDatabase(),
+      demoUser(persona),
+    ) as unknown as ServerClient
+  }
+
+  return supabaseClient()
+}
+
+/**
+ * The real one, unchanged.
+ *
+ * Split out from `createClient` only so that `ServerClient` below can be its
+ * return type. The alternative was annotating the demo branch with
+ * `ReturnType<typeof createServerClient>`, which is *not* the same type: the
+ * function is generic, and naming it without type arguments resolves the
+ * parameters to their defaults rather than to what this call site infers. The
+ * result type-checks and then degrades every `data` in every caller to `any`,
+ * which showed up as an implicit-any three files away and would otherwise have
+ * been a silent loss of type safety across the whole read layer.
+ */
+async function supabaseClient() {
   const cookieStore = await cookies()
 
   return createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
@@ -73,6 +122,9 @@ export async function createClient() {
   })
 }
 
+/** Exactly what `createServerClient` infers at that call site, and nothing wider. */
+type ServerClient = Awaited<ReturnType<typeof supabaseClient>>
+
 /**
  * The authenticated user, or `null`.
  *
@@ -83,6 +135,11 @@ export async function createClient() {
  *
  * Wrapped in React `cache` so a layout, a page and an action inside the same
  * render share one round trip instead of three.
+ *
+ * Deliberately not branched for the demo. `createClient()` above already
+ * returns a client whose `auth.getUser()` answers with the persona, so this
+ * function reaches the demo identity along its ordinary path — one substitution
+ * rather than two, and no second place to keep in step with the first.
  */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient()

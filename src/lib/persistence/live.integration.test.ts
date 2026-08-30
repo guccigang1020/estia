@@ -542,6 +542,7 @@ describe.skipIf(!CREDENTIALS)('live: the storage 0018–0023 provisioned', () =>
       {
         organizationId: stage.organizationA,
         userId: stage.userB,
+        preset: 'sales',
         settings: agentSettings(stage.organizationA, stage.userB),
       },
       undefined,
@@ -549,6 +550,16 @@ describe.skipIf(!CREDENTIALS)('live: the storage 0018–0023 provisioned', () =>
 
     expect(attached.status).toBe('active')
     expect(attached.membershipId).not.toBe('')
+
+    // The membership resolves with grants, which is the point of adding
+    // somebody at all. A membership with no row in `membership_roles` is a
+    // person who can sign in and do nothing, with nothing in the record
+    // explaining why.
+    const { data: assigned } = await db
+      .from('membership_roles')
+      .select('roles!inner(code)')
+      .eq('membership_id', attached.membershipId)
+    expect(assigned?.length ?? 0).toBeGreaterThan(0)
 
     const loaded = await agents.loadSettings(stage.organizationA, stage.userB)
     expect(loaded).toMatchObject({

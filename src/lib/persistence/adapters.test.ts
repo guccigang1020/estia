@@ -9,6 +9,8 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { resolveActor } from '../actor/resolve'
+import { can } from '../authz/can'
 import { SupabaseActorSource } from './actor'
 import { SupabaseAuditWriter } from './audit'
 import { FakeSupabaseClient, hasFilter } from './fake-client'
@@ -193,6 +195,205 @@ describe('SupabaseActorSource', () => {
     expect('properties' in (effective?.subscription.limitOverrides ?? {})).toBe(
       false,
     )
+  })
+})
+
+// ── An agent's grants, as the whole resolution produces them ──────────────
+
+/**
+ * The defect: a settings screen that lied, in the direction that matters.
+ *
+ * An owner narrows an agent's calendar, price or guest-data level, the terms
+ * row is written, and the agent's membership still resolves through the system
+ * role their preset seeded on day one — because a system role is re-resolved
+ * from the catalogue on every request. The narrowing changed what the agent
+ * *screens* showed and did not change one grant, which is the wrong direction
+ * for an authorization bug to point.
+ *
+ * Driven through `resolveActor` and `can()` rather than through `loadRoles`,
+ * because the claim is not "the adapter returns a different array". The claim
+ * is that the agent cannot do the thing the owner just took away, on the very
+ * next request, with no re-invite and nothing to invalidate.
+ */
+describe('an agent resolves with a live projection of their stored access', () => {
+  const PLAN = {
+    id: 'sub-1',
+    organization_id: 'org-1',
+    plan_id: 'plan-1',
+    status: 'active',
+    billing_interval: 'monthly',
+    agreed_monthly_price_agorot: 0,
+    agreed_yearly_price_agorot: 0,
+    trial_ends_at: null,
+    current_period_end: null,
+    limit_overrides: {},
+    entitlement_grants: [],
+    entitlement_revocations: [],
+    plans: {
+      id: 'plan-1',
+      code: 'pro',
+      name: 'Pro',
+      description: 'x',
+      monthly_price_agorot: 0,
+      yearly_price_agorot: 0,
+      limits: { properties: null, units: null, members: null, storageGb: null },
+      // The agent grants are gated on `agent_network` and the approval path
+      // on `approvals`, so the plan has to carry both or an assertion below
+      // would be false for a reason that has nothing to do with the ladders.
+      entitlements: ['core', 'agent_network', 'approvals'],
+      is_public: true,
+      sort_order: 1,
+    },
+  }
+
+  /** A membership holding the seeded `sales_agent` role, plus stored terms. */
+  function sourceFor(access: Record<string, unknown> | null) {
+    const client = new FakeSupabaseClient({
+      responses: {
+        memberships: {
+          data: {
+            id: 'm-1',
+            user_id: 'user-1',
+            organization_id: 'org-1',
+            status: 'active',
+          },
+        },
+        organization_subscriptions: { data: PLAN },
+        membership_roles: {
+          data: [
+            {
+              roles: {
+                code: 'sales_agent',
+                is_system: true,
+                is_platform: false,
+                role_permissions: [],
+              },
+            },
+          ],
+        },
+        // `all_organization` so that every assertion below is about grants
+        // and nothing else. A real agent is `own_records` with an inventory
+        // override, and that is `agentScopes`' question, not this one.
+        membership_scopes: {
+          data: {
+            kind: 'all_organization',
+            property_ids: [],
+            unit_ids: [],
+            team_ids: [],
+          },
+        },
+        agent_organization_settings: { data: access },
+      },
+    })
+    return new SupabaseActorSource(client.asDb())
+  }
+
+  const SALES_ROW = {
+    access_calendar: 'availability_booking',
+    access_price: 'agent',
+    access_guest_data: 'none',
+    access_amendments: [],
+    access_cancellation_kind: 'never',
+    access_cancellation_hours: null,
+    access_payment_link: false,
+  }
+
+  async function actorFor(access: Record<string, unknown> | null) {
+    const resolution = await resolveActor(sourceFor(access), 'user-1', 'org-1')
+    if (!resolution.ok)
+      throw new Error(`expected an actor: ${resolution.reason}`)
+    return resolution.actor
+  }
+
+  const RESOURCE = { organizationId: 'org-1' }
+
+  it('resolves the preset position when nothing has been edited', async () => {
+    const actor = await actorFor(SALES_ROW)
+
+    expect(can(actor, 'availability.view', RESOURCE)).toBe(true)
+    expect(can(actor, 'booking.create', RESOURCE)).toBe(true)
+    expect(can(actor, 'rate.view_agent', RESOURCE)).toBe(true)
+  })
+
+  it('honours a narrowing the owner made, with no re-invite', async () => {
+    // The same membership, the same seeded role, one edited row: this agent
+    // has been dropped to leads only. Before this wiring existed every one of
+    // these was `true`, because the role answered and the row did not.
+    const actor = await actorFor({
+      ...SALES_ROW,
+      access_calendar: 'none',
+      access_price: 'none',
+    })
+
+    expect(can(actor, 'availability.view', RESOURCE)).toBe(false)
+    expect(can(actor, 'booking.create', RESOURCE)).toBe(false)
+    expect(can(actor, 'rate.view_agent', RESOURCE)).toBe(false)
+    expect(can(actor, 'rate.view_public', RESOURCE)).toBe(false)
+  })
+
+  it('honours a widening too, so the screen is not merely a ratchet', async () => {
+    const actor = await actorFor({
+      ...SALES_ROW,
+      access_price: 'net',
+      access_guest_data: 'phone',
+      access_payment_link: true,
+    })
+
+    expect(can(actor, 'rate.view_net', RESOURCE)).toBe(true)
+    expect(can(actor, 'guest.view_phone', RESOURCE)).toBe(true)
+    expect(can(actor, 'payment.request_link', RESOURCE)).toBe(true)
+  })
+
+  it('keeps the preset rights the ladders cannot express', async () => {
+    // `lead.update` and `approval.request` are on the seeded role and on no
+    // rung of any ladder, so no screen can take them away — and a projection
+    // that replaced the role outright would have, silently uninstalling the
+    // discount-approval path the moment this landed.
+    const actor = await actorFor({
+      ...SALES_ROW,
+      access_calendar: 'none',
+      access_price: 'none',
+    })
+
+    expect(can(actor, 'lead.update', RESOURCE)).toBe(true)
+    expect(can(actor, 'approval.request', RESOURCE)).toBe(true)
+    expect(can(actor, 'commission.view', RESOURCE)).toBe(true)
+  })
+
+  it('leaves the seeded role alone when no terms row exists', async () => {
+    // Reachable: `attachExistingUser` writes the membership and its role
+    // before the terms. Reading absence as "narrowed to nothing" would lock an
+    // agent out over a row that was never written.
+    const actor = await actorFor(null)
+
+    expect(can(actor, 'booking.create', RESOURCE)).toBe(true)
+  })
+
+  it('costs a non-agent membership no extra query at all', async () => {
+    // The second read is made only when a preset code is actually on the
+    // membership. The fake throws on an unseeded table, so seeding no
+    // `agent_organization_settings` response is itself the assertion.
+    const client = new FakeSupabaseClient({
+      responses: {
+        membership_roles: {
+          data: [
+            {
+              roles: {
+                code: 'general_manager',
+                is_system: true,
+                is_platform: false,
+                role_permissions: [],
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    const roles = await new SupabaseActorSource(client.asDb()).loadRoles('m-1')
+
+    expect(roles).toEqual([{ code: 'general_manager', kind: 'system' }])
+    expect(client.queriesFor('agent_organization_settings')).toHaveLength(0)
   })
 })
 

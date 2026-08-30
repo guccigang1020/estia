@@ -32,7 +32,11 @@ import {
   type PriceLevel,
   type SystemRole,
 } from './roles'
-import { ENTITLEMENTS, type Entitlement } from '../plans/entitlements'
+import {
+  ENTITLEMENTS,
+  ENTITLEMENT_FOR_GRANT,
+  type Entitlement,
+} from '../plans/entitlements'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -891,6 +895,95 @@ describe('the business side of the agent network', () => {
     expect(can(gm, 'commission.payout', RESOURCE)).toBe(false)
   })
 
+  /**
+   * `commission.manage` was granted in SQL by `0016` §9 to exactly these two
+   * roles and composed into neither here, which left the database one grant
+   * wider than the engine. The two are converged on the database's answer,
+   * because the grant is bounded to writing a commission statement — the only
+   * thing it policies is `commission_statements` insert and update — and never
+   * to approving or releasing one.
+   */
+  it('lets the two roles that own the commercial relationship correct a commission', () => {
+    expect(holds('general_manager', 'commission.manage')).toBe(true)
+    expect(holds('finance_manager', 'commission.manage')).toBe(true)
+  })
+
+  it('keeps correcting a commission apart from releasing one', () => {
+    const gm = actorInRole('general_manager')
+
+    expect(can(gm, 'commission.manage', RESOURCE)).toBe(true)
+    expect(can(gm, 'commission.approve', RESOURCE)).toBe(false)
+    expect(can(gm, 'commission.payout', RESOURCE)).toBe(false)
+  })
+
+  it('gives no other composed role the writing of a commission', () => {
+    const unexpected = SYSTEM_ROLES.filter(
+      (role) =>
+        role !== 'organization_owner' &&
+        role !== 'administrator' &&
+        role !== 'general_manager' &&
+        role !== 'finance_manager' &&
+        holds(role, 'commission.manage'),
+    )
+
+    expect(unexpected, 'roles wrongly able to write a commission').toEqual([])
+  })
+
+  /**
+   * A grant that exists because external sellers do is unusable without the
+   * feature that pays for them. Seventeen of the nineteen were mapped;
+   * `agent.membership.manage` and `commission.manage` were not, and the second
+   * of those is the one this role change hands to a general manager.
+   */
+  it('gates every agent-network grant on the agent_network entitlement', () => {
+    const agentGrants: readonly Grant[] = [
+      'agent.view',
+      'agent.invite',
+      'agent.manage',
+      'agent.membership.manage',
+      'agent.scope.manage',
+      'agent.audit.view',
+      'agency.manage',
+      'agent_agreement.view',
+      'agent_agreement.manage',
+      'agent_limits.manage',
+      'agent_booking.approve',
+      'agent_statement.view',
+      'agent_statement.issue',
+      'commission.view',
+      'commission.manage',
+      'commission.approve',
+      'commission.payout',
+      'report.agent.view',
+    ]
+    const ungated = agentGrants.filter(
+      (grant) => ENTITLEMENT_FOR_GRANT[grant] !== 'agent_network',
+    )
+
+    expect(ungated, 'agent-network grants with no entitlement').toEqual([])
+  })
+
+  it('refuses an agent-network grant to an organization that has not bought the network', () => {
+    const withoutNetwork = actorInRole('general_manager', {
+      entitlements: new Set<Entitlement>(
+        ENTITLEMENTS.filter((e) => e !== 'agent_network'),
+      ),
+    })
+
+    expect(
+      authorize(withoutNetwork, 'commission.manage', RESOURCE),
+    ).toMatchObject({
+      reason: 'plan_does_not_include',
+      entitlement: 'agent_network',
+    })
+    expect(
+      authorize(withoutNetwork, 'agent.membership.manage', RESOURCE),
+    ).toMatchObject({
+      reason: 'plan_does_not_include',
+      entitlement: 'agent_network',
+    })
+  })
+
   it('lets a finance manager approve and pay a commission', () => {
     const finance = actorInRole('finance_manager')
 
@@ -1021,11 +1114,15 @@ describe('administrator', () => {
   /**
    * The derivation is what keeps this number right, so the number is pinned:
    * if a permission is added and this figure is not updated deliberately, the
-   * change was not thought about. 127 non-platform permissions plus 13 field
+   * change was not thought about. 129 non-platform permissions plus 13 field
    * permissions, less the four reserved to the owner.
+   *
+   * 137 → 138 when `agent.membership.manage` joined the catalogue, so that a
+   * general manager could suspend an agent without being handed `user.edit`
+   * over every membership in the business.
    */
-  it('holds exactly 137 grants', () => {
-    expect(grantsForSystemRole('administrator')).toHaveLength(137)
+  it('holds exactly 138 grants', () => {
+    expect(grantsForSystemRole('administrator')).toHaveLength(138)
   })
 })
 
@@ -1056,8 +1153,8 @@ describe('organization_owner', () => {
     expect(held, 'platform grants held by an organization owner').toEqual([])
   })
 
-  it('holds exactly 141 grants — every non-platform permission and every field permission', () => {
-    expect(grantsForSystemRole('organization_owner')).toHaveLength(141)
+  it('holds exactly 142 grants — every non-platform permission and every field permission', () => {
+    expect(grantsForSystemRole('organization_owner')).toHaveLength(142)
   })
 
   it('holds the agent network, because running the sellers is the owner’s business', () => {
@@ -1177,6 +1274,38 @@ describe('grantsForRoles()', () => {
     const shared = [...union].filter((g) => g === 'task.view')
 
     expect(shared).toEqual(['task.view'])
+  })
+
+  /**
+   * A duplicate is harmless to the engine — `grantsForRoles()` flattens into a
+   * `Set` — and that is exactly why one survived: `general_manager` carried
+   * `availability.view` twice, because `BOOKING_READ` and `SELLING_DESK` both
+   * legitimately contain it and both were spread. Nothing broke; the role's
+   * array length simply stopped being the number of grants it holds, which is
+   * the figure every count in this file and in the migrations is checked
+   * against. Pinned so the next overlapping bundle is caught at the seam
+   * rather than at a count that no longer adds up.
+   */
+  it.each(SYSTEM_ROLES)('lists no grant twice in "%s"', (role) => {
+    const grants = grantsForSystemRole(role)
+    const seen = new Set<Grant>()
+    const duplicated = grants.filter((grant) => {
+      if (seen.has(grant)) return true
+      seen.add(grant)
+      return false
+    })
+
+    expect(duplicated, `grants listed twice by ${role}`).toEqual([])
+  })
+
+  it('agrees with itself about how many grants a role holds', () => {
+    for (const role of SYSTEM_ROLES) {
+      const grants = grantsForSystemRole(role)
+
+      expect(grants, `${role} array length vs. distinct grants`).toHaveLength(
+        grantsForRoles([role]).size,
+      )
+    }
   })
 
   it('does not let a combination of roles reach an owner-only grant', () => {

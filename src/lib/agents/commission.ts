@@ -501,7 +501,18 @@ export interface Commission {
   /** Not null in the table: the booking foreign key is composite over it. */
   propertyId: string
   bookingId: string
-  agentUserId: string
+  /**
+   * The named person owed the money, or `null` when an agency is.
+   *
+   * Nullable because `commissions.agent_user_id` is, and because the reason it
+   * is nullable is a real commercial fact rather than a schema accident: an
+   * agency keeps the relationship when the individual who sold the stay
+   * leaves, and `commissions_has_a_payee` says only that *one of the two* is
+   * present. `Commission` in `src/lib/finance/commissions.ts` has always
+   * modelled it this way; this is the agent domain catching up rather than a
+   * new possibility being introduced.
+   */
+  agentUserId: string | null
   agencyId: string | null
   /** The rule and the version it was computed under. Never re-derived. */
   ruleId: string | null
@@ -540,7 +551,8 @@ export interface CreateCommissionInput {
   organizationId: string
   propertyId: string
   bookingId: string
-  agentUserId: string
+  /** `null` when the payee is the agency. One of the two must be present. */
+  agentUserId: string | null
   agencyId: string | null
   lines: readonly PriceLine[]
   rule: CommissionRuleRecord | null
@@ -559,8 +571,22 @@ function rateBpsFor(rule: CommissionRule | undefined): number | null {
  * A booking with no matching rule still produces a record, at zero. The
  * alternative — no row — makes "was this sale commissionable?" unanswerable
  * later, and the answer "there was no rule that day" is worth storing.
+ *
+ * A commission owed to nobody is refused, because `commissions_has_a_payee`
+ * refuses it and a record that cannot be written should not be built. Both
+ * fields being nullable is the schema saying "one of the two", not "either or
+ * neither" — the same guard `commissionFromDraft` makes in the finance
+ * domain.
  */
 export function createCommission(input: CreateCommissionInput): Commission {
+  if (input.agentUserId === null && input.agencyId === null) {
+    throw new BusinessRuleError({
+      code: 'commission.no_payee',
+      message: `Commission ${input.id} names neither an agent nor an agency`,
+      userMessage: 'לא ניתן לחשב עמלה בלי לציין למי היא משולמת.',
+    })
+  }
+
   const base = input.rule?.base ?? 'stay_total'
   const baseAgorot = commissionBaseAmount(input.lines, base)
   const calculation = calculateCommission(

@@ -75,9 +75,11 @@ import { COMMISSION_BASES, COMMISSION_STATUSES } from '../contracts/states'
 import { APPROVAL_STATUSES, APPROVAL_TYPES } from '../contracts/states'
 import {
   AGENT_CANCELLATION_KINDS,
+  AGENT_PRESET_ROLE,
   parseAgentAccess,
   type AgentAccess,
   type AgentCancellationPolicy,
+  type AgentPresetName,
 } from '../agents/access'
 import type {
   Commission,
@@ -106,9 +108,8 @@ import type {
   AgentInvitation,
   AgentOrganizationSettings,
 } from '../agents/types'
-import { MEMBERSHIP_STATUSES } from './actor'
 import { ConflictError, NotFoundError } from '../errors'
-import type { MembershipStatus } from '../authz/can'
+import { MEMBERSHIP_STATUSES, type MembershipStatus } from '../authz/can'
 import type { TransactionHandle } from '../service'
 import type { Db, Row } from './client'
 import { SchemaNotProvisionedError } from './errors'
@@ -271,9 +272,10 @@ export class SupabaseAgentRepository
    *
    * The membership is touched only when the status differs from the stored
    * one. That is not an optimisation: `memberships_update` requires
-   * `user.edit`, which an owner holding only `agent.manage` does not have, and
-   * an unconditional write would refuse every ordinary edit of the ladders for
-   * a status nobody was changing.
+   * `user.edit` and 0025's `memberships_update_agent` requires
+   * `agent.membership.manage`, neither of which an owner holding only
+   * `agent.manage` has, and an unconditional write would refuse every ordinary
+   * edit of the ladders for a status nobody was changing.
    */
   async saveSettings(
     settings: AgentOrganizationSettings,
@@ -376,25 +378,29 @@ export class SupabaseAgentRepository
    *      commission can still be argued from them; overwriting them on
    *      re-admission would delete the same record a day later instead.
    *
-   *   3. Otherwise the terms are inserted as given.
+   *   3. The role, before the terms. `membership_roles` is where grants come
+   *      from, and a membership with no row there resolves with none at all —
+   *      the agent signs in, every screen is empty, and nothing in the record
+   *      says why. The role is therefore assigned in the same act as the
+   *      membership rather than left to a caller who may not exist.
    *
-   * What this cannot do is assign a role. `membership_roles` is where grants
-   * come from, `AgentOrganizationSettings` carries no role and `addAgent`
-   * chooses a preset it does not pass down, so the membership created here
-   * resolves with no grants until one is assigned. That is a gap in the port,
-   * not in the schema, and inventing a role code in an adapter would be this
-   * file deciding authorization.
+   *      This adapter still does not decide authorization. `preset` arrives
+   *      from the operation, and `AGENT_PRESET_ROLE` in the domain maps it to
+   *      a role code; what happens here is a lookup and an insert.
+   *
+   *   4. Otherwise the terms are inserted as given.
    */
   async attachExistingUser(
     input: {
       organizationId: string
       userId: string
+      preset: AgentPresetName
       settings: AgentOrganizationSettings
     },
     tx: TransactionHandle,
   ): Promise<AgentOrganizationSettings> {
     const db = clientFor(tx, this.db)
-    const { organizationId, userId, settings } = input
+    const { organizationId, userId, preset, settings } = input
 
     // The ids come from `input`, never from `input.settings`. They are the same
     // today, and a predicate that trusted the nested copy would widen silently
@@ -409,6 +415,12 @@ export class SupabaseAgentRepository
     const membershipId = membership
       ? await this.reactivateMembership(db, tx, membership, anchored)
       : await this.createMembership(db, tx, organizationId, userId, anchored)
+
+    // Before the terms, and before the early return below. An agent whose
+    // terms already exist can still be holding a membership whose role was
+    // removed while they were gone, and re-admitting them into that is the
+    // outcome this whole step exists to make unrepresentable.
+    await this.assignPresetRole(db, tx, organizationId, membershipId, preset)
 
     const existing = await this.loadSettings(organizationId, userId)
     if (existing) return { ...existing, status: settings.status }
@@ -752,8 +764,10 @@ export class SupabaseAgentRepository
    * Move the membership status, and refuse to report success if nothing moved.
    *
    * Zero rows means the membership is gone, belongs to somebody else, or —
-   * most likely — this caller holds `agent.manage` but not the `user.edit`
-   * that `memberships_update` demands. All three must be loud: returning the
+   * most likely — this caller holds `agent.manage` and neither of the two
+   * grants that reach the row: the organization-wide `user.edit`
+   * (`memberships_update`) or the agent-specific `agent.membership.manage`
+   * (`memberships_update_agent`, 0025). All three must be loud: returning the
    * requested status while the row still says `active` would tell an owner
    * they had suspended an agent who is still selling.
    */
@@ -793,6 +807,91 @@ export class SupabaseAgentRepository
       membershipId: membership.membershipId,
     })
     return membership.membershipId
+  }
+
+  /**
+   * Give the membership the role its preset names, once.
+   *
+   * ── Why this is not optional ──────────────────────────────────────────
+   *
+   * `SupabaseActorSource.loadRoles` reads `membership_roles`, and a membership
+   * with nothing there resolves to an empty grant set. That is not a degraded
+   * agent, it is a person who can open the product and do nothing, and the
+   * record holds no explanation. So the role goes in beside the membership and
+   * a failure to write it is a failure of the whole attach.
+   *
+   * ── Three deliberate choices ──────────────────────────────────────────
+   *
+   * **The role is looked up, never created.** `AGENT_PRESET_ROLE` names one of
+   * the four global agent roles seeded by 0012 (`organization_id is null`), so
+   * this cannot mint permissions; the worst it can do is hand out a bundle the
+   * catalogue already defines. A role that is missing is a schema that has not
+   * been migrated, and it says so rather than proceeding without one.
+   *
+   * **Existing first, insert second.** `membership_roles` has no UPDATE policy
+   * by design and its primary key is `(membership_id, role_id)`, so a second
+   * insert would raise `23505` on the ordinary path of re-admitting an agent
+   * who kept their role. Reading first makes the step idempotent without
+   * swallowing an error class that might be something else.
+   *
+   * **A refused insert throws.** Unlike the UPDATE in `setMembershipStatus`,
+   * which a policy turns into zero rows, a policy violation on INSERT is a
+   * `42501` error — so a caller holding neither `role.assign`
+   * (`membership_roles_insert`) nor `agent.membership.manage`
+   * (`membership_roles_insert_agent`, 0025) surfaces loudly here, and
+   * `assertMembershipWriteAllowed` in the operation has already refused it by
+   * name one step earlier.
+   *
+   * Note what 0025's policy additionally requires and this method already
+   * satisfies: the role is one of the four presets, and the membership holds
+   * nothing else. The second is why the role is written before the terms and
+   * why a re-admitted agent's existing role is read rather than re-inserted.
+   */
+  private async assignPresetRole(
+    db: Db,
+    tx: TransactionHandle,
+    organizationId: string,
+    membershipId: string,
+    preset: AgentPresetName,
+  ): Promise<void> {
+    const code = AGENT_PRESET_ROLE[preset]
+
+    const { data: roleData, error: roleError } = await db
+      .from('roles')
+      .select('id')
+      .eq('code', code)
+      .is('organization_id', null)
+      .maybeSingle()
+
+    if (roleError) throw roleError
+    if (!roleData) {
+      throw new SchemaNotProvisionedError(
+        `${code} role`,
+        'assigning an agent the role their preset names — without which ' +
+          'the membership resolves with no grants at all —',
+      )
+    }
+
+    const roleId = asString(toRow(roleData), 'id')
+
+    const { data: held, error: heldError } = await db
+      .from('membership_roles')
+      .select('role_id')
+      .eq('membership_id', membershipId)
+      .eq('role_id', roleId)
+      .maybeSingle()
+
+    if (heldError) throw heldError
+    if (held) return
+
+    const { error } = await db.from('membership_roles').insert({
+      membership_id: membershipId,
+      organization_id: organizationId,
+      role_id: roleId,
+    })
+
+    if (error) throw error
+    recordWrite(tx, `membership_roles(${membershipId}:${code})`)
   }
 
   private async createMembership(
@@ -882,13 +981,62 @@ export class SupabaseAgentRepository
   }
 }
 
+// ── The one read actor resolution makes ───────────────────────────────────
+
+/**
+ * The stored ladders of the agent behind this membership, or `null`.
+ *
+ * Lives here rather than in `actor.ts` because this file owns the shape of
+ * `agent_organization_settings` — the column names, and `toAccess`, which is
+ * the single door from those columns into the union. A second reader over
+ * there would be a second spelling of seven column names, and the first one to
+ * drift would produce an agent whose access silently resolved to nothing.
+ *
+ * `null` means **no terms row**, which is a real state: the membership and its
+ * role are written before the terms in `attachExistingUser`, and a caller
+ * reading `null` must not treat it as "this agent may do nothing" — see
+ * `SupabaseActorSource.loadRoles`, which leaves the seeded role alone.
+ *
+ * A row that exists and is *incoherent* is not `null`: `toAccess` throws
+ * `RowShapeError` rather than inventing an access level for the record that
+ * decides what an outsider may see.
+ *
+ * `membership_id` is `UNIQUE` on the table
+ * (`agent_organization_settings_membership_key`), so `maybeSingle` is exact
+ * and not a narrowing of a wider result.
+ */
+export async function loadAgentAccessForMembership(
+  db: Db,
+  membershipId: string,
+): Promise<AgentAccess | null> {
+  const { data, error } = await db
+    .from('agent_organization_settings')
+    .select(AGENT_ACCESS_COLUMNS)
+    .eq('membership_id', membershipId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) return null
+  return toAccess(toRow(data))
+}
+
 // ── Column lists ──────────────────────────────────────────────────────────
+
+/**
+ * The `AgentAccess` columns alone — the surface `agent.access.update` writes.
+ *
+ * Named separately from the inventory reach because actor resolution reads
+ * exactly these and nothing else: it is answering "what may this agent do",
+ * and the properties they may sell are a scope question decided elsewhere.
+ */
+export const AGENT_ACCESS_COLUMNS =
+  'access_calendar, access_price, access_guest_data, access_amendments, ' +
+  'access_cancellation_kind, access_cancellation_hours, access_payment_link'
 
 /** The three ladders, shared by the settings row and the invitation. */
 const LADDER_COLUMNS =
-  'access_calendar, access_price, access_guest_data, access_amendments, ' +
-  'access_cancellation_kind, access_cancellation_hours, access_payment_link, ' +
-  'inventory_kind, inventory_property_ids, inventory_unit_ids'
+  AGENT_ACCESS_COLUMNS +
+  ', inventory_kind, inventory_property_ids, inventory_unit_ids'
 
 const SETTINGS_COLUMNS =
   'id, organization_id, agent_user_id, membership_id, ' +
@@ -1017,7 +1165,7 @@ function firstEmbedded(value: unknown): Row | null {
  * `{ calendar: 'none', price: 'net' }` into a type that cannot hold it, and
  * every `switch` downstream would fall through to a branch nobody wrote.
  */
-function toAccess(row: Row): AgentAccess {
+export function toAccess(row: Row): AgentAccess {
   const calendar = asString(row, 'access_calendar')
   const draft: Record<string, unknown> = {
     calendar,
@@ -1155,12 +1303,11 @@ function toCommission(row: Row): Commission {
     organizationId: asString(row, 'organization_id'),
     propertyId: asString(row, 'property_id'),
     bookingId: asString(row, 'booking_id'),
-    // `NOT NULL` in the domain and nullable in the column, because a
-    // commission can be owed to an agency with no named person. That case
-    // needs an `agencyId`-only variant on the port; until it has one, a row
-    // with no agent cannot be represented and says so rather than inventing
-    // an empty user id.
-    agentUserId: requireAgent(row),
+    // Nullable at both ends now. `commissions_has_a_payee` requires one of
+    // `agent_user_id` and `agency_id`, not both, because an agency keeps the
+    // relationship when the individual leaves — and the domain type says the
+    // same thing, so there is no shape this adapter has to refuse to read.
+    agentUserId: asStringOrNull(row, 'agent_user_id'),
     agencyId: asStringOrNull(row, 'agency_id'),
     ruleId: asStringOrNull(row, 'rule_id'),
     ruleVersion: asNumberOrNull(row, 'rule_version'),
@@ -1187,18 +1334,6 @@ function toCommission(row: Row): Commission {
     cancellationReason: asStringOrNull(row, 'cancellation_reason'),
     version: asNumber(row, 'version'),
   }
-}
-
-function requireAgent(row: Row): string {
-  const agent = asStringOrNull(row, 'agent_user_id')
-  if (agent === null) {
-    throw new SchemaNotProvisionedError(
-      'an agency-only shape on the Commission record',
-      'reading a commission owed to an agency rather than to a named person. ' +
-        'commissions.agent_user_id is nullable and the domain type is not',
-    )
-  }
-  return agent
 }
 
 /**

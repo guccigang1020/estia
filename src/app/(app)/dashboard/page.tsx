@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/states/empty-state'
 import { buildMenu } from '@/components/nav/menu'
 import { entitlementLabel, scopeLabel } from '@/components/nav/labels'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardDescription,
@@ -56,7 +57,8 @@ export default async function DashboardPage({
           as="h1"
           illustration="property"
           title="עוד אין לך מרחב עבודה"
-          body="החשבון שלך נוצר, אבל הוא עדיין לא משויך לאף ארגון. ארגון נוצר בתהליך ההצטרפות, או על ידי הזמנה ממנהל קיים — שני המסלולים עוד לא נבנו, ולכן אין כאן מה להציג."
+          body="החשבון שלך נוצר, אבל הוא עדיין לא משויך לאף ארגון. אפשר להקים ארגון חדש עכשיו, או להמתין להזמנה ממנהל בארגון קיים."
+          action={<Button href="/onboarding">הקמת ארגון</Button>}
         />
       </Shell>
     )

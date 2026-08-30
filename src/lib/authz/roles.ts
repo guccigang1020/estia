@@ -174,6 +174,32 @@ export function grantsForGuestDataLevel(
 }
 
 /**
+ * A position on all three ladders at once, with the grant they share counted
+ * once.
+ *
+ * `rate.view_public` sits on two of them, correctly and for different reasons:
+ * the calendar's `availability_price` rung has it because a quote is a price
+ * put in front of a customer, and the price ladder's first rung has it because
+ * it is the first price anyone may be shown. Neither may give it up, so a
+ * preset standing on both listed it twice — which is invisible to the engine,
+ * since `grantsForRoles()` flattens into a `Set`, and visible in every count
+ * taken of the array. The union is taken here rather than left to drift.
+ */
+function grantsForLadders(
+  calendar: CalendarLevel,
+  price: PriceLevel,
+  guestData: GuestDataLevel,
+): readonly Grant[] {
+  return [
+    ...new Set<Grant>([
+      ...grantsForCalendarLevel(calendar),
+      ...grantsForPriceLevel(price),
+      ...grantsForGuestDataLevel(guestData),
+    ]),
+  ]
+}
+
+/**
  * The amendment rights, which are deliberately *not* a ladder.
  *
  * No ordering between them is true. A business may happily let an agent move
@@ -227,9 +253,20 @@ const SELLING_DESK: Grant[] = [
   'payment.request_link',
 ]
 
+/**
+ * Free/busy plus the selling desk, with the grant they share counted once.
+ *
+ * `availability.view` genuinely belongs to both bundles — it is the free/busy
+ * half of reading a booking, and it is the first thing anybody selling looks
+ * at — so neither list may drop it. Spreading both, though, put it into every
+ * composed role twice, which made the role's array length disagree with the
+ * number of grants it actually holds. The union is taken once, here, rather
+ * than left for `grantsForRoles()` to flatten silently.
+ */
+const SELLING_FLOOR: Grant[] = [...new Set([...BOOKING_READ, ...SELLING_DESK])]
+
 const BOOKING_DESK: Grant[] = [
-  ...BOOKING_READ,
-  ...SELLING_DESK,
+  ...SELLING_FLOOR,
   'booking.create',
   'booking.update',
   ...AMENDMENT_GRANTS,
@@ -370,9 +407,18 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     // who sells, what inventory they see, and on what terms. They are
     // deliberately not given `commission.approve` or `commission.payout` —
     // whoever writes the commission rule does not also release the money.
+    //
+    // `agent.membership.manage` and not `user.edit` + `role.assign`. Owning
+    // the network means adding and suspending the people in it, and both of
+    // those write `memberships` and `membership_roles` — tables that hold
+    // every employee. The organization-wide grants would let whoever runs the
+    // sellers change an administrator's membership; the agent-specific one is
+    // policed (0025) to reach only memberships that have agent terms and do
+    // not themselves hold elevated authority.
     'agent.view',
     'agent.invite',
     'agent.manage',
+    'agent.membership.manage',
     'agent.scope.manage',
     'agency.manage',
     'agent_agreement.view',
@@ -381,6 +427,13 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'agent_booking.approve',
     'agent.audit.view',
     'commission.view',
+    // Correcting a commission that the automatic `estimated → pending →
+    // eligible` steps got wrong, and issuing the period statement it lands on.
+    // It is the commercial half of the network, which is this role's, and it
+    // is bounded: `commission.manage` policies nothing but insert and update
+    // on `commission_statements`. Approving and paying out are separate grants
+    // above, and stay with finance.
+    'commission.manage',
     'agent_statement.view',
     'report.agent.view',
     'lead.assign',
@@ -437,8 +490,7 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
    * given business profitability or export.
    */
   reception: [
-    ...BOOKING_READ,
-    ...SELLING_DESK,
+    ...SELLING_FLOOR,
     'booking.update',
     ...AMENDMENT_GRANTS,
     'booking.change_status',
@@ -491,10 +543,12 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'owner.view_commission',
     'approval.decide',
     'booking.export',
-    // Approves and pays the commission, and may read the agreement it is
-    // computed from — but cannot write that agreement. The person who sets
-    // the rate is never the person who releases the money.
+    // Approves and pays the commission, corrects a figure that came out wrong,
+    // and may read the agreement it is computed from — but cannot write that
+    // agreement. The person who sets the rate is never the person who releases
+    // the money.
     'commission.view',
+    'commission.manage',
     'commission.approve',
     'commission.payout',
     'agent_agreement.view',
@@ -524,9 +578,10 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   ],
 
   operations_manager: [
+    // `task.assign` is not repeated here: `OPERATIONS_CORE` carries it, and
+    // this role's whole point is that it holds all of it.
     ...OPERATIONS_CORE,
     ...BOOKING_READ,
-    'task.assign',
     'user.view',
     'team.manage',
     'expense.view',
@@ -596,12 +651,7 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
    * dates, not a price, not a guest. The commission and statement they do see
    * are their own pay, confined to their own records by the membership scope.
    */
-  referral_agent: [
-    ...AGENT_BASE,
-    ...grantsForCalendarLevel('none'),
-    ...grantsForPriceLevel('none'),
-    ...grantsForGuestDataLevel('none'),
-  ],
+  referral_agent: [...AGENT_BASE, ...grantsForLadders('none', 'none', 'none')],
 
   /**
    * The main model. Sees what is free, quotes it, holds it, books it — and
@@ -610,9 +660,7 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
    */
   sales_agent: [
     ...AGENT_BASE,
-    ...grantsForCalendarLevel('availability_booking'),
-    ...grantsForPriceLevel('agent'),
-    ...grantsForGuestDataLevel('none'),
+    ...grantsForLadders('availability_booking', 'agent', 'none'),
     'lead.update',
   ],
 
@@ -624,9 +672,7 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
    */
   senior_agent: [
     ...AGENT_BASE,
-    ...grantsForCalendarLevel('availability_booking'),
-    ...grantsForPriceLevel('agent'),
-    ...grantsForGuestDataLevel('none'),
+    ...grantsForLadders('availability_booking', 'agent', 'none'),
     'lead.update',
     ...AMENDMENT_GRANTS,
     'booking.cancel',
@@ -642,9 +688,7 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
    */
   agency_manager: [
     ...AGENT_BASE,
-    ...grantsForCalendarLevel('availability_booking'),
-    ...grantsForPriceLevel('net'),
-    ...grantsForGuestDataLevel('phone'),
+    ...grantsForLadders('availability_booking', 'net', 'phone'),
     'lead.update',
     'lead.assign',
     ...AMENDMENT_GRANTS,

@@ -383,6 +383,82 @@ describe('scope is not consulted when no resource is named', () => {
   })
 })
 
+// ── Per-family scope overrides ────────────────────────────────────────────
+
+/**
+ * What `scopeOverrides` actually does, pinned because the answer decides
+ * whether anything may be put in it.
+ *
+ * `scopeFor()` **replaces** the default with the override for that family. It
+ * does not intersect the two. So an override is only a narrowing when the
+ * scope written into it is already a subset of the default — and it is a
+ * widening in every other case, including the case that matters: a default of
+ * `own_records`, which reaches no property or unit at all, against an
+ * inventory override naming properties.
+ *
+ * This is why `resolveActor` still does not populate the field from an agent's
+ * stored inventory reach. Doing so would hand an agent whose membership scope
+ * row is absent — every agent in the product today, since `attachExistingUser`
+ * writes no `membership_scopes` row — an inventory reach their membership
+ * never granted, and `all_properties` converts to `all_organization`.
+ */
+describe('a per-family scope override replaces the default rather than intersecting it', () => {
+  const grants: readonly Grant[] = ['availability.view']
+
+  it('falls back to the default scope for a family that is not overridden', () => {
+    const actor = actorWith(grants, {
+      scope: { kind: 'properties', propertyIds: ['prop-1'] },
+      scopeOverrides: { finance: { kind: 'own_records' } },
+    })
+
+    expect(
+      can(actor, 'availability.view', resource({ propertyId: 'prop-1' })),
+    ).toBe(true)
+  })
+
+  it('falls back to the default scope for a resource that declares no family', () => {
+    const actor = actorWith(grants, {
+      scope: { kind: 'own_records' },
+      scopeOverrides: { inventory: { kind: 'all_organization' } },
+    })
+
+    expect(
+      can(actor, 'availability.view', resource({ unitId: 'unit-1' })),
+    ).toBe(false)
+  })
+
+  it('narrows where the override is narrower than the default', () => {
+    const actor = actorWith(grants, {
+      scope: { kind: 'all_organization' },
+      scopeOverrides: { inventory: { kind: 'properties', propertyIds: [] } },
+    })
+
+    expect(
+      can(
+        actor,
+        'availability.view',
+        resource({ propertyId: 'prop-1', family: 'inventory' }),
+      ),
+    ).toBe(false)
+  })
+
+  it('widens where the override is wider than the default, which is why nothing may be written into it unchecked', () => {
+    const actor = actorWith(grants, {
+      scope: { kind: 'own_records' },
+      scopeOverrides: {
+        inventory: { kind: 'properties', propertyIds: ['prop-1'] },
+      },
+    })
+    const unit = resource({ propertyId: 'prop-1', unitId: 'unit-1' })
+
+    // The same unit, the same actor, the same grant. Only the family differs.
+    expect(can(actor, 'availability.view', unit)).toBe(false)
+    expect(
+      can(actor, 'availability.view', { ...unit, family: 'inventory' }),
+    ).toBe(true)
+  })
+})
+
 // ── Plan entitlements ─────────────────────────────────────────────────────
 
 describe('plan entitlements', () => {

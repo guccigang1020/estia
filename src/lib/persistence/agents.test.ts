@@ -611,6 +611,8 @@ describe('the agent settings row, and the status that is not on it', () => {
         memberships: {
           data: { id: 'mem-1', user_id: 'agent-1', status: 'active' },
         },
+        roles: { data: { id: 'role-sales' } },
+        membership_roles: { data: { role_id: 'role-sales' } },
         agent_organization_settings: { data: SETTINGS_ROW },
       },
     })
@@ -621,6 +623,7 @@ describe('the agent settings row, and the status that is not on it', () => {
       {
         organizationId: 'org-a',
         userId: 'agent-1',
+        preset: 'sales',
         settings: settings({ discountCap: { maxPercent: 0, maxAgorot: null } }),
       },
       undefined,
@@ -631,6 +634,77 @@ describe('the agent settings row, and the status that is not on it', () => {
       .queriesFor('agent_organization_settings')
       .filter((query) => query.verb === 'insert')
     expect(writes).toHaveLength(0)
+  })
+
+  it('assigns the role the preset names, in the same act as the membership', async () => {
+    // The gap this closes: `membership_roles` is where grants come from, and a
+    // membership created without a row there resolves with none at all. The
+    // agent signs in, every screen is empty, and nothing in the record says
+    // why.
+    const client = new FakeSupabaseClient({
+      responses: {
+        // No membership yet, then the one this creates.
+        'memberships:select': { data: null },
+        'memberships:insert': { data: { id: 'mem-9' } },
+        roles: { data: { id: 'role-senior' } },
+        // Not held yet, so the insert has to happen.
+        'membership_roles:select': { data: null },
+        'membership_roles:insert': { data: null },
+        'agent_organization_settings:select': { data: null },
+        'agent_organization_settings:insert': { data: SETTINGS_ROW },
+      },
+    })
+
+    await new SupabaseAgentRepository(client.asDb()).attachExistingUser(
+      {
+        organizationId: 'org-a',
+        userId: 'agent-1',
+        preset: 'senior',
+        settings: settings(),
+      },
+      undefined,
+    )
+
+    const lookup = client.queriesFor('roles')[0]
+    expect(hasFilter(lookup, 'eq', 'code', 'senior_agent')).toBe(true)
+    // A *global* role. A per-organization row with the same code would be a
+    // customer's own role wearing a system name.
+    expect(hasFilter(lookup, 'is', 'organization_id', null)).toBe(true)
+
+    const write = client
+      .queriesFor('membership_roles')
+      .find((query) => query.verb === 'insert')
+    expect(write?.payload).toEqual({
+      membership_id: 'mem-9',
+      organization_id: 'org-a',
+      role_id: 'role-senior',
+    })
+  })
+
+  it('refuses the whole attach when the preset names no role that exists', async () => {
+    // Returning settings here would report success for an agent who holds
+    // nothing. An unmigrated catalogue is a schema problem and says so.
+    const client = new FakeSupabaseClient({
+      responses: {
+        'memberships:select': { data: null },
+        'memberships:insert': { data: { id: 'mem-9' } },
+        roles: { data: null },
+      },
+    })
+
+    await expect(
+      new SupabaseAgentRepository(client.asDb()).attachExistingUser(
+        {
+          organizationId: 'org-a',
+          userId: 'agent-1',
+          preset: 'sales',
+          settings: settings(),
+        },
+        undefined,
+      ),
+    ).rejects.toThrow(/sales_agent/)
+
+    expect(client.queriesFor('agent_organization_settings')).toHaveLength(0)
   })
 })
 

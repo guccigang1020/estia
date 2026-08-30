@@ -25,6 +25,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { isDemoMode } from '@/lib/demo/flag'
 import { env } from '@/lib/env'
 
 /** Paths a signed-out visitor may reach. Everything else needs a session. */
@@ -70,6 +71,18 @@ function matches(pathname: string, prefixes: string[]) {
  * one it arrived with).
  */
 export async function updateSession(request: NextRequest) {
+  // The demo has no Supabase session to refresh and no signed-out state to
+  // redirect out of — the person is a cookie, resolved per request inside
+  // `createClient()`. Both halves of this function are therefore about
+  // something that does not exist here, and running the optimistic redirect
+  // would send every demo request to `/sign-in`, which is a screen the demo
+  // deliberately has no way to complete.
+  //
+  // This is the third choke point, and the only one outside the two the demo
+  // set out to touch. It is here because the proxy runs before rendering: with
+  // it left alone, nothing below it ever renders at all.
+  if (isDemoMode()) return NextResponse.next({ request })
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(

@@ -4,6 +4,7 @@ import Link from 'next/link'
 
 import { signOutAction } from '@/app/(auth)/actions'
 import { SignOutButton } from '@/components/auth/sign-out-button'
+import { DemoSwitcher } from '@/components/demo/demo-switcher'
 import { MobileNav } from '@/components/nav/mobile-nav'
 import { Sidebar } from '@/components/nav/sidebar'
 import { TopBar } from '@/components/nav/top-bar'
@@ -71,6 +72,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             {children}
           </main>
         </div>
+
+        {/* Mounted here too: "no workspace" and "no subscription" are states
+            worth being able to walk into and back out of, and the switcher is
+            the only way out of them. It renders nothing when the demo flag is
+            off — see `DemoSwitcher`, which returns null before reading
+            anything at all. */}
+        <DemoSwitcher />
       </>
     )
   }
@@ -135,6 +143,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         workspaceName={context.workspace.name}
         propertyLabel={propertyLabel}
       />
+
+      <DemoSwitcher />
     </>
   )
 }

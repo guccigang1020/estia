@@ -293,6 +293,40 @@ describe('presets are seed values, not stored kinds', () => {
     expect(after.has('rate.view_agent')).toBe(false)
     expect(after.has('rate.view_public')).toBe(true)
   })
+
+  it('keeps a seeded preset’s non-ladder rights and drops nothing else', () => {
+    // `lead.update` is on `sales_agent` and on no rung of any ladder, so no
+    // screen can take it away. Everything the ladders *can* decide is answered
+    // by the stored row instead — here a sales agent narrowed to leads only.
+    const narrowed = agentRoleAssignment(
+      { calendar: 'none', price: 'none', guestData: 'none' },
+      ['sales_agent'],
+    )
+    const grants = new Set(narrowed.grants)
+
+    expect(grants.has('lead.update')).toBe(true)
+    expect(grants.has('approval.request')).toBe(true)
+    expect(grants.has('availability.view')).toBe(false)
+    expect(grants.has('booking.create')).toBe(false)
+    expect(grants.has('rate.view_agent')).toBe(false)
+  })
+
+  it('resolves the senior preset to its stored amendments, not the role’s', () => {
+    // A deliberate narrowing rather than a regression, and the clearest single
+    // example of the defect being closed. `senior_agent` in roles.ts carries
+    // the whole `AMENDMENT_GRANTS` set including `booking.amend_dates`, while
+    // `AGENT_PRESETS.senior` lists four amendments and not `dates`. The screen
+    // has always shown dates as off; until resolution projected the stored
+    // row, the engine let a senior agent move them anyway.
+    const grants = new Set(
+      agentRoleAssignment(AGENT_PRESETS.senior, ['senior_agent']).grants,
+    )
+
+    expect(grants.has('booking.amend_price')).toBe(true)
+    expect(grants.has('booking.amend_dates')).toBe(false)
+    // And the non-ladder half of the same role is untouched.
+    expect(grants.has('booking.view_payment_status')).toBe(true)
+  })
 })
 
 // ── Predicates ────────────────────────────────────────────────────────────

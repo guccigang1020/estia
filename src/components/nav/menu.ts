@@ -418,7 +418,7 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'organization',
         label: 'פרטי הארגון',
         requires: { kind: 'grant', anyOf: ['organization.settings.edit'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/settings/organization' },
       },
       {
         id: 'billing',

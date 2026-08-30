@@ -24,8 +24,27 @@ import { ENTITLEMENT_FOR_GRANT } from '../plans/entitlements'
 
 // ── Inputs ────────────────────────────────────────────────────────────────
 
-export type MembershipStatus =
-  'invited' | 'pending' | 'active' | 'suspended' | 'removed'
+/**
+ * The five, declared once, beside the type they inhabit.
+ *
+ * The array is the runtime half and the type is derived from it, so the two
+ * cannot disagree. It lives here rather than in the persistence layer because
+ * every reader of a status needs the same five: the engine, the actor
+ * resolver, and the agent domain. A copy in an adapter made
+ * `persistence/actor.ts` the source of truth for a decision that belongs to
+ * authorization — and made `persistence/agents.ts` import from the adapter
+ * beside it, which is the import cycle `persistence/actor.ts` would otherwise
+ * close when it reads an agent's stored ladders.
+ */
+export const MEMBERSHIP_STATUSES = [
+  'invited',
+  'pending',
+  'active',
+  'suspended',
+  'removed',
+] as const
+
+export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number]
 
 /**
  * Where a membership's permissions apply.
@@ -85,8 +104,15 @@ export interface Actor {
    * what they are reaching for. Absent for almost everyone — an employee has
    * one scope and this stays undefined.
    *
-   * An unlisted family falls back to `scope`. Adding a family here can only
-   * ever narrow, never widen: the default is still checked first.
+   * An unlisted family falls back to `scope`, and so does a resource that
+   * declares no family at all — which is what makes this safe to add to the
+   * model: a call site that has not opted in cannot have its answer changed.
+   *
+   * A listed family, though, is **replaced** rather than intersected — see
+   * `scopeFor` below. An override is a narrowing only when what is written
+   * into it is already a subset of the default; write something wider and it
+   * widens. Whoever populates this field owns that comparison, because the
+   * engine does not make it.
    */
   scopeOverrides?: Partial<Record<ResourceFamily, Scope>>
   /** Features the organization's plan includes. */
@@ -285,6 +311,13 @@ export function isWithinScope(actor: Actor, resource: Resource): boolean {
  * default applies. A resource that does not declare a family always uses the
  * default, which is why adding families to the model cannot change the answer
  * for any call site that has not opted in.
+ *
+ * "Wins" is literal: the override is returned instead of the default, not
+ * intersected with it. That is deliberate — the two scopes an agent needs
+ * ("which records are mine" and "which inventory may I sell") have no common
+ * subset, so an intersection would always be empty and the model would answer
+ * nothing. The cost is that this function cannot tell a narrowing from a
+ * widening, so whatever fills `scopeOverrides` must.
  */
 export function scopeFor(actor: Actor, resource: Resource): Scope {
   if (resource.family === undefined) return actor.scope

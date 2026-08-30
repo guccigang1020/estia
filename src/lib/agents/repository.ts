@@ -15,6 +15,7 @@
  */
 
 import type { TransactionHandle } from '../service'
+import type { AgentPresetName } from './access'
 import type { Commission, CommissionRuleRecord } from './commission'
 import type { DiscountApproval } from './discounts'
 import type { AgentHoldLedgerEntry } from './holds'
@@ -44,11 +45,21 @@ export interface AgentSettingsStore {
    * Returns the new settings. It creates a membership and **never a user** —
    * the user already exists, which is the entire point of the middle branch in
    * `identity.ts`.
+   *
+   * `preset` is not a field of the settings and never becomes one — see the
+   * `NO_AGENT_TYPE_COLUMN` guard in `types.ts`. It is carried here because a
+   * membership is where grants come from, and one created without a role
+   * resolves with none: the agent signs in and can do nothing, with nothing in
+   * the record explaining why. The implementation must assign
+   * `AGENT_PRESET_ROLE[preset]` in the same act as the membership, and must
+   * fail rather than return settings for a membership that holds no role.
    */
   attachExistingUser(
     input: {
       organizationId: string
       userId: string
+      /** Which preset was chosen. Decides the role, never stored as a type. */
+      preset: AgentPresetName
       settings: AgentOrganizationSettings
     },
     tx: TransactionHandle,

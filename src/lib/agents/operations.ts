@@ -26,7 +26,7 @@
  * requirement rather than a nicety.
  */
 
-import { assertCan, type Actor, type Resource } from '../authz/can'
+import { assertCan, can, type Actor, type Resource } from '../authz/can'
 import { BusinessRuleError } from '../errors'
 import { defineOperation, s } from '../service'
 import {
@@ -34,6 +34,7 @@ import {
   AGENT_PRESET_NAMES,
   parseAgentAccess,
   type AgentAccess,
+  type AgentPresetName,
 } from './access'
 import {
   advanceCommission,
@@ -88,6 +89,59 @@ function settingsResource(
   }
 }
 
+/**
+ * Two grants reach an agent's membership row, and either is enough.
+ *
+ * `user.edit` is the organization-wide team authority: it reaches *every*
+ * membership, and holding it is why an owner and an administrator can do this.
+ * `agent.membership.manage` is the narrow one added for the role that actually
+ * owns the network — 0025 policies it down to memberships that have agent
+ * terms and do not themselves hold elevated authority.
+ *
+ * Written as "either", never as a substitution: an actor who holds `user.edit`
+ * keeps every path they had, and the refusal names the agent-specific grant
+ * because that is the one somebody running the agent screen should be given.
+ */
+function assertAgentMembershipWriteAllowed(actor: Actor): void {
+  if (can(actor, 'user.edit')) return
+  assertCan(actor, 'agent.membership.manage')
+}
+
+/** The same either/or for `membership_roles`, which `role.assign` policies. */
+function assertAgentRoleAssignAllowed(actor: Actor): void {
+  if (can(actor, 'role.assign')) return
+  assertCan(actor, 'agent.membership.manage')
+}
+
+/**
+ * The membership grants the two attaching branches actually need.
+ *
+ * `agent.invite` is the grant to run this operation; it is not the grant the
+ * membership tables are policed by. Which one is missing depends on the
+ * branch, and saying so is the whole value: "you cannot add an agent" is not
+ * an answer anybody can act on, and `Not authorized: agent.membership.manage`
+ * is.
+ *
+ * `memberships_insert` is deliberately still plain `user.invite`: creating a
+ * membership for somebody who has none cannot be narrowed to "agent
+ * memberships only", because there is no agent membership yet to test. A
+ * general manager holds `user.invite` already, so the branch works without
+ * widening anything.
+ *
+ * The role is required on both branches rather than only on the new one. A
+ * membership being reactivated may have had its role removed while the agent
+ * was gone, and re-admitting them into a role-less membership recreates
+ * exactly the outcome this is here to prevent.
+ */
+function assertMembershipWriteAllowed(
+  actor: Actor,
+  branch: 'attach_existing_user' | 'reactivate_membership',
+): void {
+  if (branch === 'attach_existing_user') assertCan(actor, 'user.invite')
+  else assertAgentMembershipWriteAllowed(actor)
+  assertAgentRoleAssignAllowed(actor)
+}
+
 function shekels(agorot: number): string {
   return `₪${(agorot / 100).toLocaleString('he-IL', {
     maximumFractionDigits: 2,
@@ -129,7 +183,8 @@ export function defineAgentOperations(repo: AgentRepository) {
 
     async execute({ input, context, now, tx }) {
       const { actor } = context
-      const access: AgentAccess = AGENT_PRESETS[input.preset ?? 'sales']
+      const preset: AgentPresetName = input.preset ?? 'sales'
+      const access: AgentAccess = AGENT_PRESETS[preset]
 
       const plan = await planAgentInvitation(repo, {
         organizationId: actor.organizationId,
@@ -165,10 +220,23 @@ export function defineAgentOperations(repo: AgentRepository) {
       }
 
       // The two branches that touch an existing person. Neither creates a user.
+      //
+      // Asserted here, before the first write of either branch, because
+      // `agent.invite` is not the grant the *membership* tables are policed
+      // by: `memberships_insert` demands `user.invite`, `memberships_update`
+      // demands `user.edit`, and `membership_roles_insert` demands
+      // `role.assign`. Discovering that inside the adapter produces a
+      // `NotFoundError` about a membership that plainly exists, or — worse on
+      // the role — an agent who was added and can do nothing. Naming the
+      // missing grant costs one line and is the difference between a refusal
+      // somebody can act on and a mystery.
+      assertMembershipWriteAllowed(actor, plan.branch)
+
       const settings = await repo.attachExistingUser(
         {
           organizationId: actor.organizationId,
           userId: plan.userId,
+          preset,
           settings: {
             organizationId: actor.organizationId,
             agentUserId: plan.userId,
@@ -370,6 +438,39 @@ export function defineAgentOperations(repo: AgentRepository) {
         entity: settings,
         version: settings.version,
       }
+    },
+
+    /**
+     * `agent.manage` opens this operation. It does not open the row it has to
+     * write.
+     *
+     * The status lives on the membership — 0019 put it there deliberately and
+     * kept it there — and `memberships_update` is policed by `user.edit`. An
+     * actor holding `agent.manage` without `user.edit` therefore passes the
+     * pipeline, passes the rule, updates the terms, and then matches zero rows
+     * on the membership; the adapter turns that into a `NotFoundError` naming
+     * a membership that plainly exists.
+     *
+     * **A suspension that silently does not take effect is a security
+     * failure** — a suspended agent who is still selling is the exact case the
+     * button exists for — so this refuses before anything is written and names
+     * the grant that is missing.
+     *
+     * The alternative considered here was to make `agent.manage` imply
+     * `user.edit` in the policy, and it was refused for a reason that still
+     * stands: `memberships_update` guards *every* membership in the
+     * organization, so widening it would let whoever manages the agent network
+     * change an administrator's status. That is a privilege escalation, not a
+     * widening.
+     *
+     * What 0025 did instead is name the authority — `agent.membership.manage`
+     * — and give it a policy of its own that reaches a membership only when
+     * agent terms exist for it and it holds no elevated authority of its own.
+     * So a general manager can now suspend an agent, and still cannot touch an
+     * administrator who happens to be one.
+     */
+    rule({ context }) {
+      assertAgentMembershipWriteAllowed(context.actor)
     },
 
     async execute({ input, entity, context, now, tx }) {
@@ -734,16 +835,23 @@ export function defineAgentOperations(repo: AgentRepository) {
         input.commissionId,
       )
       if (!commission) return null
-      return {
-        resource: {
-          organizationId: commission.organizationId,
-          propertyId: commission.propertyId,
-          family: 'finance' as const,
-          assignedToUserId: commission.agentUserId,
-        },
-        entity: commission,
-        version: commission.version,
+
+      // `assignedToUserId` is set only when there is a person to assign it to.
+      // A commission owed to an agency has no named payee, and writing `null`
+      // — or an empty string — into the field the `own_records` scope compares
+      // against would be a value that could match. The key is absent instead,
+      // which reaches only an organization-wide scope. Deny by default, the
+      // same way `inventoryResource` omits an absent property.
+      const resource: Resource = {
+        organizationId: commission.organizationId,
+        propertyId: commission.propertyId,
+        family: 'finance' as const,
       }
+      if (commission.agentUserId !== null) {
+        resource.assignedToUserId = commission.agentUserId
+      }
+
+      return { resource, entity: commission, version: commission.version }
     },
 
     async execute({ entity, context, now, tx }) {

@@ -175,6 +175,8 @@ export const PERMISSIONS = [
   // owes. Those are split finely because they are decided by different people.
   //
   //   · `agent.manage` edits who the seller is.
+  //   · `agent.membership.manage` is the *membership* behind the seller — see
+  //     below, because it is the one that touches a table other people are in.
   //   · `agent.scope.manage` decides which inventory an outsider can see, and
   //     is therefore the blast radius, not an attribute. It is separated for
   //     the same reason `permission.edit` is separated from `user.edit`.
@@ -185,6 +187,34 @@ export const PERMISSIONS = [
   'agent.view',
   'agent.invite',
   'agent.manage',
+  /**
+   * Admitting, suspending, reinstating and removing an agent's **membership**,
+   * and giving that membership one of the four agent preset roles.
+   *
+   * ── Why this is not `user.edit` ───────────────────────────────────────
+   *
+   * The status an owner presses "suspend" on lives on `memberships`, and the
+   * role an agent resolves through lives on `membership_roles`. Both tables
+   * hold every employee in the business, so their policies are written around
+   * `user.edit` and `role.assign` — the organization-wide team authority.
+   *
+   * A general manager owns the agent network and holds neither of those, by
+   * design: whoever runs the sellers must not be able to change an
+   * administrator's membership. Handing them `user.edit` to make the agent
+   * screen work would be exactly that privilege escalation, because
+   * `memberships_update` cannot see that the row it is admitting happens to
+   * belong to an agent.
+   *
+   * So the authority is named for what it actually is, and the policies that
+   * honour it (0025) are narrowed to match the name: they reach a membership
+   * only when an `agent_organization_settings` row exists for it, and never
+   * when that membership itself holds elevated authority — so an owner or an
+   * administrator who is also an agent stays out of reach.
+   *
+   * It is a strict subset of `user.edit` + `role.assign`, never a substitute:
+   * an actor holding those keeps every path they had.
+   */
+  'agent.membership.manage',
   'agent.scope.manage',
   'agency.manage',
   'agent_agreement.view',

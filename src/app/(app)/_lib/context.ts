@@ -25,8 +25,9 @@ import { cache } from 'react'
 import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
 
-import { resolveActor } from '@/lib/actor'
+import { resolveActor, type ActorSource } from '@/lib/actor'
 import type { Actor, MembershipStatus, Scope } from '@/lib/authz/can'
+import { isDemoMode } from '@/lib/demo/flag'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 
 import { SupabaseActorSource } from './actor-source'
@@ -197,6 +198,47 @@ async function propertiesInScope(scope: Scope): Promise<PropertyOption[]> {
   }))
 }
 
+/* ----------------------------------------------------------------- demo -- */
+
+/**
+ * Where the actor comes from.
+ *
+ * In the demo this is `SupabaseActorSource` wrapped, not replaced. The
+ * membership, the roles and the scope are still read from rows and still fed
+ * through `resolveActor`, so the actor a persona produces is a *consequence* of
+ * the dataset rather than a claim about it — which is the only version of this
+ * that demonstrates anything. Only the plan is substituted, because the package
+ * switcher is the second axis of the demo. See `src/lib/demo/session.ts`.
+ */
+async function actorSource(): Promise<ActorSource> {
+  const source = new SupabaseActorSource()
+  if (!isDemoMode()) return source
+
+  const { DemoActorSource, currentDemoPlan } = await import('@/lib/demo')
+  return new DemoActorSource(source, await currentDemoPlan())
+}
+
+/**
+ * A persona the dataset cannot seat is a broken demo, and says so.
+ *
+ * In production, "your membership vanished between listing the workspaces and
+ * resolving the actor" is a race with a sensible answer: treat it as having no
+ * workspace and show the landing page. In the demo it is not a race, it is a
+ * dataset that names a persona in `DEMO_PERSONAS` and forgets to give them a
+ * `memberships` row — and rendering "you have no workspace" for that would
+ * present a wiring mistake as a legitimate product state. The whole switcher
+ * would then look like it worked, which is exactly the false reassurance the
+ * demo exists to avoid.
+ */
+function failMissingDemoMembership(userId: string): never {
+  throw new Error(
+    `The demo persona with user_id ${userId} has no active membership in the ` +
+      `dataset, so there is no actor to resolve and no screen to show. Every ` +
+      `entry in DEMO_PERSONAS needs a matching 'memberships' row in ` +
+      `DEMO_DATASET — see src/lib/demo/types.ts.`,
+  )
+}
+
 /* ------------------------------------------------------------ resolution -- */
 
 /**
@@ -254,10 +296,13 @@ export const shellContext = cache(async (): Promise<ShellContext | null> => {
     store.get(WORKSPACE_COOKIE)?.value,
   )
 
-  if (!workspace) return { status: 'no_workspace', user }
+  if (!workspace) {
+    if (isDemoMode()) failMissingDemoMembership(user.id)
+    return { status: 'no_workspace', user }
+  }
 
   const resolution = await resolveActor(
-    new SupabaseActorSource(),
+    await actorSource(),
     user.id,
     workspace.organizationId,
   )
@@ -265,6 +310,7 @@ export const shellContext = cache(async (): Promise<ShellContext | null> => {
   if (!resolution.ok) {
     switch (resolution.reason) {
       case 'no_membership':
+        if (isDemoMode()) failMissingDemoMembership(user.id)
         // The membership vanished between listing the workspaces and resolving
         // the actor. Treat it as having none rather than as a broken state.
         return { status: 'no_workspace', user }
