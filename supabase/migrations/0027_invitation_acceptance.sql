@@ -332,7 +332,117 @@ comment on function public.accept_invitation(text) is
 
 
 -- ============================================================================
--- 2 · Who may call it
+-- 2 · Reading an invitation without consuming it
+-- ============================================================================
+-- Redeeming is a write, and a write must not happen because a page was
+-- rendered. A link in an email is opened by a mail client's link checker, by a
+-- corporate scanner, by a browser prefetching what it thinks you are about to
+-- click, and by the person pressing back — and each of those would burn a
+-- single-use token and leave a real invitee holding a dead link.
+--
+-- So the screen reads first and writes only when somebody presses a button.
+-- Reading is its own problem, though, for the reason 0004 gave: the invitee is
+-- a stranger to the organization, `invitations_select` demands
+-- `has_permission(organization_id, 'user.view')`, and they hold nothing. This
+-- is the read half, and it is deliberately narrow.
+--
+-- What it discloses, and to whom. Anybody holding the token learns the
+-- organization's name, the role's name, when the link expires and whether it
+-- still works. That is what they were sent an email about. It does NOT return
+-- the invitation id, the scope, the inviter, the personal message or the
+-- invitee's address in full — the address comes back with its local part
+-- masked, which is enough for "sign in as the right person" and not enough to
+-- harvest.
+
+create or replace function public.invitation_preview(p_token_hash text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $
+declare
+  v_user_id   uuid := (select auth.uid());
+  v_email     text;
+  v_inv       public.invitations%rowtype;
+  v_org_name  text;
+  v_role_name text;
+  v_status    text;
+  v_masked    text;
+  v_member    public.membership_status;
+begin
+  if v_user_id is null then
+    raise exception 'not_authenticated'
+      using hint = 'התחבר או הירשם כדי לראות את ההזמנה.', errcode = '28000';
+  end if;
+
+  select * into v_inv
+  from public.invitations
+  where token_hash = p_token_hash;
+
+  if not found then
+    raise exception 'invitation_not_found'
+      using hint = 'ההזמנה לא נמצאה. ייתכן שהקישור שונה, או שההזמנה בוטלה.',
+            errcode = 'P0002';
+  end if;
+
+  select email into v_email from auth.users where id = v_user_id;
+
+  select name into v_org_name
+  from public.organizations where id = v_inv.organization_id;
+
+  select name into v_role_name
+  from public.roles where id = v_inv.role_id;
+
+  -- `a***@example.com`. Enough to recognise an address you own; not enough to
+  -- learn one you do not.
+  v_masked := case
+    when position('@' in v_inv.email::text) > 1
+      then left(v_inv.email::text, 1) || '***' ||
+           substring(v_inv.email::text from position('@' in v_inv.email::text))
+    else '***'
+  end;
+
+  select m.status into v_member
+  from public.memberships m
+  where m.user_id = v_user_id and m.organization_id = v_inv.organization_id;
+
+  -- The order matters and mirrors `accept_invitation` exactly. A preview that
+  -- says "ready" where acceptance would refuse is worse than no preview: it
+  -- renders a button that cannot work.
+  v_status := case
+    when v_inv.accepted_at is not null and v_inv.accepted_by = v_user_id
+      then 'already_accepted_by_you'
+    when v_inv.accepted_at is not null then 'accepted'
+    when v_inv.revoked_at is not null then 'revoked'
+    when v_inv.expires_at <= now() then 'expired'
+    when v_email is null or lower(v_email) <> lower(v_inv.email::text)
+      then 'email_mismatch'
+    when v_org_name is null then 'organization_missing'
+    when v_role_name is null then 'role_missing'
+    when v_member = 'active'::public.membership_status then 'already_member'
+    else 'ready'
+  end;
+
+  return jsonb_build_object(
+    'status',           v_status,
+    'organizationName', v_org_name,
+    'roleName',         v_role_name,
+    'invitedEmail',     v_masked,
+    'expiresAt',        v_inv.expires_at,
+    -- The caller's own address, so the screen can say "you are signed in as"
+    -- without a second round trip. It is theirs; it is not a disclosure.
+    'signedInEmail',    v_email
+  );
+end;
+$;
+
+comment on function public.invitation_preview(text) is
+  'Reads an invitation by token hash without consuming it, so the acceptance screen can render before anything is written. Returns the organization name, the role name, the expiry and one status string mirroring accept_invitation''s refusal order; the invited address comes back masked. SECURITY DEFINER for the same reason accept_invitation is — the invitee cannot satisfy invitations_select.';
+
+
+-- ============================================================================
+-- 3 · Who may call them
 -- ============================================================================
 -- 0014's rule, applied to a function that is genuinely an API surface rather
 -- than accidentally one: Supabase grants EXECUTE on a new function in `public`
@@ -347,9 +457,17 @@ revoke all on function public.accept_invitation(text)
 
 grant execute on function public.accept_invitation(text) to authenticated;
 
+-- The same, for the read. `anon` matters more here, not less: a function that
+-- discloses an organization's name to anybody holding a token must at least
+-- require that somebody is signed in to hold it.
+revoke all on function public.invitation_preview(text)
+  from public, anon, service_role;
+
+grant execute on function public.invitation_preview(text) to authenticated;
+
 
 -- ============================================================================
--- 3 · Rehearsal
+-- 4 · Rehearsal
 -- ============================================================================
 -- The same shape 0026 used: assert the things this migration assumed, so a
 -- schema that has drifted fails here rather than at the moment somebody clicks
@@ -399,14 +517,27 @@ begin
 
   -- `anon` holding EXECUTE would mean an unauthenticated caller can reach the
   -- one function that writes a membership.
-  if exists (
-    select 1
-    from pg_proc p
-    join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname = 'accept_invitation'
-      and has_function_privilege('anon', p.oid, 'EXECUTE')
-  ) then
-    raise exception 'anon still holds EXECUTE on accept_invitation';
+  select string_agg(p.proname, ', ') into missing
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('accept_invitation', 'invitation_preview')
+    and has_function_privilege('anon', p.oid, 'EXECUTE');
+
+  if missing is not null then
+    raise exception 'anon still holds EXECUTE on: %', missing;
+  end if;
+
+  -- And both exist at all. A rename in one half and not the other is how the
+  -- screen renders a preview and then cannot redeem what it previewed.
+  select string_agg(name, ', ') into missing
+  from (values ('accept_invitation'), ('invitation_preview')) as f(name)
+  where not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = f.name
+  );
+
+  if missing is not null then
+    raise exception '0027 functions missing: %', missing;
   end if;
 end $$;

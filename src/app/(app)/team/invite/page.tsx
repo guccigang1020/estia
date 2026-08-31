@@ -94,6 +94,9 @@ export default async function InviteMemberPage() {
         const profile = role.grantsKnown ? knownRoleProfile(role.code) : null
 
         return {
+          // The row's id, which is what `invitations.role_id` stores. The code
+          // is a label a build knows; the row is the grant.
+          id: role.id,
           code: role.code,
           name: role.name,
           description: role.description,

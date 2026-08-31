@@ -18,8 +18,12 @@
 export {
   ACCEPTANCE_REFUSAL_CODES,
   InvitationRefusedError,
+  PREVIEW_MESSAGE,
   acceptInvitation,
+  previewInvitation,
   type AcceptedInvitation,
+  type InvitationPreview,
+  type InvitationPreviewStatus,
 } from './acceptance'
 
 export {

@@ -79,6 +79,11 @@ src/lib/invitations/acceptance.test.ts        coordinator          write
 # the module people read first is worse than no comment.
 src/lib/invitations/index.ts                  coordinator          write
 src/app/invite/**                             coordinator          write
+# The creating half, claimed for the same reason: the screen that mints a
+# token and the screen that redeems one are one conversation, and the second
+# is worthless without the first. `domain-writes` is not running.
+src/app/(app)/team/invite/**                  coordinator          write
+src/components/management/invite-member-form.tsx  coordinator      write
 
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
@@ -103,7 +108,8 @@ src/lib/invitations/**                        domain-writes        write
 src/lib/service/**                            domain-writes        write
 src/app/(app)/guests/_lib/actions.ts          domain-writes        write
 src/app/(app)/properties/**                   domain-writes        write
-src/app/(app)/team/invite/**                  domain-writes        write
+# team/invite moved to coordinator for this wave — see the invitation block
+# above. Both halves of an invitation are one act and now have one writer.
 
 # ── The one block with no domain at all, not merely no screen. ─────────────
 src/app/(app)/website/**                      ai-website           write

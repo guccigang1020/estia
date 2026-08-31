@@ -20,34 +20,46 @@
  * are the ones `SENSITIVE_ACTIONS` says need a second factor, a reason or an
  * approval, and an owner should see them before rather than after.
  *
- * ── Why the submit is disabled ────────────────────────────────────────────
+ * ── The submit was disabled, and now is not ───────────────────────────────
  *
- * There is no operation behind it, and this component does not pretend there
- * is. `public.invitations` requires a `token_hash` and an expiry — an
- * invitation is a capability URL, so creating one means minting a token,
- * hashing it, and delivering it — and no module in `src/lib` defines that
- * operation. Writing the row from a server action would skip the whole
- * `defineOperation` pipeline: authorization, validation, the transaction, the
- * audit event and idempotency, in that order. A screen that created a
- * membership with no audit row would contradict the audit screen shipped
- * beside it.
+ * It shipped switched off with the reason on screen: `public.invitations`
+ * needs a minted, hashed token and an expiry, and nothing in `src/lib` minted
+ * one. Both halves exist now — `defineInvitationOperations` creates the row
+ * through the full pipeline, and `/invite/[token]` with migration 0027 lets
+ * somebody redeem it. Enabling the button before the second half existed would
+ * have made every invitation a dead letter.
  *
- * The honest render is a form that is complete, that says exactly what it
- * would create, and that states what is missing. See the report accompanying
- * this work.
+ * ── The link is shown once, here, and sent by a person ────────────────────
+ *
+ * There is no mail transport in this codebase. The token leaves the operation
+ * sideways through the delivery port — never in the result, because a result
+ * is persisted into `idempotency_keys` and a token there is a credential in
+ * plain text — and this screen displays it exactly once for the inviter to
+ * copy. That is a real product pattern, not a placeholder, and it is why the
+ * panel says plainly that closing the page without copying means cancelling
+ * and starting again.
  */
 
 import { useState } from 'react'
 
+import {
+  createInvitationAction,
+  type CreatedInvitationResult,
+} from '@/app/(app)/team/invite/_lib/actions'
+import { ActionError } from '@/components/booking/action-error'
+import { useAsyncAction } from '@/components/ui/async-action'
 import { Field } from '@/components/ui/field'
 import { Select, TextInput, Textarea } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import type { SafeErrorBody } from '@/lib/errors'
 
 import { Notice } from './notice'
 
 /** One assignable role, with the consequence of choosing it. */
 export type InvitableRole = {
+  /** `public.roles.id`, which is what the invitation stores. */
+  id: string
   code: string
   name: string
   description: string | null
@@ -85,10 +97,77 @@ export function InviteMemberForm({
   const [scopeKind, setScopeKind] =
     useState<(typeof SCOPE_KINDS)[number]['value']>('all_organization')
 
+  const send = useAsyncAction<void>()
+  const [failure, setFailure] = useState<SafeErrorBody | null>(null)
+  const [created, setCreated] = useState<CreatedInvitationResult | null>(null)
+
+  /**
+   * One key for this form, kept across retries.
+   *
+   * The retry after a dropped connection is the case that matters: the person
+   * cannot know whether the first attempt reached the database, and pressing
+   * again must not create a second invitation to the same address — which
+   * `invitations_one_live_per_email_idx` would refuse anyway, with a
+   * constraint name instead of a sentence.
+   */
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+
   const role = roles.find((candidate) => candidate.code === roleCode) ?? null
 
   return (
-    <form className="flex flex-col gap-6">
+    <form
+      className="flex flex-col gap-6"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (send.pending || created) return
+
+        const data = new FormData(event.currentTarget)
+        const text = (field: string) => String(data.get(field) ?? '')
+        const many = (field: string) =>
+          data.getAll(field).map((value) => String(value))
+
+        if (!role) {
+          setFailure({
+            code: 'no_role_selected',
+            message: 'לא נבחר תפקיד. בחר תפקיד מהרשימה.',
+            dataMessage: 'ההזמנה לא נוצרה.',
+            retryMessage: 'בחר תפקיד ונסה שוב.',
+            dataOutcome: 'not_saved',
+            retryable: false,
+            // Its own id even though nothing reached the server: a person
+            // reading a support ticket should not find one failure without
+            // one.
+            correlationId: crypto.randomUUID(),
+          })
+          return
+        }
+
+        setFailure(null)
+        void send.run(async () => {
+          const result = await createInvitationAction({
+            email: text('email'),
+            roleId: role.id,
+            scopeKind,
+            // Only the list the chosen scope actually uses is sent. The
+            // database's `invitations_scope_shape` refuses a row that carries
+            // ids the kind does not want, and sending them anyway would make
+            // a stale choice from a previous selection part of the request.
+            propertyIds: scopeKind === 'properties' ? many('propertyIds') : [],
+            unitIds: [],
+            teamIds: scopeKind === 'team' ? many('teamIds') : [],
+            message: text('message'),
+            idempotencyKey,
+          })
+
+          if (!result.ok) {
+            setFailure(result.error)
+            return
+          }
+
+          setCreated(result.data)
+        })
+      }}
+    >
       <div className="grid gap-5 sm:grid-cols-2">
         <Field
           label="כתובת דוא״ל"
@@ -186,37 +265,88 @@ export function InviteMemberForm({
 
       {role && <RolePreview role={role} scopeKind={scopeKind} />}
 
-      <Notice title="הפעולה הזאת אינה קיימת עדיין במוצר" tone="strong">
-        הטופס שלם, והכתיבה חסרה. הזמנה היא כתובת־יכולת:{' '}
-        <code dir="ltr">public.invitations</code> דורשת{' '}
-        <code dir="ltr">token_hash</code> ותאריך תפוגה, כלומר יצירת אסימון,
-        גיבובו ומשלוחו — ואין ב-<code dir="ltr">src/lib</code> מודול שמגדיר את
-        הפעולה הזאת. כתיבת השורה ישירות מכאן הייתה עוקפת את כל מה שעובר דרך{' '}
-        <code dir="ltr">defineOperation</code>: הרשאה, ולידציה, טרנזקציה, רישום
-        ביומן הביקורת ומניעת כפילות. חברות שנוצרת בלי שורה ביומן סותרת את מסך
-        יומן הביקורת שנבנה לצידה, ולכן הכפתור מושבת ולא מסתיר את החוסר.
-      </Notice>
+      {created ? (
+        <InvitationHandoffPanel created={created} />
+      ) : (
+        <Notice title="הקישור מוצג פעם אחת, ואתה ששולח אותו" tone="strong">
+          אין במערכת שירות דואר, ולכן ההזמנה לא נשלחת מכאן. אחרי היצירה יוצג כאן
+          קישור אישי — העתק אותו ושלח לאדם בעצמך. הקישור אינו נשמר בשום מקום:
+          במסד הנתונים יש רק גיבוב שלו, וזאת הסיבה שדליפה של גיבוי לא מחלקת גישה
+          לארגון. אם תסגור את הדף בלי להעתיק, בטל את ההזמנה וצור חדשה.
+        </Notice>
+      )}
+
+      {failure ? <ActionError error={failure} /> : null}
 
       <div className="flex items-center gap-3">
-        <Button
-          type="submit"
-          disabled
-          aria-describedby="invite-disabled-reason"
-        >
-          שליחת ההזמנה
+        <Button type="submit" disabled={send.pending || created !== null}>
+          {send.pending ? 'יוצר…' : 'יצירת ההזמנה'}
         </Button>
-        <p
-          id="invite-disabled-reason"
-          className="text-sm text-muted-foreground"
-        >
-          מושבת עד שתיווצר פעולת הזמנה בשכבת השירות.
-        </p>
+        <span aria-live="polite" className="sr-only">
+          {send.pending ? 'יוצר את ההזמנה' : ''}
+        </span>
       </div>
     </form>
   )
 }
 
 /* ------------------------------------------------------------- fragments -- */
+
+/**
+ * The link, once.
+ *
+ * `readOnly` and selected on focus rather than a copy button alone, because a
+ * clipboard write can fail silently in a browser that has not granted the
+ * permission and the person would send nothing at all. The value is also the
+ * one thing on this screen that must never be logged, so there is no
+ * `onChange` and nothing reads it back.
+ *
+ * A replay returns no link and says so. Minting a replacement would leave two
+ * live credentials for one invitation.
+ */
+function InvitationHandoffPanel({
+  created,
+}: {
+  created: CreatedInvitationResult
+}) {
+  const expires = new Intl.DateTimeFormat('he-IL', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    timeZone: 'Asia/Jerusalem',
+  }).format(new Date(created.expiresAt))
+
+  if (!created.link) {
+    return (
+      <Notice title="ההזמנה כבר קיימת" tone="strong">
+        השליחה הזאת חזרה על שליחה קודמת, ולכן לא נוצרה הזמנה שנייה ואין קישור
+        חדש. הקישור המקורי הוא זה שתקף. אם אבד — בטל את ההזמנה הקיימת וצור אחת
+        חדשה.
+      </Notice>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-primary bg-surface-raised p-4">
+      <p className="text-sm font-semibold text-foreground">
+        ההזמנה נוצרה. שלח את הקישור ל־
+        <span dir="ltr">{created.email}</span>
+      </p>
+
+      <input
+        readOnly
+        dir="ltr"
+        value={created.link}
+        onFocus={(event) => event.currentTarget.select()}
+        aria-label="קישור ההזמנה"
+        className="w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-foreground"
+      />
+
+      <p className="text-xs text-muted-foreground">
+        בתוקף עד {expires}. תקף לשימוש אחד בלבד, ורק מהכתובת שאליה נועד.
+      </p>
+    </div>
+  )
+}
 
 /**
  * What the chosen role will actually grant, before it is granted.

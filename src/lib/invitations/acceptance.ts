@@ -241,3 +241,160 @@ export async function acceptInvitation(
 
   return parse(data)
 }
+
+/* ------------------------------------------------------------- the read -- */
+
+/**
+ * What an invitation looks like before anybody has redeemed it.
+ *
+ * `ready` is the only status that offers a button. Every other one describes a
+ * state the acceptance function would refuse, in the same order it checks
+ * them — deliberately, because a preview that says "ready" where acceptance
+ * refuses renders a control that cannot work, which is worse than no preview.
+ */
+export type InvitationPreviewStatus =
+  | 'ready'
+  | 'already_accepted_by_you'
+  | 'accepted'
+  | 'revoked'
+  | 'expired'
+  | 'email_mismatch'
+  | 'already_member'
+  | 'organization_missing'
+  | 'role_missing'
+
+export type InvitationPreview = {
+  status: InvitationPreviewStatus
+  organizationName: string | null
+  roleName: string | null
+  /** Masked — `a***@example.com`. Enough to recognise, not enough to harvest. */
+  invitedEmail: string
+  /** The caller's own address. Theirs, so not a disclosure. */
+  signedInEmail: string | null
+  expiresAt: string | null
+}
+
+const PREVIEW_STATUSES: readonly InvitationPreviewStatus[] = [
+  'ready',
+  'already_accepted_by_you',
+  'accepted',
+  'revoked',
+  'expired',
+  'email_mismatch',
+  'already_member',
+  'organization_missing',
+  'role_missing',
+]
+
+/**
+ * What the screen says about each state, and what it offers next.
+ *
+ * Kept here beside `REFUSALS` rather than in the page, so the two halves of
+ * one conversation are read together. A page that worded these itself would
+ * drift from the refusal the button then produces.
+ */
+export const PREVIEW_MESSAGE: Readonly<
+  Record<InvitationPreviewStatus, { title: string; body: string }>
+> = {
+  ready: {
+    title: 'הוזמנת להצטרף',
+    body: 'ההזמנה תקפה. אישור יצרף אותך לארגון בתפקיד שנקבע עבורך.',
+  },
+  already_accepted_by_you: {
+    title: 'כבר הצטרפת',
+    body: 'קיבלת את ההזמנה הזאת בעבר, והחברות שלך פעילה. אפשר להמשיך למערכת.',
+  },
+  accepted: {
+    title: 'ההזמנה כבר נוצלה',
+    body: 'מישהו כבר השתמש בקישור הזה. כל הזמנה תקפה לפעם אחת — בקש מהמזמין הזמנה חדשה.',
+  },
+  revoked: {
+    title: 'ההזמנה בוטלה',
+    body: 'מי ששלח את ההזמנה ביטל אותה. פנה אליו כדי לקבל הזמנה חדשה.',
+  },
+  expired: {
+    title: 'תוקף ההזמנה פג',
+    body: 'הקישור הזה כבר אינו פעיל. בקש מהמזמין לשלוח קישור חדש.',
+  },
+  email_mismatch: {
+    title: 'ההזמנה נשלחה לכתובת אחרת',
+    body: 'אתה מחובר בכתובת שאינה זו שאליה נשלחה ההזמנה. התנתק, התחבר עם הכתובת הנכונה, ופתח את הקישור שוב.',
+  },
+  already_member: {
+    title: 'אתה כבר חבר בארגון',
+    body: 'החברות שלך בארגון הזה פעילה. לשינוי תפקיד או הרשאות פנה למנהל הארגון — הזמנה אינה הדרך לכך.',
+  },
+  organization_missing: {
+    title: 'הארגון אינו קיים עוד',
+    body: 'הארגון שאליו הוזמנת נסגר או נמחק. אין למה להצטרף.',
+  },
+  role_missing: {
+    title: 'התפקיד שבהזמנה בוטל',
+    body: 'התפקיד שנקבע עבורך כבר אינו קיים בארגון. בקש מהמזמין הזמנה חדשה.',
+  },
+}
+
+function parsePreview(value: unknown): InvitationPreview {
+  const row =
+    typeof value === 'object' && value !== null
+      ? (value as Record<string, unknown>)
+      : {}
+
+  const text = (key: string): string | null =>
+    typeof row[key] === 'string' && (row[key] as string).length > 0
+      ? (row[key] as string)
+      : null
+
+  const raw = text('status')
+  // An unrecognised status is treated as "this link does not work" rather than
+  // as `ready`. Failing towards the button is how a screen offers an action
+  // the database is about to refuse.
+  const status = PREVIEW_STATUSES.includes(raw as InvitationPreviewStatus)
+    ? (raw as InvitationPreviewStatus)
+    : 'accepted'
+
+  return {
+    status,
+    organizationName: text('organizationName'),
+    roleName: text('roleName'),
+    invitedEmail: text('invitedEmail') ?? '***',
+    signedInEmail: text('signedInEmail'),
+    expiresAt: text('expiresAt'),
+  }
+}
+
+/**
+ * Read an invitation without consuming it.
+ *
+ * This is what makes the screen safe to render on a GET. Redeeming is a write,
+ * and a mail client's link checker, a corporate scanner or a browser prefetch
+ * would each burn a single-use token by merely looking at it. So the page
+ * reads, and the button writes.
+ *
+ * Throws the same refusals `acceptInvitation` does for a token that does not
+ * resolve at all — there is nothing to render for a link that names no
+ * invitation.
+ */
+export async function previewInvitation(
+  db: Db,
+  token: string,
+): Promise<InvitationPreview> {
+  const trimmed = token.trim()
+  if (trimmed.length === 0) {
+    throw new NotFoundError('invitation', 'missing-token', {
+      userMessage: REFUSALS.invitation_not_found.userMessage,
+    })
+  }
+
+  const { data, error } = await db.rpc('invitation_preview', {
+    p_token_hash: await hashInvitationToken(trimmed),
+  })
+
+  if (error) {
+    const refusal = refusalFrom(error as PostgrestErrorish)
+    if (refusal) throw refusal
+    throw error
+  }
+
+  return parsePreview(data)
+}
