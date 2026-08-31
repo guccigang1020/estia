@@ -93,6 +93,7 @@
  * cannot be told apart here. Adding `version` to the port would close it.
  */
 
+import { localDate } from '../booking/dates'
 import { PRICE_LINE_KINDS, type PriceLine } from '../booking/types'
 import {
   APPROVAL_STATUSES,
@@ -102,8 +103,30 @@ import {
   PAYMENT_STATUSES,
 } from '../contracts/states'
 import { ConflictError } from '../errors'
-import type { FinanceRepository } from '../finance/repository'
+import type {
+  CommissionListQuery,
+  CommissionListRow,
+  CommissionPayee,
+  ExpenseAllocationRow,
+  ExpenseRuleDraft,
+  ExpenseRuleListQuery,
+  ExpenseRuleListRow,
+  FinanceRepository,
+  InvoiceListQuery,
+  InvoiceListRow,
+  InvoicePaymentLinkRow,
+  PaymentListQuery,
+  PaymentListRow,
+} from '../finance/repository'
+import { sumAgorot } from '../finance/money'
 import type { FinanceSnapshot } from '../finance/snapshot'
+import {
+  ALLOCATION_METHODS,
+  EXPENSE_FREQUENCIES,
+  EXPENSE_KINDS,
+  EXPENSE_SCOPE_KINDS,
+  type VariableFormula,
+} from '../finance/types'
 import {
   COLLECTION_CHANNELS,
   INVOICE_KINDS,
@@ -860,7 +883,521 @@ export class SupabaseFinanceRepository implements FinanceRepository {
     return toCommission(rows[0] as Row)
   }
 
+  // ── Lists ───────────────────────────────────────────────────────────────
+  //
+  // The organization-wide reads, moved here from `finance/_lib/queries.ts`
+  // unchanged: the same columns, the same filters, the same ordering, the same
+  // page ceiling and the same three joins. What stayed above is what was never
+  // this layer's: `can()` per row and `redact()` per field, which is why the
+  // flags on each query exist rather than an `Actor`.
+  //
+  // These are deliberately narrower than the record readers above them. A
+  // `Payment` costs a second query against `payment_provider_events` for
+  // `appliedEventIds`, per page, and a list prints none of it.
+
+  /**
+   * The payments in this organization, newest first.
+   *
+   * Ordered by `created_at` and not by `paid_at`: a pending or failed payment
+   * has no `paid_at`, and ordering by it would sort exactly the rows somebody
+   * is looking for to the bottom of the list.
+   */
+  async listPayments(
+    query: PaymentListQuery,
+  ): Promise<readonly PaymentListRow[]> {
+    const rows = await this.listRows(
+      'payments',
+      PAYMENT_LIST_COLUMNS,
+      query.organizationId,
+      query.propertyId,
+      query.status,
+      query.limit,
+    )
+
+    const references = query.withBookingReferences
+      ? await this.bookingReferences(
+          query.organizationId,
+          rows.map((row) => asString(row, 'booking_id')),
+        )
+      : new Map<string, string>()
+
+    return rows.map((row) => {
+      const bookingId = asString(row, 'booking_id')
+      return {
+        id: asString(row, 'id'),
+        bookingId,
+        propertyId: asString(row, 'property_id'),
+        // The booking's own reference where it is readable, and otherwise the
+        // one the payment recorded when it was taken. Both are real; neither is
+        // invented, and null is a real answer.
+        bookingReference:
+          references.get(bookingId) ?? asStringOrNull(row, 'payer_reference'),
+        status: asEnum(row, 'status', PAYMENT_STATUSES),
+        method: asEnum(row, 'method', PAYMENT_METHODS),
+        purpose: asEnum(row, 'purpose', PAYMENT_PURPOSES),
+        channel: asEnum(row, 'channel', COLLECTION_CHANNELS),
+        requiresAttention: asEnumOrNull(
+          row,
+          'requires_attention',
+          PAYMENT_ATTENTIONS,
+        ),
+        unknownSince: propertyDate(row, 'unknown_since'),
+        recordedOn: requiredPropertyDate(row, 'created_at'),
+        paidOn: propertyDate(row, 'paid_at'),
+        payerName: asStringOrNull(row, 'payer_name'),
+        amountAgorot: asAgorot(row, 'amount_agorot'),
+        capturedAgorot: asAgorot(row, 'captured_agorot'),
+        refundedAgorot: asAgorot(row, 'amount_refunded_agorot'),
+      }
+    })
+  }
+
+  async listInvoices(
+    query: InvoiceListQuery,
+  ): Promise<readonly InvoiceListRow[]> {
+    const rows = await this.listRows(
+      'invoices',
+      INVOICE_LIST_COLUMNS,
+      query.organizationId,
+      query.propertyId,
+      query.status,
+      query.limit,
+    )
+
+    const linked = query.withLinkedPayments
+      ? await this.linkedPayments(
+          query.organizationId,
+          rows.flatMap(toPaymentIds),
+          query.withLinkedAmounts,
+        )
+      : null
+
+    return rows.map((row) => {
+      const ids = toPaymentIds(row)
+      const lines = toLines(row, 'invoice_lines')
+
+      return {
+        id: asString(row, 'id'),
+        bookingId: asString(row, 'booking_id'),
+        propertyId: asString(row, 'property_id'),
+        kind: asEnum(row, 'kind', INVOICE_KINDS),
+        status: asEnum(row, 'status', INVOICE_STATUSES),
+        series: asString(row, 'series'),
+        year: asNumber(row, 'year'),
+        number: asNumberOrNull(row, 'number'),
+        displayNumber: asStringOrNull(row, 'display_number'),
+        issuedOn: propertyDate(row, 'issued_at'),
+        cancelledOn: propertyDate(row, 'cancelled_at'),
+        cancellationReason: asStringOrNull(row, 'cancellation_reason'),
+        recordedOn: requiredPropertyDate(row, 'created_at'),
+        taxRateBps: asNumberOrNull(row, 'tax_rate_bps'),
+        touristVatExempt: asBoolean(row, 'tourist_vat_exempt'),
+        lines,
+        // The domain's own sum, computed once here so that no component adds
+        // anything up. Carried *beside* the stored total rather than instead of
+        // it: an issued invoice's total is frozen, and rendering the sum of the
+        // lines in its place would be quietly correcting a legal document.
+        linesTotalAgorot: sumAgorot(lines.map((line) => line.amount)),
+        subtotalAgorot: asAgorot(row, 'subtotal_agorot'),
+        taxAgorot: asAgorot(row, 'tax_agorot'),
+        totalAgorot: asAgorot(row, 'total_agorot'),
+        customerName: asString(row, 'customer_name'),
+        customerTaxId: asStringOrNull(row, 'customer_tax_id'),
+        linkedPaymentCount: ids.length,
+        payments:
+          linked === null
+            ? null
+            : ids
+                .map((id) => linked.get(id))
+                .filter(
+                  (entry): entry is InvoicePaymentLinkRow =>
+                    entry !== undefined,
+                ),
+      }
+    })
+  }
+
+  async listCommissions(
+    query: CommissionListQuery,
+  ): Promise<readonly CommissionListRow[]> {
+    const rows = await this.listRows(
+      'commissions',
+      COMMISSION_LIST_COLUMNS,
+      query.organizationId,
+      query.propertyId,
+      query.status,
+      query.limit,
+    )
+
+    const [references, people, agencies] = await Promise.all([
+      query.withBookingReferences
+        ? this.bookingReferences(
+            query.organizationId,
+            rows.map((row) => asString(row, 'booking_id')),
+          )
+        : new Map<string, string>(),
+      this.profileNames(namesNeeded(rows, 'agent_user_id')),
+      this.agencyNames(namesNeeded(rows, 'agency_id')),
+    ])
+
+    return rows.map((row) => {
+      const bookingId = asString(row, 'booking_id')
+      return {
+        id: asString(row, 'id'),
+        bookingId,
+        propertyId: asString(row, 'property_id'),
+        bookingReference: references.get(bookingId) ?? null,
+        status: asEnum(row, 'status', COMMISSION_STATUSES),
+        payee: toPayee(row, people, agencies),
+        amountAgorot: asAgorot(row, 'amount_agorot'),
+        rateBps: asNumberOrNull(row, 'rate_bps'),
+        basis: asEnum(row, 'base', COMMISSION_BASES),
+        rule: toListedCommissionRule(row, query.withRuleLabel),
+        basisAgorot: asAgorot(row, 'basis_agorot'),
+        explanation: asStringOrNull(row, 'explanation'),
+        becameEligibleOn: propertyDate(row, 'eligible_at'),
+        approvedOn: propertyDate(row, 'approved_at'),
+        paidOn: propertyDate(row, 'paid_at'),
+        cancellationReason: asStringOrNull(row, 'cancellation_reason'),
+        clawbackRequired: asBoolean(row, 'clawback_required'),
+        recordedOn: requiredPropertyDate(row, 'created_at'),
+      }
+    })
+  }
+
+  async countPayments(
+    organizationId: string,
+    propertyId: string | null,
+  ): Promise<number> {
+    return this.countRows('payments', organizationId, propertyId)
+  }
+
+  async countInvoices(
+    organizationId: string,
+    propertyId: string | null,
+  ): Promise<number> {
+    return this.countRows('invoices', organizationId, propertyId)
+  }
+
+  async countCommissions(
+    organizationId: string,
+    propertyId: string | null,
+  ): Promise<number> {
+    return this.countRows('commissions', organizationId, propertyId)
+  }
+
+  // ── Expenses ────────────────────────────────────────────────────────────
+
+  /**
+   * The live expense rules.
+   *
+   * `deleted_at is null`, because `expense_rules` carries a soft delete and a
+   * retired rule is retired — unlike a cancelled invoice, which is a document
+   * that still exists.
+   *
+   * The property filter is `scope_property_id = ? or scope_property_id is
+   * null` expressed as two reads rather than one `.or()`: PostgREST's `or`
+   * syntax is not in this codebase's supported surface, and a rule that applies
+   * to the whole organization applies to the selected property too. Dropping
+   * the organization-wide rules would tell somebody looking at one property
+   * that the business has no cleaning cost.
+   */
+  async listExpenseRules(
+    query: ExpenseRuleListQuery,
+  ): Promise<readonly ExpenseRuleListRow[]> {
+    const scoped =
+      query.propertyId === null
+        ? [await this.expenseRulePage(query, null, false)]
+        : await Promise.all([
+            this.expenseRulePage(query, query.propertyId, false),
+            this.expenseRulePage(query, null, true),
+          ])
+
+    const seen = new Set<string>()
+    const rules: ExpenseRuleListRow[] = []
+
+    for (const page of scoped) {
+      for (const row of page) {
+        const id = asString(row, 'id')
+        if (seen.has(id)) continue
+        seen.add(id)
+        rules.push(toExpenseRule(row))
+      }
+    }
+
+    // Sorted after the merge, so the two reads produce one list in one order.
+    return rules
+      .sort((a, b) =>
+        a.effectiveFrom === b.effectiveFrom
+          ? a.label.localeCompare(b.label, 'he')
+          : a.effectiveFrom < b.effectiveFrom
+            ? 1
+            : -1,
+      )
+      .slice(0, query.limit)
+  }
+
+  async countExpenseRules(organizationId: string): Promise<number> {
+    const { count, error } = await this.db
+      .from('expense_rules')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null)
+
+    if (error) throw error
+    return count ?? 0
+  }
+
+  async listExpenseAllocations(
+    organizationId: string,
+    ruleIds: readonly string[],
+  ): Promise<readonly ExpenseAllocationRow[]> {
+    const unique = [...new Set(ruleIds)]
+    if (unique.length === 0) return []
+
+    const { data, error } = await this.db
+      .from('expense_allocations')
+      .select(EXPENSE_ALLOCATION_COLUMNS)
+      .eq('organization_id', organizationId)
+      .in('rule_id', unique)
+      .order('allocated_at', { ascending: false })
+
+    if (error) throw error
+    return toRows(data).map(toExpenseAllocation)
+  }
+
+  /**
+   * Write a rule.
+   *
+   * `version` is absent: `tg_touch_row` owns it, exactly as it owns a payment's.
+   * The scope columns are written from the union rather than all four being
+   * sent, because `expense_rules_scope_target` refuses a scope that names
+   * something at a level it does not claim.
+   */
+  async insertExpenseRule(
+    draft: ExpenseRuleDraft,
+    tx?: TransactionHandle,
+  ): Promise<ExpenseRuleListRow> {
+    const db = clientFor(tx, this.db)
+
+    const { data, error } = await db
+      .from('expense_rules')
+      .insert({
+        id: draft.id,
+        organization_id: draft.organizationId,
+        label: draft.label,
+        category: draft.category,
+        kind: draft.kind,
+        frequency: draft.frequency,
+        amount_agorot: draft.amountAgorot,
+        formula: draft.formula,
+        allocation: draft.allocation,
+        scope_kind: draft.scope.kind,
+        scope_property_id: draft.scope.propertyId ?? null,
+        scope_unit_id: draft.scope.unitId ?? null,
+        scope_booking_id: draft.scope.bookingId ?? null,
+        effective_from: draft.effectiveFrom,
+        effective_to: draft.effectiveTo,
+        approval_required: draft.approvalRequired,
+        created_by: draft.createdByUserId,
+      })
+      .select(EXPENSE_RULE_COLUMNS)
+      .single()
+
+    if (error) throw error
+    recordWrite(tx, `expense_rules(${draft.id})`)
+    return toExpenseRule(toRow(data))
+  }
+
   // ── Internals ───────────────────────────────────────────────────────────
+
+  /** One page of a finance list, with the filters every one of the three shares. */
+  private async listRows(
+    table: 'payments' | 'invoices' | 'commissions',
+    columns: string,
+    organizationId: string,
+    propertyId: string | null,
+    status: string | null,
+    limit: number,
+  ): Promise<Row[]> {
+    let query = this.db
+      .from(table)
+      .select(columns)
+      .eq('organization_id', organizationId)
+
+    if (propertyId !== null) query = query.eq('property_id', propertyId)
+    if (status !== null) query = query.eq('status', status)
+
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return toRows(data)
+  }
+
+  /**
+   * A `head` count, so "you have never taken a payment" and "your filter
+   * matched nothing" can be told apart without paying for the rows.
+   */
+  private async countRows(
+    table: 'payments' | 'invoices' | 'commissions',
+    organizationId: string,
+    propertyId: string | null,
+  ): Promise<number> {
+    let query = this.db
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+
+    if (propertyId !== null) query = query.eq('property_id', propertyId)
+
+    const { count, error } = await query
+    if (error) throw error
+    return count ?? 0
+  }
+
+  /**
+   * Booking references for the rows on screen, in one query.
+   *
+   * Not an embed: there is no `payments.bookings` relation declared for the
+   * transaction compiler or the demo client, and adding one for a single text
+   * column would widen a surface both files keep deliberately narrow. One `in`
+   * over at most a page of ids is cheaper than the embed would have been.
+   */
+  private async bookingReferences(
+    organizationId: string,
+    bookingIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const unique = [...new Set(bookingIds)]
+    if (unique.length === 0) return new Map()
+
+    const { data, error } = await this.db
+      .from('bookings')
+      .select('id, reference')
+      .eq('organization_id', organizationId)
+      .in('id', unique)
+
+    if (error) throw error
+
+    const references = new Map<string, string>()
+    for (const row of toRows(data)) {
+      references.set(asString(row, 'id'), asString(row, 'reference'))
+    }
+    return references
+  }
+
+  /** The payments an invoice accounts for, with or without their amounts. */
+  private async linkedPayments(
+    organizationId: string,
+    paymentIds: readonly string[],
+    withAmounts: boolean,
+  ): Promise<ReadonlyMap<string, InvoicePaymentLinkRow>> {
+    const unique = [...new Set(paymentIds)]
+    if (unique.length === 0) return new Map()
+
+    const { data, error } = await this.db
+      .from('payments')
+      .select('id, status, method, amount_agorot, paid_at')
+      .eq('organization_id', organizationId)
+      .in('id', unique)
+
+    if (error) throw error
+
+    const links = new Map<string, InvoicePaymentLinkRow>()
+    for (const row of toRows(data)) {
+      const link: InvoicePaymentLinkRow = {
+        id: asString(row, 'id'),
+        status: asEnum(row, 'status', PAYMENT_STATUSES),
+        method: asEnum(row, 'method', PAYMENT_METHODS),
+        paidOn: propertyDate(row, 'paid_at'),
+      }
+      if (withAmounts) link.amountAgorot = asAgorot(row, 'amount_agorot')
+      links.set(link.id, link)
+    }
+    return links
+  }
+
+  /**
+   * Display names for the people a commission is owed to.
+   *
+   * `user_profiles_select` admits anybody who shares an organization with the
+   * subject, and this is only ever asked for ids that appeared on a commission
+   * row the reader was already admitted to. A missing name is left null rather
+   * than filled with the uuid.
+   */
+  private async profileNames(
+    userIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    if (userIds.length === 0) return new Map()
+
+    const { data, error } = await this.db
+      .from('user_profiles')
+      .select('id, full_name')
+      .in('id', [...userIds])
+
+    if (error) throw error
+
+    const names = new Map<string, string>()
+    for (const row of toRows(data)) {
+      const name = asStringOrNull(row, 'full_name')
+      if (name !== null) names.set(asString(row, 'id'), name)
+    }
+    return names
+  }
+
+  /** Agency names. A row this reader cannot see leaves the name null, which is true. */
+  private async agencyNames(
+    agencyIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    if (agencyIds.length === 0) return new Map()
+
+    const { data, error } = await this.db
+      .from('agencies')
+      .select('id, name')
+      .in('id', [...agencyIds])
+
+    if (error) throw error
+
+    const names = new Map<string, string>()
+    for (const row of toRows(data)) {
+      names.set(asString(row, 'id'), asString(row, 'name'))
+    }
+    return names
+  }
+
+  /**
+   * One of the two reads `listExpenseRules` merges.
+   *
+   * `organizationWide` is the difference between "narrow to this property" and
+   * "the rules that name no property at all", which is `scope_property_id is
+   * null` rather than an absent filter.
+   */
+  private async expenseRulePage(
+    filters: ExpenseRuleListQuery,
+    propertyId: string | null,
+    organizationWide: boolean,
+  ): Promise<Row[]> {
+    let query = this.db
+      .from('expense_rules')
+      .select(EXPENSE_RULE_COLUMNS)
+      .eq('organization_id', filters.organizationId)
+      .is('deleted_at', null)
+
+    if (organizationWide) query = query.is('scope_property_id', null)
+    else if (propertyId !== null) {
+      query = query.eq('scope_property_id', propertyId)
+    }
+
+    if (filters.kind !== null) query = query.eq('kind', filters.kind)
+
+    const { data, error } = await query
+      .order('effective_from', { ascending: false })
+      .limit(filters.limit)
+
+    if (error) throw error
+    return toRows(data)
+  }
 
   /**
    * The provider events already applied to each of these payments.
@@ -1102,6 +1639,49 @@ const CREDIT_NOTE_COLUMNS =
   'issued_at, credit_note_lines(kind, label, amount_agorot, quantity, ' +
   'line_date, sort_order)'
 
+/* ── The list reads ────────────────────────────────────────────────────────
+ *
+ * Narrower than the record columns above, and each is the exact list the
+ * screens used before the port grew these methods. A list that selected
+ * `PAYMENT_COLUMNS` would carry `version`, `currency` and `authorized_agorot`
+ * across the wire for a hundred rows nobody prints them for.
+ */
+
+const PAYMENT_LIST_COLUMNS =
+  'id, booking_id, property_id, status, method, purpose, channel, ' +
+  'amount_agorot, captured_agorot, amount_refunded_agorot, payer_name, ' +
+  'payer_reference, requires_attention, unknown_since, paid_at, created_at'
+
+/**
+ * `invoice_payments(payment_id)`, and never `metadata.payment_ids`.
+ *
+ * 0022 created the join table and 0024 dropped the array after proving nothing
+ * was lost. A fallback to the array here would resurrect links somebody
+ * deliberately removed, on a deployment where the key still happens to exist.
+ */
+const INVOICE_LIST_COLUMNS =
+  'id, booking_id, property_id, kind, status, series, year, number, ' +
+  'display_number, customer_name, customer_tax_id, subtotal_agorot, ' +
+  'tax_agorot, total_agorot, tax_rate_bps, tourist_vat_exempt, issued_at, ' +
+  'cancelled_at, cancellation_reason, created_at, ' +
+  'invoice_lines(kind, label, amount_agorot, quantity, line_date, sort_order), ' +
+  'invoice_payments(payment_id)'
+
+const COMMISSION_LIST_COLUMNS =
+  'id, booking_id, property_id, agent_user_id, agency_id, status, base, ' +
+  'basis_agorot, rate_bps, amount_agorot, explanation, eligible_at, ' +
+  'approved_at, paid_at, cancellation_reason, clawback_required, metadata, ' +
+  'created_at'
+
+const EXPENSE_RULE_COLUMNS =
+  'id, label, category, kind, frequency, amount_agorot, formula, allocation, ' +
+  'scope_kind, scope_property_id, scope_unit_id, scope_booking_id, ' +
+  'effective_from, effective_to, approval_required, version'
+
+const EXPENSE_ALLOCATION_COLUMNS =
+  'id, rule_id, rule_version, booking_id, method, period_start, period_end, ' +
+  'amount_agorot, weight, basis, allocated_at'
+
 const SNAPSHOT_COLUMNS =
   'organization_id, booking_id, captured_at, property_id, unit_id, ' +
   'captured_by, reason, revision, supersedes_captured_at, check_in, ' +
@@ -1259,7 +1839,12 @@ function toInvoice(row: Row): Invoice {
     // here falls back to the array 0022 replaced: a stale copy in `metadata`
     // would resurrect a link somebody deliberately removed.
     paymentIds: toPaymentIds(row),
-    snapshotCapturedAt: asTimestamp(row, 'snapshot_captured_at'),
+    // `asTimestampOrNull`, not `asTimestamp`. The column is nullable — 0016
+    // added it to a table that already held documents, with no backfill — and
+    // `asTimestamp` refuses null, so a single invoice without a capture made
+    // this method throw before it returned a row. `archived_at` above is the
+    // same shape and was already read tolerantly; this one was not.
+    snapshotCapturedAt: asTimestampOrNull(row, 'snapshot_captured_at'),
   }
 }
 
@@ -1326,6 +1911,170 @@ function toCommissionRule(row: Row): Commission['rule'] {
     // domain's own type declares.
     value: rateBps === null ? asAgorot(row, 'amount_agorot') : rateBps / 100,
     label: asStringOrNull(row, 'explanation') ?? '',
+  }
+}
+
+/* ── List row mapping ──────────────────────────────────────────────────── */
+
+/**
+ * A `timestamptz` as the calendar date it fell on at the property.
+ *
+ * Not `iso.slice(0, 10)`. A payment taken at 00:30 in Israel is `21:30Z` the
+ * previous day, and slicing the ISO string would file it under yesterday — on
+ * the screen a bookkeeper uses to reconcile a day's takings. `localDate` is the
+ * domain's own conversion, against `PROPERTY_TIME_ZONE`.
+ */
+function propertyDate(row: Row, column: string): string | null {
+  const value = asTimestampOrNull(row, column)
+  return value === null ? null : localDate(new Date(value))
+}
+
+function requiredPropertyDate(row: Row, column: string): string {
+  return localDate(new Date(asTimestamp(row, column)))
+}
+
+function namesNeeded(rows: readonly Row[], column: string): string[] {
+  const ids = new Set<string>()
+  for (const row of rows) {
+    const value = asStringOrNull(row, column)
+    if (value !== null) ids.add(value)
+  }
+  return [...ids]
+}
+
+/**
+ * The payee, decided the way the domain decides it.
+ *
+ * `payeeKey` in `finance/commissions.ts` prefers `agentUserId` and falls back
+ * to the agency, and this follows that order rather than inventing a second
+ * rule — the two must agree, because one groups a statement and the other
+ * labels it.
+ */
+function toPayee(
+  row: Row,
+  people: ReadonlyMap<string, string>,
+  agencies: ReadonlyMap<string, string>,
+): CommissionPayee {
+  const agentUserId = asStringOrNull(row, 'agent_user_id')
+  const agencyId = asStringOrNull(row, 'agency_id')
+
+  if (agentUserId !== null) {
+    return {
+      kind: 'agent',
+      name: people.get(agentUserId) ?? null,
+      agencyName: agencyId === null ? null : (agencies.get(agencyId) ?? null),
+    }
+  }
+  if (agencyId !== null) {
+    return { kind: 'agency', name: agencies.get(agencyId) ?? null }
+  }
+  return { kind: 'unknown' }
+}
+
+/**
+ * `toCommissionRule`, with the label withheld.
+ *
+ * The rule is read exactly as the record reader reads it. `withLabel` is the
+ * only difference and it is not cosmetic: the label is free text written when
+ * the commission was created and it routinely quotes the base in words —
+ * "10% מסך הלינות (2,940 ₪)" — so it is the base by another name. It lives one
+ * level down inside `rule`, where `redact()` cannot reach it, which is correct
+ * behaviour and not a bug in `redact`: a field rule cannot know that another
+ * field's value was copied somewhere else. So the copy is never built.
+ *
+ * An empty label is the domain's own "no explanation", which the screen renders
+ * as nothing rather than as a blank quotation.
+ */
+function toListedCommissionRule(
+  row: Row,
+  withLabel: boolean,
+): Commission['rule'] {
+  const rule = toCommissionRule(row)
+  return withLabel ? rule : { ...rule, label: '' }
+}
+
+function toExpenseRule(row: Row): ExpenseRuleListRow {
+  return {
+    id: asString(row, 'id'),
+    label: asString(row, 'label'),
+    category: asString(row, 'category'),
+    kind: asEnum(row, 'kind', EXPENSE_KINDS),
+    frequency: asEnum(row, 'frequency', EXPENSE_FREQUENCIES),
+    amountAgorot: asAgorot(row, 'amount_agorot'),
+    formula: toVariableFormula(row),
+    allocation: asEnum(row, 'allocation', ALLOCATION_METHODS),
+    scopeKind: asEnum(row, 'scope_kind', EXPENSE_SCOPE_KINDS),
+    scopePropertyId: asStringOrNull(row, 'scope_property_id'),
+    effectiveFrom: asIsoDate(row, 'effective_from'),
+    effectiveTo: asIsoDateOrNull(row, 'effective_to'),
+    approvalRequired: asBoolean(row, 'approval_required'),
+    version: asNumber(row, 'version'),
+  }
+}
+
+/**
+ * The `VariableFormula` union, out of jsonb.
+ *
+ * `expense_rules_formula_kind` constrains `formula ->> 'kind'` to the five the
+ * domain declares, and `expense_rules_formula_pair` makes the column null for
+ * every fixed rule — so a row that reaches here with an unrecognised kind is a
+ * row the database should have refused. It comes back as `null` rather than as
+ * a half-built object: `variableAmount` denies by default on a formula it does
+ * not recognise, and a shape that lies about its kind would be worse than an
+ * absent one.
+ */
+function toVariableFormula(row: Row): VariableFormula | null {
+  const raw = row.formula
+  if (raw === null || raw === undefined || typeof raw !== 'object') return null
+  if (Array.isArray(raw)) return null
+
+  const formula = raw as Record<string, unknown>
+  const kind = formula.kind
+
+  if (kind === 'percent_of_revenue') {
+    // Stored as basis points by the seed and as `percent` by the domain. Both
+    // are read, and neither is guessed at: a `bps` key means basis points.
+    const bps = formula.bps
+    const percent = formula.percent
+    if (typeof bps === 'number') {
+      return { kind: 'percent_of_revenue', percent: bps / 100 }
+    }
+    if (typeof percent === 'number') {
+      return { kind: 'percent_of_revenue', percent }
+    }
+    return null
+  }
+
+  if (
+    kind === 'per_night' ||
+    kind === 'per_guest_night' ||
+    kind === 'per_booking' ||
+    kind === 'per_guest'
+  ) {
+    const rate = formula.rateAgorot
+    return typeof rate === 'number' && Number.isInteger(rate)
+      ? { kind, rateAgorot: rate }
+      : null
+  }
+
+  return null
+}
+
+function toExpenseAllocation(row: Row): ExpenseAllocationRow {
+  return {
+    id: asString(row, 'id'),
+    ruleId: asString(row, 'rule_id'),
+    ruleVersion: asNumber(row, 'rule_version'),
+    bookingId: asString(row, 'booking_id'),
+    method: asEnum(row, 'method', ALLOCATION_METHODS),
+    periodStart: asIsoDate(row, 'period_start'),
+    periodEnd: asIsoDate(row, 'period_end'),
+    amountAgorot: asAgorot(row, 'amount_agorot'),
+    // `numeric(12,6)` arrives as a string. `asNumber` is what stops "1.000000"
+    // reaching arithmetic as a concatenation.
+    weight: asNumber(row, 'weight'),
+    basis: asStringOrNull(row, 'basis'),
+    allocatedOn: requiredPropertyDate(row, 'allocated_at'),
   }
 }
 

@@ -271,9 +271,10 @@ describe('an agent resolves with a live projection of their stored access', () =
             },
           ],
         },
-        // `all_organization` so that every assertion below is about grants
-        // and nothing else. A real agent is `own_records` with an inventory
-        // override, and that is `agentScopes`' question, not this one.
+        // `all_organization`, which is what `attachExistingUser` writes for an
+        // agent whose terms say `all_properties`. What that grant is spent on
+        // is `loadScopeNarrowing`'s question and is asked separately below;
+        // these assertions are about grants and nothing else.
         membership_scopes: {
           data: {
             kind: 'all_organization',
@@ -296,6 +297,12 @@ describe('an agent resolves with a live projection of their stored access', () =
     access_cancellation_kind: 'never',
     access_cancellation_hours: null,
     access_payment_link: false,
+    // The reach columns are on the same row and are read by the same
+    // resolution — `loadScopeNarrowing` asks for them by name — so a fixture
+    // without them is a row the mapping refuses at the border.
+    inventory_kind: 'all_properties',
+    inventory_property_ids: [],
+    inventory_unit_ids: [],
   }
 
   async function actorFor(access: Record<string, unknown> | null) {
@@ -305,7 +312,16 @@ describe('an agent resolves with a live projection of their stored access', () =
     return resolution.actor
   }
 
-  const RESOURCE = { organizationId: 'org-1' }
+  /**
+   * A record this agent created.
+   *
+   * Their own, and deliberately so. An agent's default scope is `own_records`
+   * — that is what the narrowing asks for and what the clamp grants — so a
+   * resource belonging to nobody would be refused on scope and every assertion
+   * below would pass or fail for a reason that has nothing to do with the
+   * ladders being tested.
+   */
+  const RESOURCE = { organizationId: 'org-1', createdByUserId: 'user-1' }
 
   it('resolves the preset position when nothing has been edited', async () => {
     const actor = await actorFor(SALES_ROW)

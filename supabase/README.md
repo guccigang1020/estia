@@ -277,18 +277,18 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 הפסקה "מה עוד לא כאן" שלמעלה כבר אינה נכונה. `properties`, `units` ו-`teams`
 הגיעו ב-`0008`, וכל המפתחות הזרים שהיו פתוחים נסגרו.
 
-| קובץ | מה בפנים |
-| ---- | -------- |
-| `0008_accommodation.sql` | `teams` · `properties` · `unit_groups` · `units` · `amenities`, וסגירת ההגבלות ש-`0001` ו-`0005` השאירו פתוחות |
-| `0009_booking_core.sql` | `guests` · `bookings` · `booking_status_history` · `booking_price_lines` · `holds` · `unit_occupancy` — והערובה שאין הזמנה כפולה |
-| `0010_payments.sql` | `payments` · `payment_attempts` · `refunds` · `deposits` · `invoices` · `credit_notes` · `invoice_sequences` |
-| `0011_operations.sql` | `tasks` · `task_assignments` · `task_checklists` · `inventory_items` · `inventory_movements` · `approvals` · `commissions` |
-| `0012_permission_catalogue.sql` | סנכרון קטלוג ההרשאות עם `src/lib/authz`, ופיצול `guest.view_contact` |
-| `0013_append_only_cascade.sql` | תיקון סתירה בין `ON DELETE CASCADE` לבין טבלאות append-only |
-| `0014_function_grants.sql` | שלילת `EXECUTE` על פונקציות הטריגר, שנחשפו כ-RPC |
-| `0015_agent_network.sql` | `agencies` · `agency_memberships` · `agency_agreements` · `agent_commission_rules` (+ גרסאות) · `agent_payout_batches` |
-| `0016_finance.sql` | תקרת ההחזר לפי מה שנגבה, אירועי ספק, `finance_snapshots`, הוצאות, שורות מסמך |
-| `0017_rule_shape_null.sql` | תיקון אילוץ שהחזיר NULL ולכן התקבל |
+| קובץ                            | מה בפנים                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `0008_accommodation.sql`        | `teams` · `properties` · `unit_groups` · `units` · `amenities`, וסגירת ההגבלות ש-`0001` ו-`0005` השאירו פתוחות                   |
+| `0009_booking_core.sql`         | `guests` · `bookings` · `booking_status_history` · `booking_price_lines` · `holds` · `unit_occupancy` — והערובה שאין הזמנה כפולה |
+| `0010_payments.sql`             | `payments` · `payment_attempts` · `refunds` · `deposits` · `invoices` · `credit_notes` · `invoice_sequences`                     |
+| `0011_operations.sql`           | `tasks` · `task_assignments` · `task_checklists` · `inventory_items` · `inventory_movements` · `approvals` · `commissions`       |
+| `0012_permission_catalogue.sql` | סנכרון קטלוג ההרשאות עם `src/lib/authz`, ופיצול `guest.view_contact`                                                             |
+| `0013_append_only_cascade.sql`  | תיקון סתירה בין `ON DELETE CASCADE` לבין טבלאות append-only                                                                      |
+| `0014_function_grants.sql`      | שלילת `EXECUTE` על פונקציות הטריגר, שנחשפו כ-RPC                                                                                 |
+| `0015_agent_network.sql`        | `agencies` · `agency_memberships` · `agency_agreements` · `agent_commission_rules` (+ גרסאות) · `agent_payout_batches`           |
+| `0016_finance.sql`              | תקרת ההחזר לפי מה שנגבה, אירועי ספק, `finance_snapshots`, הוצאות, שורות מסמך                                                     |
+| `0017_rule_shape_null.sql`      | תיקון אילוץ שהחזיר NULL ולכן התקבל                                                                                               |
 
 ---
 
@@ -338,11 +338,11 @@ holds ────┘
 
 `0002` קובע שקטלוג ההרשאות "חייב להישאר זהה" ל-`src/lib/authz`. הוא לא היה:
 
-| | לפני | אחרי |
-| --- | --- | --- |
-| הרשאות פעולה | 98 | 132 |
-| הרשאות שדה | 7 | 13 |
-| תפקידי מערכת | 16 | 20 |
+|              | לפני | אחרי |
+| ------------ | ---- | ---- |
+| הרשאות פעולה | 98   | 132  |
+| הרשאות שדה   | 7    | 13   |
+| תפקידי מערכת | 16   | 20   |
 
 **החלק שהוא פגם אבטחה ולא ענייני סדר.** `guest.view_contact` היה מפתח אחד שכיסה
 גם טלפון וגם דוא״ל. הוא פוצל, כי רשת הסוכנים שואלת שאלה שהמפתח האחד לא יכול היה
@@ -371,28 +371,28 @@ guest.view_contact  ->  guest.view_phone + guest.view_email
 רשימה. זה נכון לגבי המשפט — אבל המשפט רץ פעם אחת ב-`0002` ואינו יכול להגיע
 להרשאות שנוספו היום, ולכן הוא מורץ מחדש כאן. הספירות שנמדדו בפועל:
 
-| תפקיד | נמדד | `grantsForSystemRole()` |
-| --- | --- | --- |
-| `organization_owner` | 140 | 140 |
-| `administrator` | 136 | 136 |
-| `general_manager` | 88 | 88 |
-| `property_manager` | 65 | 65 |
-| `reservation_manager` | 49 | 49 |
-| `reception` | 41 | 41 |
-| `revenue_manager` | 16 | 16 |
-| `finance_manager` | 43 | 43 |
-| `accountant` | 12 | 12 |
-| `operations_manager` | 22 | 22 |
-| `housekeeping_supervisor` | 15 | 15 |
-| `cleaner` | 4 | 4 |
-| `maintenance` | 7 | 7 |
-| `property_owner` | 4 | 4 |
-| `external_vendor` | 3 | 3 |
-| `marketing_editor` | 9 | 9 |
-| `referral_agent` | 4 | 4 |
-| `sales_agent` | 19 | 19 |
-| `senior_agent` | 27 | 27 |
-| `agency_manager` | 35 | 35 |
+| תפקיד                     | נמדד | `grantsForSystemRole()` |
+| ------------------------- | ---- | ----------------------- |
+| `organization_owner`      | 140  | 140                     |
+| `administrator`           | 136  | 136                     |
+| `general_manager`         | 88   | 88                      |
+| `property_manager`        | 65   | 65                      |
+| `reservation_manager`     | 49   | 49                      |
+| `reception`               | 41   | 41                      |
+| `revenue_manager`         | 16   | 16                      |
+| `finance_manager`         | 43   | 43                      |
+| `accountant`              | 12   | 12                      |
+| `operations_manager`      | 22   | 22                      |
+| `housekeeping_supervisor` | 15   | 15                      |
+| `cleaner`                 | 4    | 4                       |
+| `maintenance`             | 7    | 7                       |
+| `property_owner`          | 4    | 4                       |
+| `external_vendor`         | 3    | 3                       |
+| `marketing_editor`        | 9    | 9                       |
+| `referral_agent`          | 4    | 4                       |
+| `sales_agent`             | 19   | 19                      |
+| `senior_agent`            | 27   | 27                      |
+| `agency_manager`          | 35   | 35                      |
 
 **הערה על הספירה.** `grantsForSystemRole()` מחזיר מערך ובו כפילויות, כי הסולמות
 (`CALENDAR_LEVELS`, `PRICE_LEVELS`, `GUEST_DATA_LEVELS`) מוסיפים אותו מפתח משתי
@@ -486,19 +486,19 @@ using (
 
 `supabase/tests/agents.sql` מוכיח את שני הכיוונים ואת כל הבקרות:
 
-| טענה | תוצאה |
-| --- | --- |
-| חבר בסוכנות A אינו רואה את B או D | 0 |
-| חבר בסוכנות A **כן** רואה את A | 1 |
-| ארגון אינו רואה את הסוכנות של המתחרה | 0 |
-| ארגון עם הסכם חי **כן** רואה את הסוכנות שחתם איתה | 1 |
-| ארגון בלי שום הסכם אינו רואה אף סוכנות | 0 |
-| הסכם בטיוטה אינו חושף את הסוכנות | 0 |
-| הפעלת אותו הסכם **כן** חושפת אותה | 1 |
-| הסכם שהסתיים עדיין מאפשר לנקוב בשם המקבל | 1 |
-| לקוח של סוכנות אינו יכול לשנות את שמה | 0 שורות |
-| מנהל הסוכנות **כן** יכול | 1 שורה |
-| רשימת החברים של A גלויה ל-A ולא ל-B | own=1, other=0 |
+| טענה                                              | תוצאה          |
+| ------------------------------------------------- | -------------- |
+| חבר בסוכנות A אינו רואה את B או D                 | 0              |
+| חבר בסוכנות A **כן** רואה את A                    | 1              |
+| ארגון אינו רואה את הסוכנות של המתחרה              | 0              |
+| ארגון עם הסכם חי **כן** רואה את הסוכנות שחתם איתה | 1              |
+| ארגון בלי שום הסכם אינו רואה אף סוכנות            | 0              |
+| הסכם בטיוטה אינו חושף את הסוכנות                  | 0              |
+| הפעלת אותו הסכם **כן** חושפת אותה                 | 1              |
+| הסכם שהסתיים עדיין מאפשר לנקוב בשם המקבל          | 1              |
+| לקוח של סוכנות אינו יכול לשנות את שמה             | 0 שורות        |
+| מנהל הסוכנות **כן** יכול                          | 1 שורה         |
+| רשימת החברים של A גלויה ל-A ולא ל-B               | own=1, other=0 |
 
 עוד ב-`0015`:
 
@@ -753,7 +753,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/finance.sql
 
 ---
 
-## `0019` — מה סוכן *הוא*, בתוך ארגון אחד
+## `0019` — מה סוכן _הוא_, בתוך ארגון אחד
 
 `agent_organization_settings` ו-`agent_invitations`. `memberships` מחזיקה את
 הקשר ואף אחד מהתנאים, ולכן ל-`AgentSettingsStore` היו ארבע מתודות ואפס אחסון.
@@ -908,7 +908,7 @@ statement — אותו צמד ש-`0005` משתמש בו ל-`audit_events`, ומ�
 `work_plan_versions` נכתבת בטריגר `SECURITY DEFINER` ובאף קורא — `INSERT` נשלל
 מכולם. `on conflict do nothing` חשוב כאן יותר מב-`0015`: `completePlanSection`
 ו-`overridePlanSection` קוראים ל-`savePlan` בלי לקדם את הגרסה, כי מנקה שמסמן
-פריטים אינו גרסה חדשה של *מה שהעבודה היא*. ההיסטוריה רושמת כל גרסה כפי שנוצרה,
+פריטים אינו גרסה חדשה של _מה שהעבודה היא_. ההיסטוריה רושמת כל גרסה כפי שנוצרה,
 ומצב ההשלמה הרץ חי על `work_plans` בלבד.
 
 **שני מפתחות זרים לאותה הזמנה שאומרים דברים שונים בכוונה:** לצילום יש
@@ -931,7 +931,7 @@ statement — אותו צמד ש-`0005` משתמש בו ל-`audit_events`, ומ�
   שורה שגויה.
 - **הוא אינו יכול לומר ששניהם על אותה שהות.** זה החשוב מכולם, וזו הסיבה שהטבלה
   נושאת `booking_id`: שני המפתחות הזרים נוקבים ב-`(id, organization_id,
-  booking_id)`, כך שקישור בין חשבונית של שהות אחת לתשלום של שהות אחרת נדחה על ידי
+booking_id)`, כך שקישור בין חשבונית של שהות אחת לתשלום של שהות אחרת נדחה על ידי
   המסד. בידוד דיירים נכלל באותו מפתח, ולכן אין לו כלל נפרד.
 
 מה שהטבלה **אינה** מחזיקה: סכום מוקצה (ל-`Invoice.paymentIds` אין אחד, והקצאה
@@ -977,8 +977,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/preparation.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/invoice_payments.sql
 ```
 
-| קובץ                   | טענות | מכסה                                                                 |
-| ---------------------- | ----: | -------------------------------------------------------------------- |
+| קובץ                   | טענות | מכסה                                                                  |
+| ---------------------- | ----: | --------------------------------------------------------------------- |
 | `agent_settings.sql`   |    64 | `0018` · `agent_organization_settings` · `agent_invitations` · `0020` |
 | `preparation.sql`      |    38 | `0021` — סחיפה, append-only, שרשרת גרסאות, מקור התוכנית               |
 | `invoice_payments.sql` |    22 | `0022` — הצורה, השלמות, הבידוד                                        |

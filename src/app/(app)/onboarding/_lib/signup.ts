@@ -51,7 +51,7 @@
  *                   any point rolls the whole thing back and no row survives.
  *                   This is a real transaction, not a hopeful one.
  *
- *   'compensated' — only `SUPABASE_SERVICE_ROLE_KEY` is set. PostgREST has no
+ *   'compensated' — only the service role key is set. PostgREST has no
  *                   multi-statement transaction, so the five inserts are five
  *                   round trips and a failure at the fourth leaves three rows
  *                   standing. That partial state is DETECTED and removed
@@ -68,6 +68,7 @@
  * It is unreachable rather than merely wrong.
  */
 
+import { hasServiceRoleKey } from '@/lib/env'
 import { AppError, BusinessRuleError, InternalError } from '@/lib/errors'
 import { postgresPool } from '@/lib/persistence'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -110,15 +111,15 @@ export class SlugTakenError extends BusinessRuleError {
   }
 }
 
-/** Neither `DATABASE_URL` nor `SUPABASE_SERVICE_ROLE_KEY` is configured. */
+/** Neither `DATABASE_URL` nor the service role key is configured. */
 export class SignupUnavailableError extends AppError {
   constructor() {
     super({
       code: 'workspace_creation_unavailable',
       status: 503,
       message:
-        'Cannot create an organization: neither DATABASE_URL nor ' +
-        'SUPABASE_SERVICE_ROLE_KEY is set. Creating the first organization, ' +
+        'Cannot create an organization: neither DATABASE_URL nor the ' +
+        'service role key is set. Creating the first organization, ' +
         'its owner membership and its subscription is the one write no row ' +
         'level security policy can authorize — see 0004_rls.sql — so it needs ' +
         'one of the two privileged paths. Set DATABASE_URL to the Supabase ' +
@@ -163,11 +164,6 @@ export class OrphanedOrganizationError extends AppError {
 function databaseUrl(): string | undefined {
   const url = process.env.DATABASE_URL
   return url && url.trim() !== '' ? url : undefined
-}
-
-function hasServiceRoleKey(): boolean {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  return typeof key === 'string' && key.trim() !== ''
 }
 
 /** Which path `createWorkspace` will take, without taking it. */

@@ -23,11 +23,18 @@
  * would invent an answer the product does not read.
  *
  * `audit_events`, `idempotency_keys`, `payment_attempts`, `refunds`,
- * `credit_notes`, `finance_snapshots`, `work_plans` and the preparation
- * tables are also absent. They are written by the product as it runs; seeding
- * them would be seeding the output of code paths this demo exists to
- * exercise, and an audit trail nobody performed is the one kind of fiction a
- * product like this must never ship.
+ * `credit_notes`, `payment_provider_events`, `work_plans` and the preparation
+ * tables are declared and left empty. They are written by the product as it
+ * runs; seeding them would be seeding the output of the very code paths this
+ * demo exists to exercise, and an audit trail nobody performed is the one kind
+ * of fiction a product like this must never ship.
+ *
+ * Declared and empty is not the same as absent, and the difference cost two
+ * screens. `DemoDatabase.rows` throws `MissingDemoTable` for a key it has
+ * never heard of, so a table left out entirely makes a read fail where it
+ * should have answered "nothing yet" — and a screen cannot tell that from a
+ * broken deployment. Every table the product reads belongs in the map, even
+ * when the honest contents are none.
  */
 
 import type { DemoDataset, DemoPersona, DemoPlan, DemoTables } from './types'
@@ -162,6 +169,24 @@ const TABLES: DemoTables = {
   credit_notes: [],
   credit_note_lines: [],
   agent_invitations: [],
+
+  // These three belong to the list above and were missing from it, which is
+  // not the same as being seeded empty: `DemoDatabase.rows` throws
+  // `MissingDemoTable` for a key it has never heard of, so the preparation
+  // read failed instead of answering "nothing scheduled yet". A screen cannot
+  // render an honest empty state against a table that does not exist.
+  work_plans: [],
+  preparation_catalogues: [],
+  preparation_snapshots: [],
+
+  // The same omission, found the same way. `SupabaseFinanceRepository`
+  // rebuilds `Payment.appliedEventIds` from this table on every payment read,
+  // so `loadPaymentsForBooking` threw `MissingDemoTable` before returning a
+  // row. The table is owned by the webhook ingestion path — the only code that
+  // knows an event's provider, type and payload, all `NOT NULL` — exactly like
+  // `payment_attempts` and `audit_events` above, so it is seeded empty rather
+  // than filled: an applied event nobody delivered is fabricated evidence.
+  payment_provider_events: [],
 }
 
 export const DEMO_DATASET: DemoDataset = {

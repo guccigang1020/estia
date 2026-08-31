@@ -21,7 +21,11 @@ import Link from 'next/link'
 
 import { ActionError } from '@/components/booking/action-error'
 import type { SafeErrorBody } from '@/lib/errors/safe-response'
-import type { ComparisonMode, DashboardResponse, MetricRange } from '@/lib/metrics'
+import type {
+  ComparisonMode,
+  DashboardResponse,
+  MetricRange,
+} from '@/lib/metrics'
 
 import { MetricGrid } from './metric-tile'
 import { PeriodBar } from './period-bar'

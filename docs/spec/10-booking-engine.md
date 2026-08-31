@@ -44,17 +44,17 @@
 התפקידים מ-[`roles.ts`](../../src/lib/authz/roles.ts). הטווח הוא `Scope`
 מ-[`can.ts`](../../src/lib/authz/can.ts).
 
-| תפקיד | מה הוא עושה כאן | ההרשאות הנדרשות | טווח | מה הוא **לא** רואה |
-| --- | --- | --- | --- | --- |
-| `reservation_manager` / `general_manager` | הכול: יוצר, משנה, מבטל, עוקף זמינות ומחיר | `booking.*`, `hold.*`, `availability.view`, `booking.override_availability`, `booking.override_price` | `all_organization` או `properties[]` | תיק מסמכי הזהות של האורח אם לא הוענק `guest.view_document_id` |
-| `reception` | מוכר בטלפון, מבצע צ׳ק-אין וצ׳ק-אאוט, משנה תאריכים | `booking.view`, `booking.create`, `booking.update`, `AMENDMENT_GRANTS`, `booking.change_status`, `hold.create`, `hold.release`, `hold.extend` | `properties[]` בדרך כלל | `booking.view_profitability`, `rate.view_net`, `booking.export`, `booking.cancel` — **ביטול אינו בערכה של קבלה** |
-| `revenue_manager` | קובע מחירים, מינימום לילות, חסימות עונתיות | `pricing.manage`, `availability.view`, `rate.view_*` | `all_organization` | פרטי קשר של אורח |
-| `housekeeping_supervisor` / `cleaner` | רואה מה מתפנה ומתי, לא רואה מי ולא בכמה | `booking.view` בטווח מצומצם, `task.*` | `team` / `units[]` | `guest.phone`, `guest.email`, `booking.price`, `booking.source`, `booking.deposit` — **כולם ברמת שדה, ב-`redact()`** |
-| `sales_agent` (סוכן חיצוני) | רואה תפוס/פנוי, מחזיק תאריכים, יוצר הזמנה | `availability.view`, `hold.create`, `hold.release`, `hold.extend`, `booking.create`, `guest.create`, `rate.view_agent` | `units[]` או `properties[]` **צר** | 🔒 **את היומן הפנימי.** לא שם אורח (אלא אם `guest.view_name`), לא מחיר ששולם, לא מקור הזמנה, לא הזמנות של אחרים |
-| `senior_agent` | בנוסף: משנה הזמנה שלו במגבלות, שולח קישור תשלום | `AMENDMENT_GRANTS`, `payment.request_link` | `own_records` בשילוב `units[]` | `booking.override_price` — חריגה מהתקרה **מייצרת בקשת אישור**, לא מסרבת |
-| `property_owner` | רואה תפוסה והכנסה בנכס שלו | `booking.view`, `owner_statement.view` | `properties[]` של הנכס שלו | פרטי אורח, מקור הזמנה, עמלת סוכן |
-| `system` (ייבוא ערוצים, מטאטא החזקות) | יוצר הזמנות OTA, משחרר החזקות שפג תוקפן | `booking.create`, `hold.release`, `channel.manage` | `all_organization` | — נרשם ב-Audit כ-`actor_type = 'system'` |
-| `ai_agent` | מציע חלופות, עונה "מה פנוי" | 🔒 **בדיוק ההרשאות של המשתמש שהוא משרת** | זהה למשתמש | ראה §12 |
+| תפקיד                                     | מה הוא עושה כאן                                   | ההרשאות הנדרשות                                                                                                                               | טווח                                 | מה הוא **לא** רואה                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `reservation_manager` / `general_manager` | הכול: יוצר, משנה, מבטל, עוקף זמינות ומחיר         | `booking.*`, `hold.*`, `availability.view`, `booking.override_availability`, `booking.override_price`                                         | `all_organization` או `properties[]` | תיק מסמכי הזהות של האורח אם לא הוענק `guest.view_document_id`                                                        |
+| `reception`                               | מוכר בטלפון, מבצע צ׳ק-אין וצ׳ק-אאוט, משנה תאריכים | `booking.view`, `booking.create`, `booking.update`, `AMENDMENT_GRANTS`, `booking.change_status`, `hold.create`, `hold.release`, `hold.extend` | `properties[]` בדרך כלל              | `booking.view_profitability`, `rate.view_net`, `booking.export`, `booking.cancel` — **ביטול אינו בערכה של קבלה**     |
+| `revenue_manager`                         | קובע מחירים, מינימום לילות, חסימות עונתיות        | `pricing.manage`, `availability.view`, `rate.view_*`                                                                                          | `all_organization`                   | פרטי קשר של אורח                                                                                                     |
+| `housekeeping_supervisor` / `cleaner`     | רואה מה מתפנה ומתי, לא רואה מי ולא בכמה           | `booking.view` בטווח מצומצם, `task.*`                                                                                                         | `team` / `units[]`                   | `guest.phone`, `guest.email`, `booking.price`, `booking.source`, `booking.deposit` — **כולם ברמת שדה, ב-`redact()`** |
+| `sales_agent` (סוכן חיצוני)               | רואה תפוס/פנוי, מחזיק תאריכים, יוצר הזמנה         | `availability.view`, `hold.create`, `hold.release`, `hold.extend`, `booking.create`, `guest.create`, `rate.view_agent`                        | `units[]` או `properties[]` **צר**   | 🔒 **את היומן הפנימי.** לא שם אורח (אלא אם `guest.view_name`), לא מחיר ששולם, לא מקור הזמנה, לא הזמנות של אחרים      |
+| `senior_agent`                            | בנוסף: משנה הזמנה שלו במגבלות, שולח קישור תשלום   | `AMENDMENT_GRANTS`, `payment.request_link`                                                                                                    | `own_records` בשילוב `units[]`       | `booking.override_price` — חריגה מהתקרה **מייצרת בקשת אישור**, לא מסרבת                                              |
+| `property_owner`                          | רואה תפוסה והכנסה בנכס שלו                        | `booking.view`, `owner_statement.view`                                                                                                        | `properties[]` של הנכס שלו           | פרטי אורח, מקור הזמנה, עמלת סוכן                                                                                     |
+| `system` (ייבוא ערוצים, מטאטא החזקות)     | יוצר הזמנות OTA, משחרר החזקות שפג תוקפן           | `booking.create`, `hold.release`, `channel.manage`                                                                                            | `all_organization`                   | — נרשם ב-Audit כ-`actor_type = 'system'`                                                                             |
+| `ai_agent`                                | מציע חלופות, עונה "מה פנוי"                       | 🔒 **בדיוק ההרשאות של המשתמש שהוא משרת**                                                                                                      | זהה למשתמש                           | ראה §12                                                                                                              |
 
 **העמודה האחרונה היא העיקר.** ההפרדה בין "היומן הפנימי" ל"יומן הזמינות"
 (`docs/ARCHITECTURE.md` §12) אינה הגדרת תצוגה: `availability.view` מחזיר
@@ -72,7 +72,7 @@
 `teams`, `amenities`. הרלוונטי כאן:
 
 - `units.id` נושא את המפתח המורכב `units_id_organization_property_key
-  unique (id, organization_id, property_id)`. **הוא קיים בדיוק בשביל
+unique (id, organization_id, property_id)`. **הוא קיים בדיוק בשביל
   ההזמנות** — מפתח זר מורכב אליו מוכיח בבת אחת שהיחידה בנכס ושהנכס בארגון.
 - `units.max_guests`, `standard_guests`, `min_nights`, `max_nights`,
   `status` — כולם קיימים ו**אף אחד מהם אינו נקרא היום על ידי
@@ -84,17 +84,17 @@
 
 #### `guests`
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` | uuid pk | |
-| `organization_id` | uuid not null | RLS |
-| `full_name` | text not null | |
-| `phone` | text | 🔒 **מפתח הדדופליקציה.** מנורמל ל-E.164 בעמודה מחושבת `phone_e164` |
-| `email` | citext | |
-| `document_id` | text | שדה רגיש — `guest.view_document_id` |
-| `country`, `language` | text | |
-| `notes` | text | |
-| בלוק מטא-דאטה | | `created_at/by`, `updated_at/by`, `version`, `deleted_at/by` |
+| עמודה                 | טיפוס         | הערה                                                               |
+| --------------------- | ------------- | ------------------------------------------------------------------ |
+| `id`                  | uuid pk       |                                                                    |
+| `organization_id`     | uuid not null | RLS                                                                |
+| `full_name`           | text not null |                                                                    |
+| `phone`               | text          | 🔒 **מפתח הדדופליקציה.** מנורמל ל-E.164 בעמודה מחושבת `phone_e164` |
+| `email`               | citext        |                                                                    |
+| `document_id`         | text          | שדה רגיש — `guest.view_document_id`                                |
+| `country`, `language` | text          |                                                                    |
+| `notes`               | text          |                                                                    |
+| בלוק מטא-דאטה         |               | `created_at/by`, `updated_at/by`, `version`, `deleted_at/by`       |
 
 `create unique index guests_org_phone_idx on guests (organization_id,
 phone_e164) where deleted_at is null and phone_e164 is not null` —
@@ -105,32 +105,32 @@ phone_e164) where deleted_at is null and phone_e164 is not null` —
 
 העמודות נגזרות אחת לאחת מ-`BookingSnapshot` ומ-`BookingDraft`:
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` | uuid pk | |
-| `organization_id` | uuid not null | |
-| `property_id` | uuid not null | 🔒 **not null, ונגזר מהיחידה** — ראה B-3 |
-| `unit_id` | uuid not null | |
-| `guest_id` | uuid | null בשלב `inquiry`, לפני שיש אורח |
-| `reference` | text not null | המספר שהאורח מצטט בטלפון. ייחודי לארגון |
-| `status` | `booking_status` enum | 19 ערכים, **בסדר ובאיות של `BOOKING_STATUSES`** |
-| `check_in`, `check_out` | date not null | חצי-פתוח |
-| `guest_name` | text not null | denormalised — הזמנה חייבת להיות קריאה גם אם `guests` נמחקה רכה |
-| `guest_count`, `adults`, `children`, `infants` | integer | |
-| `event_type` | `event_type` enum | מ-`src/lib/preparation/types.ts` — מזין את מנוע ההכנה |
-| `source` | `booking_source` enum | 🔒 |
-| `source_channel`, `agent_user_id`, `agency_id`, `campaign_id`, `referral_id` | | 🔒 בלוק הייחוס, מ-`BookingAttribution`. **נכנס עכשיו ולא אחר כך** — `ARCHITECTURE.md` §12 |
-| `channel_reservation_id` | text | מזהה ההזמנה אצל ה-OTA. `unique (organization_id, source, channel_reservation_id)` — ראה E-14 |
-| `lines` | jsonb not null | מערך `PriceLine`. **המקור לכל סכום** |
-| `total_agorot` | integer not null | תמיד `sumLines(lines)`, נאכף ב-trigger — §7.1 |
-| `deposit_required_agorot`, `deposit_held_agorot` | integer not null default 0 | |
-| `paid_agorot` | integer not null default 0 | מתוחזק על ידי `payments`, נקרא כאן |
-| `tax_rate_bps_applied`, `tourist_vat_applied` | | 🔒 snapshot. הזמנה לא ממוסה מחדש רטרואקטיבית |
-| `cancellation_policy_snapshot` | jsonb | 🔒 המדיניות **כפי שהייתה ברגע ההתחייבות**. שינוי מדיניות בנכס אינו חל על הזמנות קיימות |
-| `cancelled_at`, `cancellation_reason`, `cancellation_fee_agorot` | | |
-| `committed_at` | timestamptz | הפעם הראשונה שהגיעה לסטטוס תופס. מזין `BookingFactRow.committedOn` |
-| `notes`, `internal_notes` | text | `internal_notes` מאחורי `booking.note.internal` |
-| בלוק מטא-דאטה | | כולל `version` — נעילה אופטימית |
+| עמודה                                                                        | טיפוס                      | הערה                                                                                         |
+| ---------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `id`                                                                         | uuid pk                    |                                                                                              |
+| `organization_id`                                                            | uuid not null              |                                                                                              |
+| `property_id`                                                                | uuid not null              | 🔒 **not null, ונגזר מהיחידה** — ראה B-3                                                     |
+| `unit_id`                                                                    | uuid not null              |                                                                                              |
+| `guest_id`                                                                   | uuid                       | null בשלב `inquiry`, לפני שיש אורח                                                           |
+| `reference`                                                                  | text not null              | המספר שהאורח מצטט בטלפון. ייחודי לארגון                                                      |
+| `status`                                                                     | `booking_status` enum      | 19 ערכים, **בסדר ובאיות של `BOOKING_STATUSES`**                                              |
+| `check_in`, `check_out`                                                      | date not null              | חצי-פתוח                                                                                     |
+| `guest_name`                                                                 | text not null              | denormalised — הזמנה חייבת להיות קריאה גם אם `guests` נמחקה רכה                              |
+| `guest_count`, `adults`, `children`, `infants`                               | integer                    |                                                                                              |
+| `event_type`                                                                 | `event_type` enum          | מ-`src/lib/preparation/types.ts` — מזין את מנוע ההכנה                                        |
+| `source`                                                                     | `booking_source` enum      | 🔒                                                                                           |
+| `source_channel`, `agent_user_id`, `agency_id`, `campaign_id`, `referral_id` |                            | 🔒 בלוק הייחוס, מ-`BookingAttribution`. **נכנס עכשיו ולא אחר כך** — `ARCHITECTURE.md` §12    |
+| `channel_reservation_id`                                                     | text                       | מזהה ההזמנה אצל ה-OTA. `unique (organization_id, source, channel_reservation_id)` — ראה E-14 |
+| `lines`                                                                      | jsonb not null             | מערך `PriceLine`. **המקור לכל סכום**                                                         |
+| `total_agorot`                                                               | integer not null           | תמיד `sumLines(lines)`, נאכף ב-trigger — §7.1                                                |
+| `deposit_required_agorot`, `deposit_held_agorot`                             | integer not null default 0 |                                                                                              |
+| `paid_agorot`                                                                | integer not null default 0 | מתוחזק על ידי `payments`, נקרא כאן                                                           |
+| `tax_rate_bps_applied`, `tourist_vat_applied`                                |                            | 🔒 snapshot. הזמנה לא ממוסה מחדש רטרואקטיבית                                                 |
+| `cancellation_policy_snapshot`                                               | jsonb                      | 🔒 המדיניות **כפי שהייתה ברגע ההתחייבות**. שינוי מדיניות בנכס אינו חל על הזמנות קיימות       |
+| `cancelled_at`, `cancellation_reason`, `cancellation_fee_agorot`             |                            |                                                                                              |
+| `committed_at`                                                               | timestamptz                | הפעם הראשונה שהגיעה לסטטוס תופס. מזין `BookingFactRow.committedOn`                           |
+| `notes`, `internal_notes`                                                    | text                       | `internal_notes` מאחורי `booking.note.internal`                                              |
+| בלוק מטא-דאטה                                                                |                            | כולל `version` — נעילה אופטימית                                                              |
 
 אילוצים:
 
@@ -177,18 +177,18 @@ create index bookings_channel_idx
 
 אחד לאחד עם `Hold` ב-`types.ts`, בתוספת שלוש עמודות שהחוזה חסר:
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id`, `organization_id`, `unit_id` | | |
-| `property_id` | uuid not null | נגזר מהיחידה, כמו בהזמנה |
-| `check_in`, `check_out` | date not null | |
-| `reason` | `hold_reason` enum | 4 ערכים מ-`HOLD_REASONS` |
-| `held_by_user_id` | uuid not null | |
-| `expires_at` | timestamptz **not null** | 🔒 החוזה אוסר החזקה בלי תפוגה |
-| `released_at`, `converted_to_booking_id` | | |
-| `created_at` | timestamptz not null | ⚠️ **חסר בחוזה** — ראה C-4 |
-| `extension_count` | integer not null default 0 | ⚠️ **חסר בחוזה** — ראה C-4 |
-| `booking_id` | uuid | ההזמנה שההחזקה נועדה לשרת, כשיש כזו (`guest_checkout`) |
+| עמודה                                    | טיפוס                      | הערה                                                   |
+| ---------------------------------------- | -------------------------- | ------------------------------------------------------ |
+| `id`, `organization_id`, `unit_id`       |                            |                                                        |
+| `property_id`                            | uuid not null              | נגזר מהיחידה, כמו בהזמנה                               |
+| `check_in`, `check_out`                  | date not null              |                                                        |
+| `reason`                                 | `hold_reason` enum         | 4 ערכים מ-`HOLD_REASONS`                               |
+| `held_by_user_id`                        | uuid not null              |                                                        |
+| `expires_at`                             | timestamptz **not null**   | 🔒 החוזה אוסר החזקה בלי תפוגה                          |
+| `released_at`, `converted_to_booking_id` |                            |                                                        |
+| `created_at`                             | timestamptz not null       | ⚠️ **חסר בחוזה** — ראה C-4                             |
+| `extension_count`                        | integer not null default 0 | ⚠️ **חסר בחוזה** — ראה C-4                             |
+| `booking_id`                             | uuid                       | ההזמנה שההחזקה נועדה לשרת, כשיש כזו (`guest_checkout`) |
 
 #### `unit_claims` — 🔒 **ההכרעה הטכנית המרכזית של המודול**
 
@@ -324,19 +324,19 @@ create table public.unit_blocks (
 
 #### `waitlist_entries`
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id`, `organization_id`, `property_id` | | `property_id` **not null**; `unit_id` **nullable** — "כל יחידה בנכס" הוא המקרה השכיח |
-| `unit_id`, `unit_group_id` | uuid | |
-| `desired` | daterange not null | |
-| `flexibility_days` | integer not null default 0 | ± ימים סביב התאריך המבוקש |
-| `guest_count` | integer not null | |
-| `guest_id`, `guest_name`, `guest_phone` | | |
-| `max_agorot` | integer | תקרת מחיר שהאורח הצהיר עליה. null = לא הצהיר |
-| `source`, `agent_user_id` | | ייחוס, כמו בהזמנה |
-| `status` | `waitlist_status` enum | `waiting` · `offered` · `converted` · `expired` · `withdrawn` |
-| `offered_at`, `offer_expires_at`, `offer_hold_id`, `converted_booking_id` | | |
-| `position` | integer | נגזר, לא נשמר — ראה §7.7 |
+| עמודה                                                                     | טיפוס                      | הערה                                                                                 |
+| ------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
+| `id`, `organization_id`, `property_id`                                    |                            | `property_id` **not null**; `unit_id` **nullable** — "כל יחידה בנכס" הוא המקרה השכיח |
+| `unit_id`, `unit_group_id`                                                | uuid                       |                                                                                      |
+| `desired`                                                                 | daterange not null         |                                                                                      |
+| `flexibility_days`                                                        | integer not null default 0 | ± ימים סביב התאריך המבוקש                                                            |
+| `guest_count`                                                             | integer not null           |                                                                                      |
+| `guest_id`, `guest_name`, `guest_phone`                                   |                            |                                                                                      |
+| `max_agorot`                                                              | integer                    | תקרת מחיר שהאורח הצהיר עליה. null = לא הצהיר                                         |
+| `source`, `agent_user_id`                                                 |                            | ייחוס, כמו בהזמנה                                                                    |
+| `status`                                                                  | `waitlist_status` enum     | `waiting` · `offered` · `converted` · `expired` · `withdrawn`                        |
+| `offered_at`, `offer_expires_at`, `offer_hold_id`, `converted_booking_id` |                            |                                                                                      |
+| `position`                                                                | integer                    | נגזר, לא נשמר — ראה §7.7                                                             |
 
 RLS: כל הטבלאות לעיל נושאות `organization_id` ומקבלות
 `organization_id in (select my_organizations())` **ברגע יצירתן**, בתוספת
@@ -366,13 +366,13 @@ inquiry → quote → option → awaiting_payment → deposit_paid
 
 **חמישה קיצורים מכוונים שקיימים בקוד ומחייבים:**
 
-| קיצור | למי | התנאי |
-| --- | --- | --- |
-| `option` / `awaiting_payment` → `confirmed` | עסק שלא גובה מקדמה | `nothingOwedUpFront` — `depositRequiredAgorot = 0` |
-| `confirmed` → `ready_for_check_in` | Walk-in שכבר עומד בדלת | — |
-| `checked_in` → `checkout_pending` | שהות של לילה אחד | — |
-| `in_house` → `checked_out` | יחידה עם צ׳ק-אאוט עצמי | — |
-| `checked_out` → `completed` | שהות בלי פיקדון | `noDepositStillHeld` |
+| קיצור                                       | למי                    | התנאי                                              |
+| ------------------------------------------- | ---------------------- | -------------------------------------------------- |
+| `option` / `awaiting_payment` → `confirmed` | עסק שלא גובה מקדמה     | `nothingOwedUpFront` — `depositRequiredAgorot = 0` |
+| `confirmed` → `ready_for_check_in`          | Walk-in שכבר עומד בדלת | —                                                  |
+| `checked_in` → `checkout_pending`           | שהות של לילה אחד       | —                                                  |
+| `in_house` → `checked_out`                  | יחידה עם צ׳ק-אאוט עצמי | —                                                  |
+| `checked_out` → `completed`                 | שהות בלי פיקדון        | `noDepositStillHeld`                               |
 
 **שני יציאות:**
 
@@ -404,15 +404,15 @@ inquiry → quote → option → awaiting_payment → deposit_paid
 
 שבעה מצבים, כפי שהמוצר מדבר עליהם:
 
-| מצב | מקור | תופס? | מי רואה |
-| --- | --- | --- | --- |
-| `available` | אין דבר שחוסם | לא | כולם |
-| `booked` | `bookings` בסטטוס תופס | כן | סוכן רואה "תפוס"; צוות רואה מי |
-| `hold` | `holds` חיה | כן | סוכן רואה "מוחזק"; רק בעליה רואה מי |
-| `blocked` | `unit_blocks` kind = `seasonal_closure` | כן | כולם |
-| `maintenance` | `unit_blocks` kind = `maintenance` | כן | צוות; סוכן רואה `blocked` |
-| `owner_use` | `unit_blocks` kind = `owner_use` | כן | צוות ובעלים; סוכן רואה `blocked` |
-| `internal_use` | `unit_blocks` kind = `internal_use` | כן | צוות; סוכן רואה `blocked` |
+| מצב            | מקור                                    | תופס? | מי רואה                             |
+| -------------- | --------------------------------------- | ----- | ----------------------------------- |
+| `available`    | אין דבר שחוסם                           | לא    | כולם                                |
+| `booked`       | `bookings` בסטטוס תופס                  | כן    | סוכן רואה "תפוס"; צוות רואה מי      |
+| `hold`         | `holds` חיה                             | כן    | סוכן רואה "מוחזק"; רק בעליה רואה מי |
+| `blocked`      | `unit_blocks` kind = `seasonal_closure` | כן    | כולם                                |
+| `maintenance`  | `unit_blocks` kind = `maintenance`      | כן    | צוות; סוכן רואה `blocked`           |
+| `owner_use`    | `unit_blocks` kind = `owner_use`        | כן    | צוות ובעלים; סוכן רואה `blocked`    |
+| `internal_use` | `unit_blocks` kind = `internal_use`     | כן    | צוות; סוכן רואה `blocked`           |
 
 ⚠️ **`DayState` בקוד מכיר בארבעה בלבד** — `free | booked | held | blocked`
 — והשלושה האחרונים בטבלה מתקפלים ל-`blocked`. זו לא בהכרח תקלה: כלפי חוץ
@@ -642,17 +642,17 @@ inquiry → quote → option → awaiting_payment → deposit_paid
 השורה היא סוג השינוי; העמודה היא הבדיקה. `●` = חובה, `○` = רק אם השדה
 הרלוונטי השתנה בפועל.
 
-| שינוי | זמינות | מחיר | הכנה | מלאי | צוות | עלות | התראה |
-| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| תאריכים | ● | ● | ● | ● | ● | ● | ● |
-| מספר אורחים | ● | ● | ● | ● | ● | ● | ● |
-| יחידה | ● | ● | ● | ● | ● | ● | ● |
-| נכס | ● | ● | ● | ● | ● | ● | ● |
-| תוספות | ○ | ● | ● | ● | ● | ● | ● |
-| מחיר / הנחה | — | ● | — | — | — | ● | ● |
-| תוכנית תעריף | — | ● | ○ | ○ | — | ● | ● |
-| סוכן / מקור | — | ○ | — | — | — | ● | ● |
-| סוג אירוע | — | ● | ● | ● | ● | ● | ● |
+| שינוי        | זמינות | מחיר | הכנה | מלאי | צוות | עלות | התראה |
+| ------------ | :----: | :--: | :--: | :--: | :--: | :--: | :---: |
+| תאריכים      |   ●    |  ●   |  ●   |  ●   |  ●   |  ●   |   ●   |
+| מספר אורחים  |   ●    |  ●   |  ●   |  ●   |  ●   |  ●   |   ●   |
+| יחידה        |   ●    |  ●   |  ●   |  ●   |  ●   |  ●   |   ●   |
+| נכס          |   ●    |  ●   |  ●   |  ●   |  ●   |  ●   |   ●   |
+| תוספות       |   ○    |  ●   |  ●   |  ●   |  ●   |  ●   |   ●   |
+| מחיר / הנחה  |   —    |  ●   |  —   |  —   |  —   |  ●   |   ●   |
+| תוכנית תעריף |   —    |  ●   |  ○   |  ○   |  —   |  ●   |   ●   |
+| סוכן / מקור  |   —    |  ○   |  —   |  —   |  —   |  ●   |   ●   |
+| סוג אירוע    |   —    |  ●   |  ●   |  ●   |  ●   |  ●   |   ●   |
 
 **"זמינות" ב"תוספות" הוא `○` ולא `—`** כי תוספת יכולה להיות מיטה נוספת
 שמעלה את מספר האורחים מעל הקיבולת, ותוספת יכולה להיות "צ׳ק-אאוט מאוחר"
@@ -764,12 +764,12 @@ commission = roundAgorot(stay_total_agorot × percent / 100)
   "version": 1,
   "tiers": [
     { "days_before": 30, "refund_bps": 10000, "fee_agorot": 0 },
-    { "days_before": 14, "refund_bps": 5000,  "fee_agorot": 0 },
-    { "days_before": 0,  "refund_bps": 0,     "fee_agorot": 0 }
+    { "days_before": 14, "refund_bps": 5000, "fee_agorot": 0 },
+    { "days_before": 0, "refund_bps": 0, "fee_agorot": 0 },
   ],
   "no_show_refund_bps": 0,
   "deposit_refundable": true,
-  "non_refundable": false
+  "non_refundable": false,
 }
 ```
 
@@ -822,28 +822,28 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ## 8. ולידציות
 
-| שדה | חובה | טווח / פורמט | ההודעה שהמשתמש רואה |
-| --- | :-: | --- | --- |
-| `unitId` | כן | uuid קיים, `status = 'active'`, בטווח השחקן | `היחידה אינה זמינה למכירה. בדוק את הגדרות היחידה.` |
-| `propertyId` | כן¹ | חייב להיות הנכס של היחידה | `היחידה הזו אינה שייכת לנכס שנבחר.` |
-| `checkIn` | כן | `YYYY-MM-DD`, תאריך קיים בלוח | `תאריך חייב להיות בפורמט YYYY-MM-DD.` / `התאריך אינו קיים בלוח השנה.` |
-| `checkOut` | כן | `> checkIn` | `תאריך העזיבה חייב להיות מאוחר מתאריך ההגעה.` |
-| טווח | — | `nights <= max_nights` | `שהות מרבית ביחידה זו היא N לילות.` |
-| טווח | — | `nights >= minimum` | `שהות מינימלית בתאריכים אלה היא N לילות, והבקשה היא ל-M.` |
-| `guestName` | כן | 2–120 תווים | `שם האורח חייב להכיל לפחות שני תווים.` |
-| `guestCount` | כן | שלם, 1–50, `<= max_guests` | `חייב להיות לפחות אורח אחד בהזמנה.` / `היחידה מאכלסת עד N אורחים.` |
-| `guestPhone` | כן² | E.164 אחרי נרמול | `מספר טלפון אינו תקין. לדוגמה: 050-1234567` |
-| `source` | כן | מ-`BOOKING_SOURCES` | `מקור ההזמנה אינו מוכר.` |
-| `status` (ביצירה) | לא | מ-`INITIAL_STATUSES` | `לא ניתן לפתוח הזמנה במצב הזה.` |
-| `baseNightlyAgorot` | כן | שלם `>= 0` | `מחיר ללילה חייב להיות מספר שלם של אגורות, ולא שלילי.` |
-| `discountPercent` | לא | 0–100 | `הנחה חייבת להיות בין 0 ל-100 אחוזים.` |
-| `manualDiscountAgorot` | לא | שלם `>= 0` + נימוק | `הנחה ידנית דורשת נימוק. הסבר בקצרה מדוע היא ניתנת.` |
-| `addons[]` | לא | עד 20, כמות 1–99 | `ניתן להוסיף עד 20 תוספות להזמנה.` |
-| `taxRatePercent` | לא | 0–100 | `שיעור המע״מ חייב להיות בין 0 ל-100.` |
-| `reason` | תלוי | לא ריק אחרי `trim` | `הפעולה הזו דורשת נימוק. הסבר בקצרה מדוע היא מבוצעת.` |
-| `expectedVersion` | כן³ | שלם | `לא ידוע איזו גרסה של הרשומה נערכה. רענן את הדף ונסה שוב.` |
-| `minutes` (החזקה) | לא | 1–43,200, `<= maxMinutes` | `משך ההחזקה המרבי הוא N דקות. לחסימה ארוכה יותר השתמש בחסימת יחידה.` |
-| `reason` (החזקה) | כן | מ-`HOLD_REASONS` | `סיבת ההחזקה אינה מוכרת.` |
+| שדה                    | חובה | טווח / פורמט                                | ההודעה שהמשתמש רואה                                                   |
+| ---------------------- | :--: | ------------------------------------------- | --------------------------------------------------------------------- |
+| `unitId`               |  כן  | uuid קיים, `status = 'active'`, בטווח השחקן | `היחידה אינה זמינה למכירה. בדוק את הגדרות היחידה.`                    |
+| `propertyId`           | כן¹  | חייב להיות הנכס של היחידה                   | `היחידה הזו אינה שייכת לנכס שנבחר.`                                   |
+| `checkIn`              |  כן  | `YYYY-MM-DD`, תאריך קיים בלוח               | `תאריך חייב להיות בפורמט YYYY-MM-DD.` / `התאריך אינו קיים בלוח השנה.` |
+| `checkOut`             |  כן  | `> checkIn`                                 | `תאריך העזיבה חייב להיות מאוחר מתאריך ההגעה.`                         |
+| טווח                   |  —   | `nights <= max_nights`                      | `שהות מרבית ביחידה זו היא N לילות.`                                   |
+| טווח                   |  —   | `nights >= minimum`                         | `שהות מינימלית בתאריכים אלה היא N לילות, והבקשה היא ל-M.`             |
+| `guestName`            |  כן  | 2–120 תווים                                 | `שם האורח חייב להכיל לפחות שני תווים.`                                |
+| `guestCount`           |  כן  | שלם, 1–50, `<= max_guests`                  | `חייב להיות לפחות אורח אחד בהזמנה.` / `היחידה מאכלסת עד N אורחים.`    |
+| `guestPhone`           | כן²  | E.164 אחרי נרמול                            | `מספר טלפון אינו תקין. לדוגמה: 050-1234567`                           |
+| `source`               |  כן  | מ-`BOOKING_SOURCES`                         | `מקור ההזמנה אינו מוכר.`                                              |
+| `status` (ביצירה)      |  לא  | מ-`INITIAL_STATUSES`                        | `לא ניתן לפתוח הזמנה במצב הזה.`                                       |
+| `baseNightlyAgorot`    |  כן  | שלם `>= 0`                                  | `מחיר ללילה חייב להיות מספר שלם של אגורות, ולא שלילי.`                |
+| `discountPercent`      |  לא  | 0–100                                       | `הנחה חייבת להיות בין 0 ל-100 אחוזים.`                                |
+| `manualDiscountAgorot` |  לא  | שלם `>= 0` + נימוק                          | `הנחה ידנית דורשת נימוק. הסבר בקצרה מדוע היא ניתנת.`                  |
+| `addons[]`             |  לא  | עד 20, כמות 1–99                            | `ניתן להוסיף עד 20 תוספות להזמנה.`                                    |
+| `taxRatePercent`       |  לא  | 0–100                                       | `שיעור המע״מ חייב להיות בין 0 ל-100.`                                 |
+| `reason`               | תלוי | לא ריק אחרי `trim`                          | `הפעולה הזו דורשת נימוק. הסבר בקצרה מדוע היא מבוצעת.`                 |
+| `expectedVersion`      | כן³  | שלם                                         | `לא ידוע איזו גרסה של הרשומה נערכה. רענן את הדף ונסה שוב.`            |
+| `minutes` (החזקה)      |  לא  | 1–43,200, `<= maxMinutes`                   | `משך ההחזקה המרבי הוא N דקות. לחסימה ארוכה יותר השתמש בחסימת יחידה.`  |
+| `reason` (החזקה)       |  כן  | מ-`HOLD_REASONS`                            | `סיבת ההחזקה אינה מוכרת.`                                             |
 
 ¹ ⚠️ היום `propertyId` אופציונלי בסכימת הקלט. ראה C-5.
 ² מרגע `option` ומעלה. פנייה יכולה להיות בלי טלפון.
@@ -860,26 +860,26 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 התבנית היא **טריגר → תנאי → פעולה**. הטריגר הוא תמיד אירוע דומיין,
 לעולם לא קריאה ישירה מהפעולה.
 
-| # | טריגר | תנאי | פעולה | למי | ערוץ |
-| --- | --- | --- | --- | --- | --- |
-| A-1 | `booking.created` | `status = 'awaiting_payment'` | קישור תשלום | אורח | WhatsApp + מייל |
-| A-2 | `booking.optioned` | תמיד | "התאריכים שמורים עד HH:MM" | אורח + סוכן | WhatsApp |
-| A-3 | `booking.confirmed` | תמיד | אישור הזמנה + פרטי הגעה | אורח | מייל |
-| A-4 | `booking.confirmed` | `agent_user_id` קיים | "העסקה נסגרה, עמלה ₪X" | סוכן | התראה בתוך המוצר |
-| A-5 | תזמון יומי | `check_in - 3 ימים`, סטטוס `confirmed` | מעבר ל-`pre_arrival` + הודעת טרום-הגעה | אורח | WhatsApp |
-| A-6 | תזמון יומי | `check_in = היום`, `ready_for_check_in` לא הושג עד 12:00 | "היחידה עדיין לא מוכנה" | משק בית | התראה |
-| A-7 | תזמון כל 5 דקות | `holds.expires_at <= now()` | מחיקת שורות תביעה + `hold.expired` | מחזיק ההחזקה | התראה בתוך המוצר |
-| A-8 | `hold.created` | `reason = 'agent_quote'` | טיימר במסך + התראה 5 דקות לפני הפקיעה | הסוכן | התראה |
-| A-9 | `booking.cancelled` | תמיד | התאמה מול `waitlist_entries` | — | פנימי |
-| A-10 | `booking.cancelled` | `paid_agorot > 0` | **בקשת החזר**, לא החזר | מנהל כספים | משימה |
-| A-11 | `hold.expired` / `unit_block.removed` | תאריכים התפנו | התאמה מול הרשימה | — | פנימי |
-| A-12 | `waitlist.matched` | קיים מועמד ראשון | החזקה + הצעה | האורח הממתין | WhatsApp |
-| A-13 | `booking.dates_amended` | תמיד | עדכון משימות הכנה וניקיון + הודעה | אורח + צוות | מייל + התראה |
-| A-14 | `booking.checked_out` | תמיד | פתיחת ניקיון ובדיקה | משק בית | משימה |
-| A-15 | `booking.deposit_released` | תמיד | "הפיקדון שוחרר" | אורח | מייל |
-| A-16 | תזמון | `checked_out + 24h` | בקשת חוות דעת | אורח | מייל |
-| A-17 | `booking.no_show` | תמיד | חיוב לפי מדיניות + שחרור התאריכים | מנהל כספים | משימה |
-| A-18 | תזמון | `awaiting_payment` מעל N שעות | תזכורת, ואז שחרור אוטומטי | אורח, ואז מוכר | WhatsApp |
+| #    | טריגר                                 | תנאי                                                     | פעולה                                  | למי            | ערוץ             |
+| ---- | ------------------------------------- | -------------------------------------------------------- | -------------------------------------- | -------------- | ---------------- |
+| A-1  | `booking.created`                     | `status = 'awaiting_payment'`                            | קישור תשלום                            | אורח           | WhatsApp + מייל  |
+| A-2  | `booking.optioned`                    | תמיד                                                     | "התאריכים שמורים עד HH:MM"             | אורח + סוכן    | WhatsApp         |
+| A-3  | `booking.confirmed`                   | תמיד                                                     | אישור הזמנה + פרטי הגעה                | אורח           | מייל             |
+| A-4  | `booking.confirmed`                   | `agent_user_id` קיים                                     | "העסקה נסגרה, עמלה ₪X"                 | סוכן           | התראה בתוך המוצר |
+| A-5  | תזמון יומי                            | `check_in - 3 ימים`, סטטוס `confirmed`                   | מעבר ל-`pre_arrival` + הודעת טרום-הגעה | אורח           | WhatsApp         |
+| A-6  | תזמון יומי                            | `check_in = היום`, `ready_for_check_in` לא הושג עד 12:00 | "היחידה עדיין לא מוכנה"                | משק בית        | התראה            |
+| A-7  | תזמון כל 5 דקות                       | `holds.expires_at <= now()`                              | מחיקת שורות תביעה + `hold.expired`     | מחזיק ההחזקה   | התראה בתוך המוצר |
+| A-8  | `hold.created`                        | `reason = 'agent_quote'`                                 | טיימר במסך + התראה 5 דקות לפני הפקיעה  | הסוכן          | התראה            |
+| A-9  | `booking.cancelled`                   | תמיד                                                     | התאמה מול `waitlist_entries`           | —              | פנימי            |
+| A-10 | `booking.cancelled`                   | `paid_agorot > 0`                                        | **בקשת החזר**, לא החזר                 | מנהל כספים     | משימה            |
+| A-11 | `hold.expired` / `unit_block.removed` | תאריכים התפנו                                            | התאמה מול הרשימה                       | —              | פנימי            |
+| A-12 | `waitlist.matched`                    | קיים מועמד ראשון                                         | החזקה + הצעה                           | האורח הממתין   | WhatsApp         |
+| A-13 | `booking.dates_amended`               | תמיד                                                     | עדכון משימות הכנה וניקיון + הודעה      | אורח + צוות    | מייל + התראה     |
+| A-14 | `booking.checked_out`                 | תמיד                                                     | פתיחת ניקיון ובדיקה                    | משק בית        | משימה            |
+| A-15 | `booking.deposit_released`            | תמיד                                                     | "הפיקדון שוחרר"                        | אורח           | מייל             |
+| A-16 | תזמון                                 | `checked_out + 24h`                                      | בקשת חוות דעת                          | אורח           | מייל             |
+| A-17 | `booking.no_show`                     | תמיד                                                     | חיוב לפי מדיניות + שחרור התאריכים      | מנהל כספים     | משימה            |
+| A-18 | תזמון                                 | `awaiting_payment` מעל N שעות                            | תזכורת, ואז שחרור אוטומטי              | אורח, ואז מוכר | WhatsApp         |
 
 **כשל משלוח:** אירועי דומיין מתפרסמים **אחרי** ה-commit, ו-
 `operation.ts` תופס כשל, מדווח דרך `onEventError` ו**לעולם לא זורק**.
@@ -897,11 +897,11 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ### 10.1 שלוש שכבות, ולכל אחת תפקיד אחר
 
-| שכבה | מפני מה מגנה | איפה |
-| --- | --- | --- |
-| נעילה אופטימית (`version`) | שני עובדים שעורכים את **אותה** הזמנה | `operation.ts` שלב 6 + `WHERE version = $n` ב-`updateBooking` |
-| אילוץ הדרה (`unit_claims`) | שני אנשים שמוכרים את **אותם תאריכים** | המסד. 🔒 **הערובה** |
-| מפתח Idempotency | **אותה בקשה** שנשלחה פעמיים | `operation.ts` שלב 3 |
+| שכבה                       | מפני מה מגנה                          | איפה                                                          |
+| -------------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| נעילה אופטימית (`version`) | שני עובדים שעורכים את **אותה** הזמנה  | `operation.ts` שלב 6 + `WHERE version = $n` ב-`updateBooking` |
+| אילוץ הדרה (`unit_claims`) | שני אנשים שמוכרים את **אותם תאריכים** | המסד. 🔒 **הערובה**                                           |
+| מפתח Idempotency           | **אותה בקשה** שנשלחה פעמיים           | `operation.ts` שלב 3                                          |
 
 🔒 **שלושתן נחוצות ואף אחת אינה מחליפה את השנייה.** גרסה לא מגלה שני
 אנשים שהזמינו שתי הזמנות שונות באותה יחידה. אילוץ הדרה לא מגלה שני אנשים
@@ -933,15 +933,15 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ### 10.4 מפתחות Idempotency — חובה, לא המלצה
 
-| פעולה | מפתח נדרש? | למה |
-| --- | :-: | --- |
-| `booking.create` מהאתר | **כן** | כפתור כפול = שתי הזמנות לאותו אורח |
-| `booking.create` מייבוא ערוץ | **כן** | webhook נשלח שוב זה נורמלי |
-| `booking.create` ידני | מומלץ | פקידה לוחצת פעמיים כשהרשת איטית |
-| `hold.create` | **כן** | שתי החזקות מקבילות שורפות את המכסה |
-| `payment.*` | **כן** | לא המודול הזה, נאמר לשלמות |
-| שינוי סטטוס | לא | `version` כבר מונע חזרה |
-| ביטול | **כן** | ביטול כפול = שני חישובי דמי ביטול |
+| פעולה                        | מפתח נדרש? | למה                                |
+| ---------------------------- | :--------: | ---------------------------------- |
+| `booking.create` מהאתר       |   **כן**   | כפתור כפול = שתי הזמנות לאותו אורח |
+| `booking.create` מייבוא ערוץ |   **כן**   | webhook נשלח שוב זה נורמלי         |
+| `booking.create` ידני        |   מומלץ    | פקידה לוחצת פעמיים כשהרשת איטית    |
+| `hold.create`                |   **כן**   | שתי החזקות מקבילות שורפות את המכסה |
+| `payment.*`                  |   **כן**   | לא המודול הזה, נאמר לשלמות         |
+| שינוי סטטוס                  |     לא     | `version` כבר מונע חזרה            |
+| ביטול                        |   **כן**   | ביטול כפול = שני חישובי דמי ביטול  |
 
 הצינור שומר את המפתח **לפני** העבודה ולא אחריה, מזהה `replayed`,
 `in_flight` ו-`payload_mismatch`, ומשחרר את המפתח בכישלון כדי שהניסיון
@@ -957,12 +957,12 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ## 11. אינטגרציות
 
-| ספק | מה נקרא | מה נכתב | בתקלה | איך מתאזנים |
-| --- | --- | --- | --- | --- |
-| **Airbnb / Booking.com / VRBO** (ערוצים) | הזמנות חדשות, שינויים, ביטולים | זמינות ומחירים החוצה | **סוגרים החוצה, לא נכנסה** — עדיף מלאי שלא נמכר מאשר overbooking | סנכרון מלא כל 15 דקות; דוח סתירות למנהל |
-| **סליקה** | סטטוס תשלום (webhook) | בקשות חיוב, החזרים | ההזמנה נשארת `awaiting_payment`, התזכורת רצה | התאמת webhook מול הזמנות פתוחות פעם בשעה |
-| **WhatsApp / מייל** | — | התראות | תור עם 3 ניסיונות, אז "נכשל" גלוי | שליחה ידנית חוזרת מהמסך |
-| **מנוע חוזים** | סטטוס חתימה | בקשת חתימה | `contract_pending` נשאר, תזכורת | — |
+| ספק                                      | מה נקרא                        | מה נכתב              | בתקלה                                                            | איך מתאזנים                              |
+| ---------------------------------------- | ------------------------------ | -------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
+| **Airbnb / Booking.com / VRBO** (ערוצים) | הזמנות חדשות, שינויים, ביטולים | זמינות ומחירים החוצה | **סוגרים החוצה, לא נכנסה** — עדיף מלאי שלא נמכר מאשר overbooking | סנכרון מלא כל 15 דקות; דוח סתירות למנהל  |
+| **סליקה**                                | סטטוס תשלום (webhook)          | בקשות חיוב, החזרים   | ההזמנה נשארת `awaiting_payment`, התזכורת רצה                     | התאמת webhook מול הזמנות פתוחות פעם בשעה |
+| **WhatsApp / מייל**                      | —                              | התראות               | תור עם 3 ניסיונות, אז "נכשל" גלוי                                | שליחה ידנית חוזרת מהמסך                  |
+| **מנוע חוזים**                           | סטטוס חתימה                    | בקשת חתימה           | `contract_pending` נשאר, תזכורת                                  | —                                        |
 
 **חוק ייבוא הערוץ:** 🔒 הזמנת OTA מיובאת **תמיד** כ-`confirmed`, עם
 `channel_reservation_id` ייחודי לכל `(organization_id, source)`. ניסיון
@@ -1096,17 +1096,17 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 מה שההזמנות מזינות אל `BookingFactRow` ומשם אל `MetricFacts`:
 
-| שדה ב-`MetricFacts` | מה ההזמנות תורמות |
-| --- | --- |
-| `occupiedUnitNights` | לילות של הזמנות ב-`REALISED_STATUSES` |
-| `soldUnitNights` | אותם לילות פחות `option` ופחות לילות חינם |
-| `heldOptionUnitNights` | לילות ב-`option` — תופסים יומן ואינם מכירה |
-| `roomRevenue` | שורות `accommodation`, לילה-לילה, **נטו ממס** |
-| `ancillaryRevenue` | `cleaning_fee`, `addon`, `extra_guest` — מוכרות בהגעה |
-| `revenueBySource`, `directRevenue` | לפי `source` ו-`DIRECT_SOURCES` |
-| `leadTimeDayTotal` | `committedOn − createdOn` |
-| `cancelledArrivalCount` | הזמנות שהיו אמורות להגיע בחלון ובוטלו |
-| `commission` | `agentCommissionLine`, לילה-לילה |
+| שדה ב-`MetricFacts`                | מה ההזמנות תורמות                                     |
+| ---------------------------------- | ----------------------------------------------------- |
+| `occupiedUnitNights`               | לילות של הזמנות ב-`REALISED_STATUSES`                 |
+| `soldUnitNights`                   | אותם לילות פחות `option` ופחות לילות חינם             |
+| `heldOptionUnitNights`             | לילות ב-`option` — תופסים יומן ואינם מכירה            |
+| `roomRevenue`                      | שורות `accommodation`, לילה-לילה, **נטו ממס**         |
+| `ancillaryRevenue`                 | `cleaning_fee`, `addon`, `extra_guest` — מוכרות בהגעה |
+| `revenueBySource`, `directRevenue` | לפי `source` ו-`DIRECT_SOURCES`                       |
+| `leadTimeDayTotal`                 | `committedOn − createdOn`                             |
+| `cancelledArrivalCount`            | הזמנות שהיו אמורות להגיע בחלון ובוטלו                 |
+| `commission`                       | `agentCommissionLine`, לילה-לילה                      |
 
 **מדדים ייחודיים למודול** (מוגדרים ב-`metrics/`, מוזנים מכאן):
 שיעור המרה של פנייה להזמנה · שיעור המרה של החזקה להזמנה · זמן ממוצע
@@ -1125,79 +1125,79 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ### מרוצים על התאריכים
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| E-01 | שני סוכנים לוחצים "אשר" על אותם תאריכים באותה שנייה | שניהם עוברים `checkAvailability`, **שניהם נכתבים** — אין אילוץ במסד | הראשון מצליח; השני מקבל `ConflictError` בעברית עם החלופות של §7.8 | Integration: שתי טרנזקציות מקבילות מול Postgres אמיתי, `Promise.allSettled`, קובעים בדיוק הצלחה אחת ו-`23P01` אחד |
-| E-02 | הזמנת OTA והזמנה ישירה נכתבות באותו רגע | כנ״ל | הראשונה שמגיעה ל-commit מנצחת. השנייה: אם ישירה — כישלון עם חלופות; אם OTA — נשמרת מסומנת `conflict` + אירוע חמור (§11) | Integration עם השהיה מבוקרת בין ה-`rule` ל-`execute` בשני הזרמים |
-| E-03 | תפוגת החזקה בדיוק ברגע ההמרה | `assertHoldIsLive` משתמש ב-`now` של הבקשה; ההשוואה קפדנית | `expiresAt == now` פירושו פקעה. ההמרה נכשלת עם "תוקף ההחזקה פג והתאריכים חזרו למכירה" | Unit: `isHoldLive` בדיוק ב-`expiresAt`, ב-`expiresAt-1ms` וב-`+1ms` |
-| E-04 | ההחזקה של סוכן פוקעת באמצע הצ׳ק-אאוט של האורח | ההמרה נכשלת נכון. **התאריכים אולי כבר נמכרו** | הכישלון מבחין בין שני מצבים: התאריכים עדיין פנויים → הצעה להחזיק מחדש בלחיצה; נמכרו → חלופות. **לעולם לא "נסה שוב" סתם** | Integration: פקיעה מבוקרת, ואז שני תרחישים — עם מתחרה ובלי |
-| E-05 | שני עובדים עורכים את אותה הזמנה | `version` נבדק בצינור וב-`WHERE` | השני מקבל `ConflictError` שאומר **מה** השתנה ומי שינה, לא רק "רענן" | Integration: שתי בקשות עם אותו `expectedVersion` |
-| E-06 | אותה בקשת יצירה נשלחת פעמיים (כפתור כפול) | עם מפתח — replay; **בלי מפתח — שתי הזמנות** | האתר **חייב** לשלוח מפתח. שרת שקיבל יצירה מהאתר בלי מפתח מסרב | E2E: לחיצה כפולה מהירה; Unit: הצינור מחזיר `replayed: true` |
-| E-07 | שתי בקשות עם אותו מפתח ותוכן שונה | `payload_mismatch` | 409 עם "בקשה זו כבר בוצעה עם פרטים אחרים" | Unit קיים ב-`idempotency.test.ts`, מורחב להזמנה |
-| E-08 | הרחבת שהות של אורח מתנגשת עם ההזמנה הבאה | `checkAvailability` תופס עם `ignoreBookingId` | סירוב עם שם ההזמנה החוסמת ותאריכיה, והצעה: להעביר את האורח הבא ליחידה אחרת | Unit: הזמנה סמוכה, הארכה בלילה אחד |
+| #    | המקרה                                               | מה קורה היום                                                        | מה **צריך** לקרות                                                                                                        | איך בודקים                                                                                                        |
+| ---- | --------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| E-01 | שני סוכנים לוחצים "אשר" על אותם תאריכים באותה שנייה | שניהם עוברים `checkAvailability`, **שניהם נכתבים** — אין אילוץ במסד | הראשון מצליח; השני מקבל `ConflictError` בעברית עם החלופות של §7.8                                                        | Integration: שתי טרנזקציות מקבילות מול Postgres אמיתי, `Promise.allSettled`, קובעים בדיוק הצלחה אחת ו-`23P01` אחד |
+| E-02 | הזמנת OTA והזמנה ישירה נכתבות באותו רגע             | כנ״ל                                                                | הראשונה שמגיעה ל-commit מנצחת. השנייה: אם ישירה — כישלון עם חלופות; אם OTA — נשמרת מסומנת `conflict` + אירוע חמור (§11)  | Integration עם השהיה מבוקרת בין ה-`rule` ל-`execute` בשני הזרמים                                                  |
+| E-03 | תפוגת החזקה בדיוק ברגע ההמרה                        | `assertHoldIsLive` משתמש ב-`now` של הבקשה; ההשוואה קפדנית           | `expiresAt == now` פירושו פקעה. ההמרה נכשלת עם "תוקף ההחזקה פג והתאריכים חזרו למכירה"                                    | Unit: `isHoldLive` בדיוק ב-`expiresAt`, ב-`expiresAt-1ms` וב-`+1ms`                                               |
+| E-04 | ההחזקה של סוכן פוקעת באמצע הצ׳ק-אאוט של האורח       | ההמרה נכשלת נכון. **התאריכים אולי כבר נמכרו**                       | הכישלון מבחין בין שני מצבים: התאריכים עדיין פנויים → הצעה להחזיק מחדש בלחיצה; נמכרו → חלופות. **לעולם לא "נסה שוב" סתם** | Integration: פקיעה מבוקרת, ואז שני תרחישים — עם מתחרה ובלי                                                        |
+| E-05 | שני עובדים עורכים את אותה הזמנה                     | `version` נבדק בצינור וב-`WHERE`                                    | השני מקבל `ConflictError` שאומר **מה** השתנה ומי שינה, לא רק "רענן"                                                      | Integration: שתי בקשות עם אותו `expectedVersion`                                                                  |
+| E-06 | אותה בקשת יצירה נשלחת פעמיים (כפתור כפול)           | עם מפתח — replay; **בלי מפתח — שתי הזמנות**                         | האתר **חייב** לשלוח מפתח. שרת שקיבל יצירה מהאתר בלי מפתח מסרב                                                            | E2E: לחיצה כפולה מהירה; Unit: הצינור מחזיר `replayed: true`                                                       |
+| E-07 | שתי בקשות עם אותו מפתח ותוכן שונה                   | `payload_mismatch`                                                  | 409 עם "בקשה זו כבר בוצעה עם פרטים אחרים"                                                                                | Unit קיים ב-`idempotency.test.ts`, מורחב להזמנה                                                                   |
+| E-08 | הרחבת שהות של אורח מתנגשת עם ההזמנה הבאה            | `checkAvailability` תופס עם `ignoreBookingId`                       | סירוב עם שם ההזמנה החוסמת ותאריכיה, והצעה: להעביר את האורח הבא ליחידה אחרת                                               | Unit: הזמנה סמוכה, הארכה בלילה אחד                                                                                |
 
 ### תשלום מול מצב
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| E-09 | האורח משנה תאריכים בזמן שתשלום בדרך | אין קשר בין השניים. **המחיר יכול להשתנות בזמן שהסליקה מחייבת את הישן** | 🔒 הזמנה עם תשלום פתוח **נעולה לשינוי מחיר**. שינוי תאריכים מותר; אם המחיר החדש שונה, השינוי נדחה עד שהתשלום הוכרע. השדה: `payment_in_flight_since` | Integration: פתיחת ניסיון תשלום, ואז `amend_dates` עם מחיר אחר → 409 מוסבר |
-| E-10 | התשלום מצליח אחרי שההזמנה בוטלה | ה-webhook יגיע להזמנה במצב `cancelled` | 🔒 **הכסף אינו נדחה — הוא מתקבל ומסומן להחזר.** נוצרת משימת החזר עם הנימוק, האורח מקבל "התשלום התקבל וההזמנה כבר בוטלה, ההחזר בדרך". ההזמנה **נשארת** מבוטלת | Integration: ביטול, ואז webhook הצלחה; קובעים `paid_agorot > 0`, סטטוס `cancelled`, ומשימת החזר אחת |
-| E-11 | התשלום מצליח פעמיים על אותה הזמנה | — | חיוב שני עם אותו `idempotencyKey` = replay. בלי מפתח — נרשם, ומסומן לזיכוי | Integration |
-| E-12 | האורח משלם מקדמה אחרי שהתאריכים נמכרו למישהו אחר | לא ייתכן היום כי אין תפיסה אמיתית; אחרי `0009` ייתכן אם ההזמנה הייתה `awaiting_payment` ופקעה | `awaiting_payment` **תופס יומן** (הוא ב-`OCCUPYING_STATUSES`), ולכן זה לא יקרה — **אלא** אם A-18 שחררה אותה. אז: הכסף מתקבל, ההזמנה נשארת משוחררת, החזר + התנצלות + חלופות | Integration עם A-18 מופעל |
-| E-13 | ביטול של הזמנה שהמע״מ בה השתנה מאז | — | 🔒 חישוב הביטול מבוסס על `tax_rate_bps_applied` ו-`cancellation_policy_snapshot` של ההזמנה, לא על הנכס היום | Unit: מדיניות שונה בנכס מזו שבתמונת המצב |
+| #    | המקרה                                            | מה קורה היום                                                                                  | מה **צריך** לקרות                                                                                                                                                          | איך בודקים                                                                                          |
+| ---- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| E-09 | האורח משנה תאריכים בזמן שתשלום בדרך              | אין קשר בין השניים. **המחיר יכול להשתנות בזמן שהסליקה מחייבת את הישן**                        | 🔒 הזמנה עם תשלום פתוח **נעולה לשינוי מחיר**. שינוי תאריכים מותר; אם המחיר החדש שונה, השינוי נדחה עד שהתשלום הוכרע. השדה: `payment_in_flight_since`                        | Integration: פתיחת ניסיון תשלום, ואז `amend_dates` עם מחיר אחר → 409 מוסבר                          |
+| E-10 | התשלום מצליח אחרי שההזמנה בוטלה                  | ה-webhook יגיע להזמנה במצב `cancelled`                                                        | 🔒 **הכסף אינו נדחה — הוא מתקבל ומסומן להחזר.** נוצרת משימת החזר עם הנימוק, האורח מקבל "התשלום התקבל וההזמנה כבר בוטלה, ההחזר בדרך". ההזמנה **נשארת** מבוטלת               | Integration: ביטול, ואז webhook הצלחה; קובעים `paid_agorot > 0`, סטטוס `cancelled`, ומשימת החזר אחת |
+| E-11 | התשלום מצליח פעמיים על אותה הזמנה                | —                                                                                             | חיוב שני עם אותו `idempotencyKey` = replay. בלי מפתח — נרשם, ומסומן לזיכוי                                                                                                 | Integration                                                                                         |
+| E-12 | האורח משלם מקדמה אחרי שהתאריכים נמכרו למישהו אחר | לא ייתכן היום כי אין תפיסה אמיתית; אחרי `0009` ייתכן אם ההזמנה הייתה `awaiting_payment` ופקעה | `awaiting_payment` **תופס יומן** (הוא ב-`OCCUPYING_STATUSES`), ולכן זה לא יקרה — **אלא** אם A-18 שחררה אותה. אז: הכסף מתקבל, ההזמנה נשארת משוחררת, החזר + התנצלות + חלופות | Integration עם A-18 מופעל                                                                           |
+| E-13 | ביטול של הזמנה שהמע״מ בה השתנה מאז               | —                                                                                             | 🔒 חישוב הביטול מבוסס על `tax_rate_bps_applied` ו-`cancellation_policy_snapshot` של ההזמנה, לא על הנכס היום                                                                | Unit: מדיניות שונה בנכס מזו שבתמונת המצב                                                            |
 
 ### ערוצים
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
+| #    | המקרה                                    | מה קורה היום      | מה **צריך** לקרות                                                                                                                                                                                                 | איך בודקים                         |
+| ---- | ---------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
 | E-14 | הזמנת OTA מגיעה על תאריכים שנמכרו ישירות | תיווצר. אין אילוץ | נשמרת `confirmed` **בלי שורת תביעה**, מסומנת `conflict`, אירוע חמור למנהל, ומסך "התנגשות ערוץ" שמציע: להעביר יחידה, לבטל את הישירה, או לבטל מול ה-OTA. 🔒 **לעולם לא דחייה שקטה** — האורח כבר קיבל אישור מ-Airbnb | Integration: ייבוא מול הזמנה קיימת |
-| E-15 | אותו webhook מגיע שלוש פעמים | — | האינדקס הייחודי על `(organization_id, source, channel_reservation_id)` הופך את השני והשלישי לעדכון | Integration |
-| E-16 | ה-OTA מבטל ואנחנו לא שמענו | — | סנכרון מלא כל 15 דקות; פער מייצר שורה בדוח סתירות ו**אינו מבטל אוטומטית** | Integration עם תגובת ערוץ מזויפת |
-| E-17 | הערוץ לא מגיב 20 דקות והמלאי לא נסגר | — | 🔒 סוגרים החוצה בכישלון: אם דחיפת הזמינות נכשלה, היחידה **מסומנת כלא-נמכרת בערוץ** עד הסנכרון המוצלח הבא | Integration עם ספק שנופל |
+| E-15 | אותו webhook מגיע שלוש פעמים             | —                 | האינדקס הייחודי על `(organization_id, source, channel_reservation_id)` הופך את השני והשלישי לעדכון                                                                                                                | Integration                        |
+| E-16 | ה-OTA מבטל ואנחנו לא שמענו               | —                 | סנכרון מלא כל 15 דקות; פער מייצר שורה בדוח סתירות ו**אינו מבטל אוטומטית**                                                                                                                                         | Integration עם תגובת ערוץ מזויפת   |
+| E-17 | הערוץ לא מגיב 20 דקות והמלאי לא נסגר     | —                 | 🔒 סוגרים החוצה בכישלון: אם דחיפת הזמינות נכשלה, היחידה **מסומנת כלא-נמכרת בערוץ** עד הסנכרון המוצלח הבא                                                                                                          | Integration עם ספק שנופל           |
 
 ### שינויים
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| E-18 | העברה ליחידה שתפוסה **בלילה אחד** מתוך הטווח | אין פעולת העברה בכלל | סירוב שמציין **בדיוק איזה לילה** ומי תופס אותו, ומציע פיצול שהות בין שתי יחידות כאפשרות מפורשת | Unit: יחידה עם הזמנה של לילה אחד בתוך הטווח; קובעים שהודעת ה-blocker נושאת את התאריך |
-| E-19 | ההעברה מצליחה חלקית — התביעה הישנה שוחררה, החדשה נכשלה | — | 🔒 **בלתי אפשרי:** שתי הפעולות באותה טרנזקציה. rollback מחזיר את התביעה הישנה | Integration: הזרקת כישלון בין השחרור לתפיסה; קובעים שהמצב זהה לחלוטין לזה שלפני |
-| E-20 | ההזמנה עוברת לנכס אחר | אין פעולה. `propertyId` מהקלט ולא מהיחידה | העברת נכס = העברת יחידה שגוררת גם `property_id`. **המפתח הזר המורכב הופך אי-התאמה לבלתי אפשרית**. משימות, צוות ומדיניות מיסוי מחושבים מחדש | Integration: קובעים ש-`property_id` תמיד = של היחידה |
-| E-21 | מספר האורחים משתנה אחרי שהניקיון התחיל | — | 🔒 המשימה הקיימת **אינה מבוטלת**. נפתחת משימת **השלמה** על ההפרש בלבד (3 מצעים נוספים, לא 9 מחדש), משויכת לאותו אדם, ועם התראה מיידית. אם הניקיון כבר `completed` — משימה חדשה בעדיפות גבוהה | Integration: משימה ב-`in_progress`, שינוי 6→9; קובעים שתי משימות והפרש נכון |
-| E-22 | מספר האורחים יורד אחרי שההכנה הושלמה | — | **אין ביטול משימה.** ההפרש נרשם כעלות שנשרפה בשדה `wasted_cost_agorot` ומופיע ברווחיות | Unit על מנוע ההכנה |
-| E-23 | תאריכים משתנים והמחיר יורד מתחת למה ששולם | היום: המחיר מחושב מחדש רק אם נשלח `pricing` | סירוב עד להכרעה: זיכוי או השארת יתרה לזכות האורח. **לא הפחתה שקטה שיוצרת חוב של העסק** | Unit: הזמנה ששולמה במלואה, קיצור לילה |
-| E-24 | הנחה ידנית אובדת בשינוי תאריכים | ⚠️ **קורה היום.** `amendBookingDates` מעביר רק `input.pricing` ולא `manualDiscountAgorot`, וההנחה נעלמת | 🔒 שורות הנחה ידנית **נשמרות ומועברות** לתמחור החדש, אלא אם המשתמש הסיר אותן במפורש בתצוגה המקדימה | Unit: הזמנה עם הנחה ידנית → `amend_dates` עם `pricing` → קובעים שהשורה קיימת. **הבדיקה נכשלת היום** |
-| E-25 | שינוי סוכן אחרי שהעמלה אושרה | — | העמלה המאושרת **אינה זזה**. נוצרת התאמה: לסוכן הישן נשארת, לחדש נרשמת מנקודת השינוי ❓ Q-7 | Integration מול מנוע העמלות |
+| #    | המקרה                                                  | מה קורה היום                                                                                            | מה **צריך** לקרות                                                                                                                                                                            | איך בודקים                                                                                          |
+| ---- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| E-18 | העברה ליחידה שתפוסה **בלילה אחד** מתוך הטווח           | אין פעולת העברה בכלל                                                                                    | סירוב שמציין **בדיוק איזה לילה** ומי תופס אותו, ומציע פיצול שהות בין שתי יחידות כאפשרות מפורשת                                                                                               | Unit: יחידה עם הזמנה של לילה אחד בתוך הטווח; קובעים שהודעת ה-blocker נושאת את התאריך                |
+| E-19 | ההעברה מצליחה חלקית — התביעה הישנה שוחררה, החדשה נכשלה | —                                                                                                       | 🔒 **בלתי אפשרי:** שתי הפעולות באותה טרנזקציה. rollback מחזיר את התביעה הישנה                                                                                                                | Integration: הזרקת כישלון בין השחרור לתפיסה; קובעים שהמצב זהה לחלוטין לזה שלפני                     |
+| E-20 | ההזמנה עוברת לנכס אחר                                  | אין פעולה. `propertyId` מהקלט ולא מהיחידה                                                               | העברת נכס = העברת יחידה שגוררת גם `property_id`. **המפתח הזר המורכב הופך אי-התאמה לבלתי אפשרית**. משימות, צוות ומדיניות מיסוי מחושבים מחדש                                                   | Integration: קובעים ש-`property_id` תמיד = של היחידה                                                |
+| E-21 | מספר האורחים משתנה אחרי שהניקיון התחיל                 | —                                                                                                       | 🔒 המשימה הקיימת **אינה מבוטלת**. נפתחת משימת **השלמה** על ההפרש בלבד (3 מצעים נוספים, לא 9 מחדש), משויכת לאותו אדם, ועם התראה מיידית. אם הניקיון כבר `completed` — משימה חדשה בעדיפות גבוהה | Integration: משימה ב-`in_progress`, שינוי 6→9; קובעים שתי משימות והפרש נכון                         |
+| E-22 | מספר האורחים יורד אחרי שההכנה הושלמה                   | —                                                                                                       | **אין ביטול משימה.** ההפרש נרשם כעלות שנשרפה בשדה `wasted_cost_agorot` ומופיע ברווחיות                                                                                                       | Unit על מנוע ההכנה                                                                                  |
+| E-23 | תאריכים משתנים והמחיר יורד מתחת למה ששולם              | היום: המחיר מחושב מחדש רק אם נשלח `pricing`                                                             | סירוב עד להכרעה: זיכוי או השארת יתרה לזכות האורח. **לא הפחתה שקטה שיוצרת חוב של העסק**                                                                                                       | Unit: הזמנה ששולמה במלואה, קיצור לילה                                                               |
+| E-24 | הנחה ידנית אובדת בשינוי תאריכים                        | ⚠️ **קורה היום.** `amendBookingDates` מעביר רק `input.pricing` ולא `manualDiscountAgorot`, וההנחה נעלמת | 🔒 שורות הנחה ידנית **נשמרות ומועברות** לתמחור החדש, אלא אם המשתמש הסיר אותן במפורש בתצוגה המקדימה                                                                                           | Unit: הזמנה עם הנחה ידנית → `amend_dates` עם `pricing` → קובעים שהשורה קיימת. **הבדיקה נכשלת היום** |
+| E-25 | שינוי סוכן אחרי שהעמלה אושרה                           | —                                                                                                       | העמלה המאושרת **אינה זזה**. נוצרת התאמה: לסוכן הישן נשארת, לחדש נרשמת מנקודת השינוי ❓ Q-7                                                                                                   | Integration מול מנוע העמלות                                                                         |
 
 ### מחזור החיים
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| E-26 | גיחת יום: יוצא ונכנס באותו יום | `rangesOverlap` חצי-פתוח — **אינם מתנגשים** | נכון. הלוח מציג שני חצאי-תא באותו תא | Unit: `{3.9→5.9}` מול `{5.9→7.9}` = `false`; קיים כדפוס ודורש בדיקה מפורשת |
-| E-27 | גיחת יום והצ׳ק-אאוט מתאחר | אין ייצוג. יום העזיבה כבר לא תפוס | 🔒 **התאריכים לא זזים.** נפתחת תקלה `late_checkout`, האורח הנכנס מקבל הודעה יזומה עם שעה מעודכנת, והניקיון מקבל עדיפות דחופה. **צ׳ק-אאוט מאוחר אינו הארכת שהות** — אם הוא כן, זו הארכה בתשלום ואז התאריך כן זז | Integration: `checkout_pending` אחרי `check_out_time`, הזמנה נכנסת באותו יום → קובעים תקלה, התראה ושדרוג עדיפות |
-| E-28 | האורח מגיע יום מוקדם מדי | — | סירוב צ׳ק-אין (`stayHasNotEnded` לא מכסה את זה) + הצעה: להוסיף לילה אם פנוי, במחיר של אותו לילה | Unit: תנאי `arrivalDateHasCome` הפוך |
-| E-29 | צ׳ק-אאוט מסומן ואז מתברר שהאורח לא עזב | `checked_out` משחרר תאריכים | חזרה ל-`in_house` **אינה מעבר חוקי**. הפעולה הנכונה: הארכה, שהיא `amend_dates` — ולכן היא נבדקת מול הזמינות. אם הלילה כבר נמכר → תקלה, לא תיקון שקט | Unit: `checked_out → in_house` מסורב עם `illegal_transition` |
-| E-30 | אי-הגעה מסומנת אך האורח מגיע ב-23:00 | `no_show` הוא **סופי** | 🔒 סטטוס סופי הוא סופי. הפעולה: **הזמנה חדשה** שמקשרת לישנה, עם התאריכים שנותרו. `no_show` שוחרר את התאריכים ולכן הזמינות נבדקת מחדש | Unit: כל מעבר מ-`no_show` נכשל ב-`terminal_status` |
-| E-31 | פיקדון לא שוחרר וההזמנה נסגרת | `noDepositStillHeld` חוסם | נכון: `completed` נחסם עם "עדיין מוחזק פיקדון". הודעה יומית למנהל על הזמנות תקועות | Unit קיים כתנאי; דורש בדיקה |
-| E-32 | הזמנה שלא הגיעה לתשלום נשארת `awaiting_payment` לנצח | A-18 היא היחידה שמשחררת, וטרם קיימת | 🔒 שחרור אוטומטי מותנה בהגדרה מפורשת, ומודיע **לפני** ולא אחרי. עסק שלא הפעיל — הזמנה נשארת ומופיעה בדוח "מלאי תקוע" | Integration עם שעון מוזרק |
+| #    | המקרה                                                | מה קורה היום                                | מה **צריך** לקרות                                                                                                                                                                                              | איך בודקים                                                                                                      |
+| ---- | ---------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| E-26 | גיחת יום: יוצא ונכנס באותו יום                       | `rangesOverlap` חצי-פתוח — **אינם מתנגשים** | נכון. הלוח מציג שני חצאי-תא באותו תא                                                                                                                                                                           | Unit: `{3.9→5.9}` מול `{5.9→7.9}` = `false`; קיים כדפוס ודורש בדיקה מפורשת                                      |
+| E-27 | גיחת יום והצ׳ק-אאוט מתאחר                            | אין ייצוג. יום העזיבה כבר לא תפוס           | 🔒 **התאריכים לא זזים.** נפתחת תקלה `late_checkout`, האורח הנכנס מקבל הודעה יזומה עם שעה מעודכנת, והניקיון מקבל עדיפות דחופה. **צ׳ק-אאוט מאוחר אינו הארכת שהות** — אם הוא כן, זו הארכה בתשלום ואז התאריך כן זז | Integration: `checkout_pending` אחרי `check_out_time`, הזמנה נכנסת באותו יום → קובעים תקלה, התראה ושדרוג עדיפות |
+| E-28 | האורח מגיע יום מוקדם מדי                             | —                                           | סירוב צ׳ק-אין (`stayHasNotEnded` לא מכסה את זה) + הצעה: להוסיף לילה אם פנוי, במחיר של אותו לילה                                                                                                                | Unit: תנאי `arrivalDateHasCome` הפוך                                                                            |
+| E-29 | צ׳ק-אאוט מסומן ואז מתברר שהאורח לא עזב               | `checked_out` משחרר תאריכים                 | חזרה ל-`in_house` **אינה מעבר חוקי**. הפעולה הנכונה: הארכה, שהיא `amend_dates` — ולכן היא נבדקת מול הזמינות. אם הלילה כבר נמכר → תקלה, לא תיקון שקט                                                            | Unit: `checked_out → in_house` מסורב עם `illegal_transition`                                                    |
+| E-30 | אי-הגעה מסומנת אך האורח מגיע ב-23:00                 | `no_show` הוא **סופי**                      | 🔒 סטטוס סופי הוא סופי. הפעולה: **הזמנה חדשה** שמקשרת לישנה, עם התאריכים שנותרו. `no_show` שוחרר את התאריכים ולכן הזמינות נבדקת מחדש                                                                           | Unit: כל מעבר מ-`no_show` נכשל ב-`terminal_status`                                                              |
+| E-31 | פיקדון לא שוחרר וההזמנה נסגרת                        | `noDepositStillHeld` חוסם                   | נכון: `completed` נחסם עם "עדיין מוחזק פיקדון". הודעה יומית למנהל על הזמנות תקועות                                                                                                                             | Unit קיים כתנאי; דורש בדיקה                                                                                     |
+| E-32 | הזמנה שלא הגיעה לתשלום נשארת `awaiting_payment` לנצח | A-18 היא היחידה שמשחררת, וטרם קיימת         | 🔒 שחרור אוטומטי מותנה בהגדרה מפורשת, ומודיע **לפני** ולא אחרי. עסק שלא הפעיל — הזמנה נשארת ומופיעה בדוח "מלאי תקוע"                                                                                           | Integration עם שעון מוזרק                                                                                       |
 
 ### הרשאות ובידוד
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| E-33 | מנהל בטווח `properties[A]` יוצר הזמנה עם `propertyId = A` ו-`unitId` של נכס B | ⚠️ **עובר.** `targetResource` בונה משאב מקלט לא מאומת, ו-`isWithinScope` מסתפק ב-`propertyId` | סירוב `out_of_scope`. `property_id` נגזר מהיחידה **לפני** בדיקת ה-scope | Security: בדיקה שמוכיחה את **השלילה**. נכשלת היום |
-| E-34 | סוכן מבקש הזמנה של ארגון אחר לפי מזהה | `loadBooking(organizationId, id)` מסנן; RLS תחסום גם | `NotFoundError` ולא `AuthorizationError` — 🔒 "אין הרשאה" מאשר שהרשומה קיימת | Security: קובעים 404 ולא 403 |
-| E-35 | מנקה קורא הזמנה ומקבל טלפון ומחיר | `redact()` אמור להסיר | הרשומה מגיעה בלי `guest.phone`, `guest.email`, `booking.price`, `booking.source`, `booking.deposit` | Security: בדיקה לכל שדה ב-`SENSITIVE_FIELDS`, על **כל** נתיב יציאה כולל ייצוא |
-| E-36 | סוכן מנסה לשחרר החזקה של סוכן אחר | `hold.release` נבדק על המשאב; טווח `own_records` יסרב | סירוב. מנהל **כן** רשאי, ובנימוק | Security + Unit |
-| E-37 | סוכן שהסכמו הסתיים מנסה לשנות הזמנה קיימת | `membership_not_active` | סירוב בשלב הראשון של `authorize`, לפני שנקראה שורה | Security |
+| #    | המקרה                                                                         | מה קורה היום                                                                                  | מה **צריך** לקרות                                                                                   | איך בודקים                                                                    |
+| ---- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| E-33 | מנהל בטווח `properties[A]` יוצר הזמנה עם `propertyId = A` ו-`unitId` של נכס B | ⚠️ **עובר.** `targetResource` בונה משאב מקלט לא מאומת, ו-`isWithinScope` מסתפק ב-`propertyId` | סירוב `out_of_scope`. `property_id` נגזר מהיחידה **לפני** בדיקת ה-scope                             | Security: בדיקה שמוכיחה את **השלילה**. נכשלת היום                             |
+| E-34 | סוכן מבקש הזמנה של ארגון אחר לפי מזהה                                         | `loadBooking(organizationId, id)` מסנן; RLS תחסום גם                                          | `NotFoundError` ולא `AuthorizationError` — 🔒 "אין הרשאה" מאשר שהרשומה קיימת                        | Security: קובעים 404 ולא 403                                                  |
+| E-35 | מנקה קורא הזמנה ומקבל טלפון ומחיר                                             | `redact()` אמור להסיר                                                                         | הרשומה מגיעה בלי `guest.phone`, `guest.email`, `booking.price`, `booking.source`, `booking.deposit` | Security: בדיקה לכל שדה ב-`SENSITIVE_FIELDS`, על **כל** נתיב יציאה כולל ייצוא |
+| E-36 | סוכן מנסה לשחרר החזקה של סוכן אחר                                             | `hold.release` נבדק על המשאב; טווח `own_records` יסרב                                         | סירוב. מנהל **כן** רשאי, ובנימוק                                                                    | Security + Unit                                                               |
+| E-37 | סוכן שהסכמו הסתיים מנסה לשנות הזמנה קיימת                                     | `membership_not_active`                                                                       | סירוב בשלב הראשון של `authorize`, לפני שנקראה שורה                                                  | Security                                                                      |
 
 ### קצוות של נתונים
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| E-38 | `2026-02-30` בשדה תאריך | `isoDate()` תופס — התבנית עוברת, ה-refine נכשל | `התאריך אינו קיים בלוח השנה.` | Unit קיים בדפוס; דורש בדיקה |
-| E-39 | הזמנה שחוצה מעבר שעון קיץ | תאריכים הם מחרוזות בלבד, החישוב ב-UTC | מספר הלילות נכון. `localDate` מטפל ב"היום" | Unit: 26–28.10, וגם `localDate` ב-22:30 UTC |
-| E-40 | הזמנה של 400 לילות | `max_nights` אינו נבדק | סירוב, אלא בעקיפה מפורשת. שהות ארוכה היא חוזה שכירות, לא הזמנה | Unit |
-| E-41 | `loadRules` מחזיר `null` ליחידה קיימת | דחייה כברירת מחדל — `unknown_unit` | נכון ומכוון. 🔒 **ברירת מחדל מתירנית כאן מוכרת יחידה שאיש לא הגדיר למכירה** | Unit קיים בקוד; דורש בדיקה |
+| #    | המקרה                                 | מה קורה היום                                   | מה **צריך** לקרות                                                           | איך בודקים                                  |
+| ---- | ------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- |
+| E-38 | `2026-02-30` בשדה תאריך               | `isoDate()` תופס — התבנית עוברת, ה-refine נכשל | `התאריך אינו קיים בלוח השנה.`                                               | Unit קיים בדפוס; דורש בדיקה                 |
+| E-39 | הזמנה שחוצה מעבר שעון קיץ             | תאריכים הם מחרוזות בלבד, החישוב ב-UTC          | מספר הלילות נכון. `localDate` מטפל ב"היום"                                  | Unit: 26–28.10, וגם `localDate` ב-22:30 UTC |
+| E-40 | הזמנה של 400 לילות                    | `max_nights` אינו נבדק                         | סירוב, אלא בעקיפה מפורשת. שהות ארוכה היא חוזה שכירות, לא הזמנה              | Unit                                        |
+| E-41 | `loadRules` מחזיר `null` ליחידה קיימת | דחייה כברירת מחדל — `unknown_unit`             | נכון ומכוון. 🔒 **ברירת מחדל מתירנית כאן מוכרת יחידה שאיש לא הגדיר למכירה** | Unit קיים בקוד; דורש בדיקה                  |
 
 ---
 
@@ -1207,7 +1207,7 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 זו הטעות היקרה והשכיחה ביותר: מנהל עם ארבעה נכסים בוחר "וילה הגפן"
 ומקבל את זו שבנכס השני, כי לשניהם יש יחידה בשם דומה.
 
-*המניעה — ארבע שכבות, אף אחת מהן אינה אזהרה:*
+_המניעה — ארבע שכבות, אף אחת מהן אינה אזהרה:_
 
 1. 🔒 **`property_id` נגזר מהיחידה בשאילתה.** הקלט אינו קובע. מפתח זר
    מורכב `(unit_id, organization_id, property_id) → units` הופך אי-התאמה
@@ -1216,57 +1216,57 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
    רשימה שטוחה של כל היחידות בארגון היא הבאג.
 3. שם היחידה במסך **תמיד נושא את הנכס**: "וילה הגפן · הרי יהודה".
 4. הזמנה שנוצרה בנכס שאינו `default_property_id` של המשתמש מציגה
-   **אישור מפורש**: "ההזמנה תיווצר בנכס *הרי יהודה*, שאינו נכס ברירת
+   **אישור מפורש**: "ההזמנה תיווצר בנכס _הרי יהודה_, שאינו נכס ברירת
    המחדל שלך." — פעם אחת, לא בכל פעם.
 
 **H-2 · יחידה נכונה, נכס נכון, תאריך שנה קודמת.**
 המקרה: 3 בינואר, מקלידים "3.9" ומקבלים ספטמבר שעבר.
 
-*המניעה:* בורר התאריכים נפתח על החודש הנוכחי ו**אינו מאפשר בחירה בעבר
+_המניעה:_ בורר התאריכים נפתח על החודש הנוכחי ו**אינו מאפשר בחירה בעבר
 ללא הרשאה**. הזמנה בעבר דורשת `booking.override_availability` + נימוק,
 כי היא לגיטימית (רישום היסטורי) אך לעולם לא מקרית. הצגת התאריך המלא
 עם היום בשבוע — "**שישי**, 3.9.2026" — כי אדם מזהה יום שגוי מהר יותר
 משהוא מזהה שנה שגויה.
 
 **H-3 · אורח כפול.**
-*המניעה:* חיפוש לפי טלפון **לפני** יצירה, במסך ולא אחרי. אינדקס ייחודי
+_המניעה:_ חיפוש לפי טלפון **לפני** יצירה, במסך ולא אחרי. אינדקס ייחודי
 על `(organization_id, phone_e164)` — 🔒 דדופליקציה בקוד נשברת בשתי בקשות
 מקבילות. שני אורחים עם אותו טלפון (זוג) נפתרים במסך מיזוג, לא בכפילות.
 
 **H-4 · שינוי שגורר שינוי שאיש לא התכוון אליו.**
-*המניעה:* 🔒 **תצוגה מקדימה חובה** (§5.5) שמראה את כל ההשלכות מהטבלה
+_המניעה:_ 🔒 **תצוגה מקדימה חובה** (§5.5) שמראה את כל ההשלכות מהטבלה
 של §6.1 לפני השמירה: מחיר, זמינות, משימות, הודעות. השמירה מבצעת בדיוק
 את מה שהוצג, ואם משהו השתנה בינתיים היא נדחית עם ההפרש.
 
 **H-5 · סכום שגוי — אפס עודף.**
-*המניעה:* כסף מוקלד בשקלים בממשק ומומר לאגורות בקצה. שדה סכום מציג
+_המניעה:_ כסף מוקלד בשקלים בממשק ומומר לאגורות בקצה. שדה סכום מציג
 `₪1,200.00` בזמן ההקלדה. הנחה מעל סף מציגה **אזהרה עם המספר**:
 "זו הנחה של ₪2,400, שהם 38% מהשהות" — אחוז לצד סכום, כי אדם קולט את
 הראשון והשני מסתיר את גודל הטעות. חריגה מהתקרה של המשתמש מייצרת
 **בקשת אישור** ולא סירוב.
 
 **H-6 · פעולה הרסנית בלחיצה אחת.**
-*המניעה:* ביטול דורש **הקלדת מספר ההזמנה** ולא לחיצה על "כן". שחרור
+_המניעה:_ ביטול דורש **הקלדת מספר ההזמנה** ולא לחיצה על "כן". שחרור
 פיקדון דורש נימוק. עקיפת זמינות דורשת נימוק. הכפתורים ההרסניים אינם
 צמודים לכפתורים היומיומיים במסך.
 
 **H-7 · פעולה כפולה.**
-*המניעה:* מפתח Idempotency (§10.4), כפתור שננעל בהגשה, ובדיקה של השרת
+_המניעה:_ מפתח Idempotency (§10.4), כפתור שננעל בהגשה, ובדיקה של השרת
 ל"הזמנה זהה נוצרה בדקה האחרונה לאותו אורח באותם תאריכים" → אזהרה עם
 קישור לקיימת.
 
 **H-8 · שחרור החזקה של מישהו אחר בטעות.**
-*המניעה:* מסך ההחזקות מציג את ההחזקות שלי כברירת מחדל. שחרור החזקה של
+_המניעה:_ מסך ההחזקות מציג את ההחזקות שלי כברירת מחדל. שחרור החזקה של
 אחר דורש נימוק ומודיע למחזיק.
 
 **H-9 · הזמנה שנוצרה כ-`confirmed` בלי שנגבה כסף.**
 ⚠️ `INITIAL_STATUSES` כולל `confirmed` — נכון לייבוא ערוץ, מסוכן לכל
-היתר. *המניעה:* פתיחה ב-`confirmed` מותרת רק כשה-`source` הוא ערוץ,
+היתר. _המניעה:_ פתיחה ב-`confirmed` מותרת רק כשה-`source` הוא ערוץ,
 או לשחקן עם `channel.manage`. אחרת הסטטוס ההתחלתי המרבי הוא
 `awaiting_payment`.
 
 **H-10 · הודעה נשלחה לאורח הלא נכון.**
-*המניעה:* כל תבנית מציגה תצוגה מקדימה עם שם ומספר ההזמנה. שליחה
+_המניעה:_ כל תבנית מציגה תצוגה מקדימה עם שם ומספר ההזמנה. שליחה
 ידנית מציגה את הנמען המלא. אין "שלח לכולם" בלי בחירה מפורשת של הקהל.
 
 ---
@@ -1275,28 +1275,28 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 **המודול תלוי ב:**
 
-| במה | לשם מה |
-| --- | --- |
-| `src/lib/authz/` | `can`, `assertCan`, קטלוג ההרשאות, `Scope` |
-| `src/lib/service/` | `defineOperation` — הצינור היחיד; `schema`, `idempotency`, `transaction`, `events` |
-| `src/lib/errors/` | `ValidationError`, `ConflictError`, `BusinessRuleError`, `NotFoundError` |
-| `src/lib/audit/` | `recordAuditEvent` |
-| `src/lib/plans/` | `formatAgorot`, מכסות |
-| `src/lib/hebrew-calendar/` | שבתות וחגים ללוח המחירים ולתאריכי אי-הגעה |
-| `0008_accommodation.sql` | `units`, `properties`, `property_in_scope`, `unit_in_scope` |
-| `btree_gist` | אילוץ ההדרה. **תלות חובה** |
+| במה                        | לשם מה                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `src/lib/authz/`           | `can`, `assertCan`, קטלוג ההרשאות, `Scope`                                         |
+| `src/lib/service/`         | `defineOperation` — הצינור היחיד; `schema`, `idempotency`, `transaction`, `events` |
+| `src/lib/errors/`          | `ValidationError`, `ConflictError`, `BusinessRuleError`, `NotFoundError`           |
+| `src/lib/audit/`           | `recordAuditEvent`                                                                 |
+| `src/lib/plans/`           | `formatAgorot`, מכסות                                                              |
+| `src/lib/hebrew-calendar/` | שבתות וחגים ללוח המחירים ולתאריכי אי-הגעה                                          |
+| `0008_accommodation.sql`   | `units`, `properties`, `property_in_scope`, `unit_in_scope`                        |
+| `btree_gist`               | אילוץ ההדרה. **תלות חובה**                                                         |
 
 **תלויים בו:**
 
-| מי | במה |
-| --- | --- |
-| `src/lib/metrics/` | `BookingStatus`, `BookingSource`, `OCCUPYING_STATUSES`, `DateRange`, `nightsBetween` — **תלות ישירה בקוד** |
-| `src/lib/preparation/` | `Agorot`, `DateRange`, `PriceLine`, וכל עובדות ההזמנה |
-| תשלומים · חשבוניות · חוזים | ההזמנה היא העוגן |
-| משימות ומשק בית | `booking.checked_out`, `booking.changed` |
-| עמלות | ייחוס + מכונת המצבים |
-| האתר הציבורי | 🔒 **קורא את היומן כמקור אמת יחיד.** הזמינות אינה משוכפלת לאתר (`DATA_MODEL.md` M3) |
-| רשת הסוכנים | זמינות, החזקות, יצירה |
+| מי                         | במה                                                                                                        |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/lib/metrics/`         | `BookingStatus`, `BookingSource`, `OCCUPYING_STATUSES`, `DateRange`, `nightsBetween` — **תלות ישירה בקוד** |
+| `src/lib/preparation/`     | `Agorot`, `DateRange`, `PriceLine`, וכל עובדות ההזמנה                                                      |
+| תשלומים · חשבוניות · חוזים | ההזמנה היא העוגן                                                                                           |
+| משימות ומשק בית            | `booking.checked_out`, `booking.changed`                                                                   |
+| עמלות                      | ייחוס + מכונת המצבים                                                                                       |
+| האתר הציבורי               | 🔒 **קורא את היומן כמקור אמת יחיד.** הזמינות אינה משוכפלת לאתר (`DATA_MODEL.md` M3)                        |
+| רשת הסוכנים                | זמינות, החזקות, יצירה                                                                                      |
 
 ---
 
@@ -1307,38 +1307,38 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ### Unit — מוכיחות שהחשבון נכון
 
-| מה | מוכיחה |
-| --- | --- |
-| `rangesOverlap` על 12 קומבינציות | חצי-פתוח, כולל גיחת יום |
-| `nightsBetween` על טווח הפוך, זהה, לא חוקי | `NaN` ולא `0` |
-| `priceStay` — לילות, אורח נוסף, תוספות, שתי הנחות, מס, פיקדון | הסך = סכום השורות, **תמיד** |
-| `roundAgorot` על ±0.5, ±0.4, ±0.6, 0 | חצי מתרחק מאפס; אין `-0` |
-| שתי הנחות 10% | מורידות 20% ולא 19% |
-| הנחה גדולה מהסכום | נחתכת לאפס, לא שלילית |
-| `agentCommissionLine` | **אינה** בסך של האורח; מחושבת ללא פיקדון |
-| `taxIncludedIn` | אינה `PriceLine` |
-| כל 19 המצבים × כל 19 היעדים | בדיוק המעברים ב-`BOOKING_TRANSITIONS` חוקיים; כל היתר נכשל |
-| `evaluateTransition` מסטטוס סופי | `terminal` לפני כל בדיקה אחרת |
-| סדר הבדיקות | הרשאה **לפני** תנאי — מנקה מקבל "אין הרשאה" ולא "אין פיקדון" |
-| `isHoldLive` בדיוק ב-`expiresAt` | `false` |
-| `planHold` מעל המכסה / מעל המשך | זורק עם הודעה בעברית |
-| `assertHoldCovers` על כיסוי חלקי | זורק |
-| `checkAvailability` מחזיר **את כל** ה-blockers | לא רק הראשון |
-| `loadRules → null` | `unknown_unit`, לא זמין |
-| חישוב דמי ביטול על כל רובד + גבולות | כולל `clamp` מול `paid_agorot` |
+| מה                                                            | מוכיחה                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------ |
+| `rangesOverlap` על 12 קומבינציות                              | חצי-פתוח, כולל גיחת יום                                      |
+| `nightsBetween` על טווח הפוך, זהה, לא חוקי                    | `NaN` ולא `0`                                                |
+| `priceStay` — לילות, אורח נוסף, תוספות, שתי הנחות, מס, פיקדון | הסך = סכום השורות, **תמיד**                                  |
+| `roundAgorot` על ±0.5, ±0.4, ±0.6, 0                          | חצי מתרחק מאפס; אין `-0`                                     |
+| שתי הנחות 10%                                                 | מורידות 20% ולא 19%                                          |
+| הנחה גדולה מהסכום                                             | נחתכת לאפס, לא שלילית                                        |
+| `agentCommissionLine`                                         | **אינה** בסך של האורח; מחושבת ללא פיקדון                     |
+| `taxIncludedIn`                                               | אינה `PriceLine`                                             |
+| כל 19 המצבים × כל 19 היעדים                                   | בדיוק המעברים ב-`BOOKING_TRANSITIONS` חוקיים; כל היתר נכשל   |
+| `evaluateTransition` מסטטוס סופי                              | `terminal` לפני כל בדיקה אחרת                                |
+| סדר הבדיקות                                                   | הרשאה **לפני** תנאי — מנקה מקבל "אין הרשאה" ולא "אין פיקדון" |
+| `isHoldLive` בדיוק ב-`expiresAt`                              | `false`                                                      |
+| `planHold` מעל המכסה / מעל המשך                               | זורק עם הודעה בעברית                                         |
+| `assertHoldCovers` על כיסוי חלקי                              | זורק                                                         |
+| `checkAvailability` מחזיר **את כל** ה-blockers                | לא רק הראשון                                                 |
+| `loadRules → null`                                            | `unknown_unit`, לא זמין                                      |
+| חישוב דמי ביטול על כל רובד + גבולות                           | כולל `clamp` מול `paid_agorot`                               |
 
 ### Integration — מוכיחות שהמסד מקיים את ההבטחה
 
-| מה | מוכיחה |
-| --- | --- |
-| שתי הזמנות חופפות במקביל | בדיוק אחת שורדת, `23P01` |
-| הזמנה מול החזקה חיה | האילוץ תופס — **זו הבדיקה שאילוץ פר-טבלה היה מכשיל** |
-| החזקה שפג תוקפה + הזמנה חדשה | הניקוי העצל משחרר בלי מטאטא |
-| המרת החזקה | תביעה אחת בסוף, לא שתיים |
-| כישלון באמצע העברת יחידה | rollback מלא (E-19) |
-| שני `expectedVersion` זהים | השני נכשל |
-| Replay של מפתח | אותה תוצאה, **בלי שורת Audit שנייה** |
-| ייבוא ערוץ פעמיים | עדכון, לא כפילות |
+| מה                           | מוכיחה                                               |
+| ---------------------------- | ---------------------------------------------------- |
+| שתי הזמנות חופפות במקביל     | בדיוק אחת שורדת, `23P01`                             |
+| הזמנה מול החזקה חיה          | האילוץ תופס — **זו הבדיקה שאילוץ פר-טבלה היה מכשיל** |
+| החזקה שפג תוקפה + הזמנה חדשה | הניקוי העצל משחרר בלי מטאטא                          |
+| המרת החזקה                   | תביעה אחת בסוף, לא שתיים                             |
+| כישלון באמצע העברת יחידה     | rollback מלא (E-19)                                  |
+| שני `expectedVersion` זהים   | השני נכשל                                            |
+| Replay של מפתח               | אותה תוצאה, **בלי שורת Audit שנייה**                 |
+| ייבוא ערוץ פעמיים            | עדכון, לא כפילות                                     |
 
 ### E2E — מוכיחות שהיום עובד
 
@@ -1349,16 +1349,16 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ### Security — 🔒 **לכל הרשאה, בדיקה שמוכיחה את השלילה**
 
-| מה | מוכיחה |
-| --- | --- |
+| מה                                                  | מוכיחה                                         |
+| --------------------------------------------------- | ---------------------------------------------- |
 | כל אחת מ-`booking.*`, `hold.*`, `availability.view` | שחקן בלעדיה **מסורב**, עם `DenialReason` הנכון |
-| `properties[A]` + `unitId` של B (E-33) | `out_of_scope` |
-| חוצה-ארגון על כל פעולה | `cross_organization`, ו-404 ולא 403 |
-| מנקה על כל שדה ב-`SENSITIVE_FIELDS` | כולל **ייצוא** ו-**realtime** |
-| סוכן מול `availabilityCalendar` | מקבל `DayAvailability` בלבד |
-| צוות פלטפורמה חוצה-ארגון | נדחה |
-| Actor של AI | לא יותר ממי שהוא משרת |
-| טוקן אורח | קורא הזמנה אחת; אינו משנה תאריכים ואינו מבטל |
+| `properties[A]` + `unitId` של B (E-33)              | `out_of_scope`                                 |
+| חוצה-ארגון על כל פעולה                              | `cross_organization`, ו-404 ולא 403            |
+| מנקה על כל שדה ב-`SENSITIVE_FIELDS`                 | כולל **ייצוא** ו-**realtime**                  |
+| סוכן מול `availabilityCalendar`                     | מקבל `DayAvailability` בלבד                    |
+| צוות פלטפורמה חוצה-ארגון                            | נדחה                                           |
+| Actor של AI                                         | לא יותר ממי שהוא משרת                          |
+| טוקן אורח                                           | קורא הזמנה אחת; אינו משנה תאריכים ואינו מבטל   |
 
 ### Regression
 
@@ -1437,41 +1437,41 @@ position = מספר הרשומות באותו (property_id, unit scope) בסטט
 
 ## ⚠️ סתירות שנמצאו
 
-| # | הסתירה | ההמלצה |
-| --- | --- | --- |
-| **C-1** | `availability.ts`, `repository.ts` ו-`holds.ts` מצהירים שאילוץ ההדרה במסד הוא הערובה. **`0009` אינו קיים; `bookings`, `holds` והאילוץ אינם קיימים.** כל המנוע רץ היום בלי הערובה שהוא מבוסס עליה | לכתוב את `0009` לפי §3.2 לפני כל שימוש אמיתי. **חסם שחרור** |
-| **C-2** | `createBooking` מדלג על בדיקת זמינות לסטטוס לא-תופס (נכון), אבל `changeBookingStatus` **אינו בודק זמינות כלל** בכניסה ל-`option`/`awaiting_payment`/`confirmed`. פנייה שנוצרה על תאריכים מכורים הופכת להזמנה תופסת בלי בדיקה | להוסיף בדיקת זמינות ב-`rule` של `changeBookingStatus` כש-`isOccupying(to) && !isOccupying(from)`. **הפער החמור ביותר בקוד** |
-| **C-3** | `operations.ts` שורות 952–954: `liveHoldCount()` מחזירה `0` קבוע. מכסת ההחזקות המקבילות שב-`HOLD_POLICY` ושדורשת `ARCHITECTURE.md` §12 **אינה נאכפת בכלל**. `repo.loadHoldsByUser` מוגדר ואינו נקרא | לחבר ל-`loadHoldsByUser` + `countLiveHoldsBy` |
-| **C-4** | `Hold` בחוזה חסר `createdAt` ו-`extensionCount`, ולכן שתי ההגנות ש-§12 דורש — תקרת חיים כוללת ותקרת מספר הארכות — **אינן ניתנות לאכיפה**. `holds.ts` מתעד זאת בעצמו | להוסיף שתי עמודות ושני שדות; לעדכן `extendHold` |
-| **C-5** | `propertyId` הוא `s.optional(s.string())` ומגיע מהקלט בלי אימות מול היחידה. תוצאה כפולה: הזמנה יכולה להירשם לנכס הלא נכון, **ומנהל בטווח `properties[A]` יכול ליצור הזמנה ביחידה של נכס B** (E-33) | לגזור מהיחידה. אם הקלט מספק ערך — לאמת ולסרב באי-התאמה |
-| **C-6** | `checkAvailability` אינו קורא `units.max_guests`, `units.max_nights` ו-`units.status`, אף ששלושתם קיימים ב-`0008`. הזמנה ל-40 אורחים ביחידה לשניים עוברת | להרחיב את `UnitAvailabilityRules` ואת `loadRules` |
-| **C-7** | `DayState` מכיר בארבעה מצבים; המוצר מדבר על שבעה. תחזוקה, שימוש בעלים ושימוש פנימי מתקפלים ל-`blocked`, וגם `loadRules → null` מתקפל לשם. הצוות הפנימי אינו יכול להבדיל | להוסיף `kind` ל-`DayAvailability` פנימית ולהשאיר את התצוגה החיצונית מקופלת |
-| **C-8** | `assertAvailable` זורק `ConflictError` שהקוד היציב שלו הוא `version_conflict`, גם בהתנגשות תאריכים. הקוד מתעד זאת כפשרה מודעת. לקוח אינו יכול להבדיל בין "מישהו ערך" ל"התאריכים נמכרו" | קוד נפרד `resource_conflict` ב-`errors/` |
-| **C-9** | הקטלוג מגדיר `booking.amend_dates`, `booking.amend_guest_count`, `booking.amend_extras`, `booking.amend_price`, והתפקידים מעניקים אותם ב-`AMENDMENT_GRANTS`. **`amendBookingDates` דורש `booking.update`.** סוכן עם `booking.amend_dates` ובלי `booking.update` אינו יכול להזיז תאריך; מי שיש לו `booking.update` עוקף את הפיצול הדק | פעולת שינוי דורשת את הגרנט הספציפי שלה. `booking.update` נשאר לעריכת רשומה כוללת |
-| **C-10** | `amendBookingDates` דורש `booking.override_price` על **כל** תמחור מחדש, גם כשהוא בדיוק התעריף המפורסם. `booking.amend_price` קיים בקטלוג ואינו בשימוש | תמחור מחדש בתעריף = `booking.amend_price`. חריגה מהתעריף/התקרה = `booking.override_price` |
-| **C-11** | `amendBookingDates` אינו מעביר `manualDiscountAgorot`, ולכן **הנחה ידנית נעלמת** בכל שינוי תאריכים שנושא תמחור (E-24) | לשמר שורות הנחה קיימות ולהעביר אותן |
-| **C-12** | `hold.extend` קיימת בקטלוג ומוענקת ב-`SELLING_DESK` ובשלב `availability_hold`. **אין פעולת הרחבה.** `extendHold()` כתובה ואינה מחוברת — ולכן ההרחבה אינה מתועדת ואינה מוגבלת | להגדיר `hold.extend` ב-`operations.ts` |
-| **C-13** | `INITIAL_STATUSES` מתיר פתיחה ב-`confirmed` לכל מי שיש לו `booking.create`, בלי התנאי `nothingOwedUpFront` שחל על אותו מעבר במכונת המצבים | לגדר ב-`channel.manage` או ב-`source` שהוא ערוץ (H-9) |
-| **C-14** | סדר `BOOKING_STATUSES` מול `TERMINAL_STATUSES` — `review_requested` מול `completed` (§4.2) | לאמץ את הכרעת `state-machine.ts` ולתקן את סדר המערך |
-| **C-15** | `BOOKING_SIDE_EFFECTS` מונה `charge_cancellation_fee`, `charge_no_show_fee`, `refund_deposit`, `close_financials` — **שמות בלבד. אין מנוי שמבצע אותם, ואין חישוב דמי ביטול בקוד** | לממש לפי §7.6 כמנויים לאירועים |
-| **C-16** | ב-`src/lib/booking/` אין ולו בדיקה אחת, בעוד `metrics/`, `authz/` ו-`service/` נבדקים. זהו המודול היחיד שנוגע בכסף ובמלאי בלי רשת | §19 |
+| #        | הסתירה                                                                                                                                                                                                                                                                                                                               | ההמלצה                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| **C-1**  | `availability.ts`, `repository.ts` ו-`holds.ts` מצהירים שאילוץ ההדרה במסד הוא הערובה. **`0009` אינו קיים; `bookings`, `holds` והאילוץ אינם קיימים.** כל המנוע רץ היום בלי הערובה שהוא מבוסס עליה                                                                                                                                     | לכתוב את `0009` לפי §3.2 לפני כל שימוש אמיתי. **חסם שחרור**                                                                 |
+| **C-2**  | `createBooking` מדלג על בדיקת זמינות לסטטוס לא-תופס (נכון), אבל `changeBookingStatus` **אינו בודק זמינות כלל** בכניסה ל-`option`/`awaiting_payment`/`confirmed`. פנייה שנוצרה על תאריכים מכורים הופכת להזמנה תופסת בלי בדיקה                                                                                                         | להוסיף בדיקת זמינות ב-`rule` של `changeBookingStatus` כש-`isOccupying(to) && !isOccupying(from)`. **הפער החמור ביותר בקוד** |
+| **C-3**  | `operations.ts` שורות 952–954: `liveHoldCount()` מחזירה `0` קבוע. מכסת ההחזקות המקבילות שב-`HOLD_POLICY` ושדורשת `ARCHITECTURE.md` §12 **אינה נאכפת בכלל**. `repo.loadHoldsByUser` מוגדר ואינו נקרא                                                                                                                                  | לחבר ל-`loadHoldsByUser` + `countLiveHoldsBy`                                                                               |
+| **C-4**  | `Hold` בחוזה חסר `createdAt` ו-`extensionCount`, ולכן שתי ההגנות ש-§12 דורש — תקרת חיים כוללת ותקרת מספר הארכות — **אינן ניתנות לאכיפה**. `holds.ts` מתעד זאת בעצמו                                                                                                                                                                  | להוסיף שתי עמודות ושני שדות; לעדכן `extendHold`                                                                             |
+| **C-5**  | `propertyId` הוא `s.optional(s.string())` ומגיע מהקלט בלי אימות מול היחידה. תוצאה כפולה: הזמנה יכולה להירשם לנכס הלא נכון, **ומנהל בטווח `properties[A]` יכול ליצור הזמנה ביחידה של נכס B** (E-33)                                                                                                                                   | לגזור מהיחידה. אם הקלט מספק ערך — לאמת ולסרב באי-התאמה                                                                      |
+| **C-6**  | `checkAvailability` אינו קורא `units.max_guests`, `units.max_nights` ו-`units.status`, אף ששלושתם קיימים ב-`0008`. הזמנה ל-40 אורחים ביחידה לשניים עוברת                                                                                                                                                                             | להרחיב את `UnitAvailabilityRules` ואת `loadRules`                                                                           |
+| **C-7**  | `DayState` מכיר בארבעה מצבים; המוצר מדבר על שבעה. תחזוקה, שימוש בעלים ושימוש פנימי מתקפלים ל-`blocked`, וגם `loadRules → null` מתקפל לשם. הצוות הפנימי אינו יכול להבדיל                                                                                                                                                              | להוסיף `kind` ל-`DayAvailability` פנימית ולהשאיר את התצוגה החיצונית מקופלת                                                  |
+| **C-8**  | `assertAvailable` זורק `ConflictError` שהקוד היציב שלו הוא `version_conflict`, גם בהתנגשות תאריכים. הקוד מתעד זאת כפשרה מודעת. לקוח אינו יכול להבדיל בין "מישהו ערך" ל"התאריכים נמכרו"                                                                                                                                               | קוד נפרד `resource_conflict` ב-`errors/`                                                                                    |
+| **C-9**  | הקטלוג מגדיר `booking.amend_dates`, `booking.amend_guest_count`, `booking.amend_extras`, `booking.amend_price`, והתפקידים מעניקים אותם ב-`AMENDMENT_GRANTS`. **`amendBookingDates` דורש `booking.update`.** סוכן עם `booking.amend_dates` ובלי `booking.update` אינו יכול להזיז תאריך; מי שיש לו `booking.update` עוקף את הפיצול הדק | פעולת שינוי דורשת את הגרנט הספציפי שלה. `booking.update` נשאר לעריכת רשומה כוללת                                            |
+| **C-10** | `amendBookingDates` דורש `booking.override_price` על **כל** תמחור מחדש, גם כשהוא בדיוק התעריף המפורסם. `booking.amend_price` קיים בקטלוג ואינו בשימוש                                                                                                                                                                                | תמחור מחדש בתעריף = `booking.amend_price`. חריגה מהתעריף/התקרה = `booking.override_price`                                   |
+| **C-11** | `amendBookingDates` אינו מעביר `manualDiscountAgorot`, ולכן **הנחה ידנית נעלמת** בכל שינוי תאריכים שנושא תמחור (E-24)                                                                                                                                                                                                                | לשמר שורות הנחה קיימות ולהעביר אותן                                                                                         |
+| **C-12** | `hold.extend` קיימת בקטלוג ומוענקת ב-`SELLING_DESK` ובשלב `availability_hold`. **אין פעולת הרחבה.** `extendHold()` כתובה ואינה מחוברת — ולכן ההרחבה אינה מתועדת ואינה מוגבלת                                                                                                                                                         | להגדיר `hold.extend` ב-`operations.ts`                                                                                      |
+| **C-13** | `INITIAL_STATUSES` מתיר פתיחה ב-`confirmed` לכל מי שיש לו `booking.create`, בלי התנאי `nothingOwedUpFront` שחל על אותו מעבר במכונת המצבים                                                                                                                                                                                            | לגדר ב-`channel.manage` או ב-`source` שהוא ערוץ (H-9)                                                                       |
+| **C-14** | סדר `BOOKING_STATUSES` מול `TERMINAL_STATUSES` — `review_requested` מול `completed` (§4.2)                                                                                                                                                                                                                                           | לאמץ את הכרעת `state-machine.ts` ולתקן את סדר המערך                                                                         |
+| **C-15** | `BOOKING_SIDE_EFFECTS` מונה `charge_cancellation_fee`, `charge_no_show_fee`, `refund_deposit`, `close_financials` — **שמות בלבד. אין מנוי שמבצע אותם, ואין חישוב דמי ביטול בקוד**                                                                                                                                                    | לממש לפי §7.6 כמנויים לאירועים                                                                                              |
+| **C-16** | ב-`src/lib/booking/` אין ולו בדיקה אחת, בעוד `metrics/`, `authz/` ו-`service/` נבדקים. זהו המודול היחיד שנוגע בכסף ובמלאי בלי רשת                                                                                                                                                                                                    | §19                                                                                                                         |
 
 ---
 
 ## ❓ הכרעות שדורשות את בעל המוצר
 
-| # | השאלה | מתי נדרש |
-| --- | --- | --- |
-| **Q-1** | **רובדי מדיניות הביטול** — כמה ימים לפני ההגעה, איזה אחוז החזר, ואיזה דמי טיפול קבועים. הסכימה מוכנה (§7.6), המספרים לא | לפני הזמנה אמיתית ראשונה |
-| **Q-2** | **מקדמה ופיקדון** — אחוז המקדמה, גובה הפיקדון, והאם הפיקדון מוחזר כשמבטלים | לפני M4 |
-| **Q-3** | **מדיניות אי-הגעה** — האם מחייבים לילה אחד, את מלוא השהות, או לפי אותם רבדים | עם Q-1 |
-| **Q-4** | **שחרור אוטומטי של `awaiting_payment`** — אחרי כמה שעות, והאם בכלל. שחרור מלאי אוטומטי הוא סיכון עסקי ולא החלטה הנדסית | לפני M4 |
-| **Q-5** | **תקרות החזקה לסוכן חדש** — הברירות בקוד (5 החזקות, 30 דקות) הן ניחוש הנדסי. §12 מדבר על ציון אמינות שגדל; **מהי המדרגה** | לפני שסוכן חיצוני ראשון נכנס |
-| **Q-6** | **חלון ההצעה ברשימת ההמתנה** — כמה זמן האורח הראשון בתור מקבל בלעדיות. שעה היא אגרסיבית, 24 שעות שורפות את התאריכים | עם רשימת ההמתנה |
-| **Q-7** | **החלפת סוכן על הזמנה קיימת** — מי מקבל את העמלה: הראשון, השני, או פיצול | עם מנוע העמלות |
-| **Q-8** | **Overbooking מודע** — האם הזמנת OTA שהתנגשה נשמרת (E-14) או נדחית. שמירה = חשיפה לפיצוי; דחייה = אורח שקיבל אישור מ-Airbnb ואין לו חדר | לפני חיבור ערוץ ראשון |
-| **Q-9** | **פטור מע״מ לתייר** — איזו ראיה נדרשת (דרכון? חותמת כניסה?) ומי מאשר | לפני M5 |
-| **Q-10** | **צ׳ק-אאוט מאוחר** — האם יש תשלום, כמה, ומאיזו שעה הוא הופך ללילה נוסף | לפני M6 |
+| #        | השאלה                                                                                                                                   | מתי נדרש                     |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| **Q-1**  | **רובדי מדיניות הביטול** — כמה ימים לפני ההגעה, איזה אחוז החזר, ואיזה דמי טיפול קבועים. הסכימה מוכנה (§7.6), המספרים לא                 | לפני הזמנה אמיתית ראשונה     |
+| **Q-2**  | **מקדמה ופיקדון** — אחוז המקדמה, גובה הפיקדון, והאם הפיקדון מוחזר כשמבטלים                                                              | לפני M4                      |
+| **Q-3**  | **מדיניות אי-הגעה** — האם מחייבים לילה אחד, את מלוא השהות, או לפי אותם רבדים                                                            | עם Q-1                       |
+| **Q-4**  | **שחרור אוטומטי של `awaiting_payment`** — אחרי כמה שעות, והאם בכלל. שחרור מלאי אוטומטי הוא סיכון עסקי ולא החלטה הנדסית                  | לפני M4                      |
+| **Q-5**  | **תקרות החזקה לסוכן חדש** — הברירות בקוד (5 החזקות, 30 דקות) הן ניחוש הנדסי. §12 מדבר על ציון אמינות שגדל; **מהי המדרגה**               | לפני שסוכן חיצוני ראשון נכנס |
+| **Q-6**  | **חלון ההצעה ברשימת ההמתנה** — כמה זמן האורח הראשון בתור מקבל בלעדיות. שעה היא אגרסיבית, 24 שעות שורפות את התאריכים                     | עם רשימת ההמתנה              |
+| **Q-7**  | **החלפת סוכן על הזמנה קיימת** — מי מקבל את העמלה: הראשון, השני, או פיצול                                                                | עם מנוע העמלות               |
+| **Q-8**  | **Overbooking מודע** — האם הזמנת OTA שהתנגשה נשמרת (E-14) או נדחית. שמירה = חשיפה לפיצוי; דחייה = אורח שקיבל אישור מ-Airbnb ואין לו חדר | לפני חיבור ערוץ ראשון        |
+| **Q-9**  | **פטור מע״מ לתייר** — איזו ראיה נדרשת (דרכון? חותמת כניסה?) ומי מאשר                                                                    | לפני M5                      |
+| **Q-10** | **צ׳ק-אאוט מאוחר** — האם יש תשלום, כמה, ומאיזו שעה הוא הופך ללילה נוסף                                                                  | לפני M6                      |
 
 ---
 

@@ -31,13 +31,18 @@
  * ladder has narrowed it for the request already in flight behind them.
  */
 
-import type { MembershipStatus, ResourceFamily, Scope } from '../authz/can'
+import type { ScopeNarrowing } from '../actor/source'
+import type { MembershipStatus } from '../authz/can'
 import type { Grant } from '../authz/permissions'
 import type { SystemRole } from '../authz/roles'
 import { BusinessRuleError } from '../errors'
 import { agentRoleAssignment, type AgentAccess } from './access'
 import { formatIsraeliPhone } from './phone'
-import { inventoryScopeToScope, type AgentOrganizationSettings } from './types'
+import {
+  inventoryScopeToScope,
+  type AgentInventoryScope,
+  type AgentOrganizationSettings,
+} from './types'
 
 // ── What survives ─────────────────────────────────────────────────────────
 
@@ -227,24 +232,41 @@ export function agentActorRoleAssignments(
 }
 
 /**
- * The two scopes an agent membership carries.
+ * The two scopes an agent membership carries, as a request the engine clamps.
  *
  * `own_records` by default — so bookings, leads, commissions and statements are
  * confined to theirs by the engine, with no agent-specific filtering anywhere —
- * and an `inventory` override for the properties they may sell.
+ * and an `inventory` entry for the properties they may sell.
  *
- * Only `inventory` is overridden. Every other family falls through to the
- * default, which means a family added to the model next year confines an agent
- * to their own records rather than exposing whatever it holds. The fallback
- * direction is the safe one.
+ * Only `inventory` is named. Every other family falls through to the default,
+ * which means a family added to the model next year confines an agent to their
+ * own records rather than exposing whatever it holds. The fallback direction is
+ * the safe one.
+ *
+ * ── Why this is a request and not an answer ───────────────────────────────
+ *
+ * The value here comes from `agent_organization_settings`, which an owner edits
+ * on the agent settings screen. If it were applied as written, that screen
+ * would be the place an outsider's inventory reach is decided, with no
+ * membership scope having granted it first — and `all_properties` converts to
+ * `all_organization`, so the widest thing in the model would be one click away
+ * from a screen that is not the permissions screen.
+ *
+ * So it is handed to `resolveActor` as a `ScopeNarrowing`, and every value is
+ * clamped against the `membership_scopes` row before it reaches the actor. The
+ * row is written by `attachExistingUser` from the same stored reach and is
+ * policed by row level security; the terms row can narrow it and cannot exceed
+ * it. An agent whose membership has no scope row at all clamps to `own_records`
+ * and reaches no inventory — which is what every agent in the product did
+ * before the row existed, so nothing that worked yesterday depends on the
+ * projection.
  */
-export function agentScopes(settings: AgentOrganizationSettings): {
-  scope: Scope
-  scopeOverrides: Partial<Record<ResourceFamily, Scope>>
-} {
+export function agentScopeNarrowing(
+  inventory: AgentInventoryScope,
+): ScopeNarrowing {
   return {
     scope: { kind: 'own_records' },
-    scopeOverrides: { inventory: inventoryScopeToScope(settings.inventory) },
+    families: { inventory: inventoryScopeToScope(inventory) },
   }
 }
 

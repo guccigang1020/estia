@@ -354,8 +354,20 @@ export interface Invoice {
 
   /** The payments this document accounts for. */
   paymentIds: readonly string[]
-  /** The snapshot the lines came from, so the two can be tied back together. */
-  snapshotCapturedAt: string
+  /**
+   * The snapshot the lines came from, so the two can be tied back together.
+   *
+   * Nullable, because `invoices.snapshot_captured_at` is. 0016 added it to a
+   * table that already held documents, without a backfill and without `not
+   * null` — so every invoice issued before that migration has none, and so does
+   * any document composed from a booking that was never snapshotted. It was
+   * typed as a plain `string` here and read with `asTimestamp`, which refuses
+   * null: one such row made `loadInvoicesForBooking` throw before it returned
+   * anything, and a deployment holding one could not render its invoices at
+   * all. `null` is the honest answer — "this document cannot be tied back to a
+   * capture" — and is a different statement from a capture at the epoch.
+   */
+  snapshotCapturedAt: string | null
 }
 
 /**

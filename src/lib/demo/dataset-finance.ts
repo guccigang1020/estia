@@ -559,12 +559,25 @@ type ExpenseSeed = {
   category: string
   kind: string
   frequency: string
+  /** The periodic amount of a `fixed` rule. Zero for a variable one — see below. */
   amount: number
+  /** `expense_rules_formula_pair`: present for a variable rule, null for a fixed one. */
+  formula: Record<string, unknown> | null
   allocation: string
   scopeKind: string
   propertyId: string | null
   approval: boolean
 }
+
+/**
+ * What one cleaning costs, and what one night of laundry costs.
+ *
+ * Named constants because the allocation rows below charge bookings the
+ * cleaning rate, and a second copy of the figure is a second figure that
+ * eventually disagrees with the first.
+ */
+const CLEANING_AGOROT = 16_000
+const LAUNDRY_PER_NIGHT_AGOROT = 4_200
 
 const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
   {
@@ -572,7 +585,13 @@ const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
     category: 'תפעול',
     kind: 'variable',
     frequency: 'one_time',
-    amount: 16_000,
+    // `expense_rules_formula_pair` requires `(kind = 'variable') = (formula is
+    // not null)`, and a variable rule's cost is its formula rather than a
+    // periodic amount — so the figure lives in `formula` and `amount_agorot`
+    // is zero. Written the other way round, the database refuses the row and
+    // the domain's own `variableAmount` computes nothing.
+    amount: 0,
+    formula: { kind: 'per_booking', rateAgorot: CLEANING_AGOROT },
     allocation: 'per_booking',
     scopeKind: 'organization',
     propertyId: null,
@@ -583,7 +602,8 @@ const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
     category: 'תפעול',
     kind: 'variable',
     frequency: 'one_time',
-    amount: 4_200,
+    amount: 0,
+    formula: { kind: 'per_night', rateAgorot: LAUNDRY_PER_NIGHT_AGOROT },
     allocation: 'per_occupied_night',
     scopeKind: 'organization',
     propertyId: null,
@@ -595,6 +615,7 @@ const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
     kind: 'fixed',
     frequency: 'monthly',
     amount: 310_000,
+    formula: null,
     allocation: 'per_day',
     scopeKind: 'property',
     propertyId: PROPERTY_IDS.rimonim,
@@ -606,6 +627,7 @@ const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
     kind: 'fixed',
     frequency: 'quarterly',
     amount: 480_000,
+    formula: null,
     allocation: 'by_revenue',
     scopeKind: 'property',
     propertyId: PROPERTY_IDS.kacholYam,
@@ -617,6 +639,10 @@ const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
     kind: 'variable',
     frequency: 'one_time',
     amount: 0,
+    // 145 basis points. `percent_of_revenue` is the one formula whose figure is
+    // a percentage rather than agorot, and the adapter reads `bps` into the
+    // percentage points the domain's `VariableFormula` declares — 1.45, not 145.
+    formula: { kind: 'percent_of_revenue', bps: 145 },
     allocation: 'by_revenue',
     scopeKind: 'organization',
     propertyId: null,
@@ -628,6 +654,7 @@ const EXPENSE_SEEDS: readonly ExpenseSeed[] = [
     kind: 'fixed',
     frequency: 'monthly',
     amount: 145_000,
+    formula: null,
     allocation: 'per_day',
     scopeKind: 'organization',
     propertyId: null,
@@ -644,10 +671,7 @@ export const EXPENSE_RULE_ROWS: DemoRow[] = EXPENSE_SEEDS.map(
     kind: seed.kind,
     frequency: seed.frequency,
     amount_agorot: seed.amount,
-    formula:
-      seed.label === 'עמלת סליקה'
-        ? { kind: 'percent_of_revenue', bps: 145 }
-        : null,
+    formula: seed.formula,
     allocation: seed.allocation,
     scope_kind: seed.scopeKind,
     scope_property_id: seed.propertyId,
@@ -675,7 +699,10 @@ export const EXPENSE_ALLOCATION_ROWS: DemoRow[] = SOLD_BOOKINGS.filter(
     method: 'per_booking',
     period_start: booking.checkIn,
     period_end: booking.checkOut,
-    amount_agorot: EXPENSE_SEEDS[0].amount,
+    // The cleaning rate, not the rule's `amount_agorot` — which is zero, as a
+    // variable rule's must be. What a booking carried is what the formula
+    // produced for it, and for `per_booking` that is one flat rate.
+    amount_agorot: CLEANING_AGOROT,
     weight: '1.000000',
     basis: 'הזמנה אחת',
     allocated_at: momentOn(booking.startOffset + booking.nights, '23:30'),

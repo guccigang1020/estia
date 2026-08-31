@@ -10,8 +10,11 @@
 
 import { describe, expect, it } from 'vitest'
 
+import type { Db } from './client'
 import { FakeSupabaseClient, hasFilter } from './fake-client'
 import { SupabaseFinanceRepository } from './finance'
+import { createDemoClient } from '../demo/client'
+import { DEMO_DATASET } from '../demo/dataset'
 import type { Commission, Invoice, Payment } from '../finance/types'
 
 function payment(overrides: Partial<Payment> = {}): Payment {
@@ -588,5 +591,319 @@ describe('SupabaseFinanceRepository: commissions', () => {
         'book-1',
       ),
     ).rejects.toThrow(/base/)
+  })
+})
+
+/* =============================================== against the demo dataset == */
+
+/**
+ * The reads, over rows nobody wrote for this test.
+ *
+ * `FakeSupabaseClient` answers with whatever the test seeded, so a column that
+ * is misspelled here is misspelled consistently and the assertion passes. The
+ * demo dataset is the opposite: it is written from the migrations, by somebody
+ * else, for eight screens — so a read that only works against its own fixture
+ * fails here. Two of these methods did, and neither failure was visible in a
+ * green suite.
+ */
+describe('SupabaseFinanceRepository: against the demo dataset', () => {
+  const organizationId = DEMO_DATASET.organizationId
+
+  function demoRepository(): SupabaseFinanceRepository {
+    return new SupabaseFinanceRepository(
+      createDemoClient(DEMO_DATASET) as unknown as Db,
+    )
+  }
+
+  function bookingWithInvoice(): string {
+    const row = DEMO_DATASET.tables.invoices?.[0]
+    if (!row) throw new Error('The demo dataset seeds no invoices')
+    return String(row.booking_id)
+  }
+
+  it('reads invoices whose snapshot was never captured', async () => {
+    // `snapshot_captured_at` is nullable — 0016 added it to a table that
+    // already held documents, with no backfill — and it was read with
+    // `asTimestamp`, which refuses null. One such invoice made this method
+    // throw before it returned a single row, so a deployment holding one could
+    // not render its invoices at all.
+    const invoices = await demoRepository().loadInvoicesForBooking(
+      organizationId,
+      bookingWithInvoice(),
+    )
+
+    expect(invoices.length).toBeGreaterThan(0)
+    for (const invoice of invoices) {
+      // `null` is the honest answer — this document cannot be tied back to a
+      // capture — and is a different statement from a capture at the epoch.
+      expect(invoice.snapshotCapturedAt).toBeNull()
+      // `archived_at` is the same shape and was already read tolerantly. It is
+      // asserted beside it so the two cannot drift apart again.
+      expect(invoice.archivedAt).toBeNull()
+      expect(invoice.lines.length).toBeGreaterThan(0)
+      expect(Number.isInteger(invoice.totalAgorot)).toBe(true)
+    }
+  })
+
+  it('reads payments even though no provider event has ever been applied', async () => {
+    // `appliedEventIds` is rebuilt from `payment_provider_events`, and that key
+    // was absent from the demo tables — which `DemoDatabase.rows` reports as
+    // `MissingDemoTable` rather than as an empty result, deliberately: a screen
+    // cannot tell "nobody has written one yet" from "this deployment has no
+    // such table". The fix belongs in the dataset, not in a `catch` here.
+    const payments = await demoRepository().loadPaymentsForBooking(
+      organizationId,
+      bookingWithInvoice(),
+    )
+
+    expect(payments.length).toBeGreaterThan(0)
+    for (const payment of payments) {
+      expect(payment.appliedEventIds).toEqual([])
+      expect(Number.isInteger(payment.amountAgorot)).toBe(true)
+    }
+  })
+
+  it('serves the list methods the screens read through', async () => {
+    const repository = demoRepository()
+
+    const payments = await repository.listPayments({
+      organizationId,
+      propertyId: null,
+      status: null,
+      limit: 500,
+      withBookingReferences: true,
+    })
+    expect(payments).toHaveLength(DEMO_DATASET.tables.payments?.length ?? 0)
+    expect(payments.every((row) => row.bookingReference !== null)).toBe(true)
+
+    const invoices = await repository.listInvoices({
+      organizationId,
+      propertyId: null,
+      status: null,
+      limit: 500,
+      withLinkedPayments: true,
+      withLinkedAmounts: true,
+    })
+    expect(invoices).toHaveLength(DEMO_DATASET.tables.invoices?.length ?? 0)
+    expect(invoices.reduce((sum, row) => sum + row.linkedPaymentCount, 0)).toBe(
+      DEMO_DATASET.tables.invoice_payments?.length ?? 0,
+    )
+
+    const commissions = await repository.listCommissions({
+      organizationId,
+      propertyId: null,
+      status: null,
+      limit: 500,
+      withBookingReferences: true,
+      withRuleLabel: true,
+    })
+    expect(commissions).toHaveLength(
+      DEMO_DATASET.tables.commissions?.length ?? 0,
+    )
+
+    const rules = await repository.listExpenseRules({
+      organizationId,
+      propertyId: null,
+      kind: null,
+      limit: 500,
+    })
+    expect(rules).toHaveLength(DEMO_DATASET.tables.expense_rules?.length ?? 0)
+    expect(await repository.countExpenseRules(organizationId)).toBe(
+      rules.length,
+    )
+
+    const allocations = await repository.listExpenseAllocations(
+      organizationId,
+      rules.map((rule) => rule.id),
+    )
+    expect(allocations).toHaveLength(
+      DEMO_DATASET.tables.expense_allocations?.length ?? 0,
+    )
+  })
+
+  it('withholds the commission rule label without ever building it', async () => {
+    // The nested redaction. `CommissionRule.label` is a copy of
+    // `commissions.explanation` one level down, where `redact()` cannot reach,
+    // and the explanation spells the base out in words.
+    const repository = demoRepository()
+    const query = {
+      organizationId,
+      propertyId: null,
+      status: null,
+      limit: 500,
+      withBookingReferences: false,
+    }
+
+    const withLabel = await repository.listCommissions({
+      ...query,
+      withRuleLabel: true,
+    })
+    const without = await repository.listCommissions({
+      ...query,
+      withRuleLabel: false,
+    })
+
+    expect(withLabel.some((row) => row.rule.label.includes('₪'))).toBe(true)
+    expect(without.every((row) => row.rule.label === '')).toBe(true)
+    // The rate and the base survive: what an agent is owed and on what base is
+    // exactly what `commission.view` is the right to see.
+    expect(without.every((row) => row.rateBps === 1000)).toBe(true)
+  })
+})
+
+describe('SupabaseFinanceRepository: expense rules', () => {
+  it('never sends the columns a trigger owns, and writes the scope as a union', async () => {
+    const client = new FakeSupabaseClient({
+      responses: {
+        expense_rules: {
+          data: {
+            id: 'rule-1',
+            label: 'תחזוקת בריכה',
+            category: 'אחזקה',
+            kind: 'fixed',
+            frequency: 'monthly',
+            amount_agorot: 145_000,
+            formula: null,
+            allocation: 'per_day',
+            scope_kind: 'property',
+            scope_property_id: 'prop-a',
+            scope_unit_id: null,
+            scope_booking_id: null,
+            effective_from: '2026-01-01',
+            effective_to: null,
+            approval_required: true,
+            version: 1,
+          },
+        },
+      },
+    })
+
+    const written = await new SupabaseFinanceRepository(
+      client.asDb(),
+    ).insertExpenseRule({
+      id: 'rule-1',
+      organizationId: 'org-a',
+      label: 'תחזוקת בריכה',
+      category: 'אחזקה',
+      kind: 'fixed',
+      frequency: 'monthly',
+      amountAgorot: 145_000,
+      formula: null,
+      allocation: 'per_day',
+      scope: { kind: 'property', propertyId: 'prop-a' },
+      effectiveFrom: '2026-01-01',
+      effectiveTo: null,
+      approvalRequired: true,
+      createdByUserId: 'user-a',
+    })
+
+    const insert = client.queries.find((query) => query.verb === 'insert')
+    expect(insert).toBeDefined()
+    const payload = insert?.payload as Record<string, unknown>
+
+    // `tg_touch_row` owns `version`, exactly as it owns a payment's. Sending it
+    // would be overwritten on the next edit — silently, and correctly.
+    expect(payload).not.toHaveProperty('version')
+    expect(payload).not.toHaveProperty('updated_at')
+    expect(payload.scope_kind).toBe('property')
+    expect(payload.scope_property_id).toBe('prop-a')
+    // `expense_rules_scope_target` refuses a scope that names something at a
+    // level it does not claim, so the other two are explicitly null.
+    expect(payload.scope_unit_id).toBeNull()
+    expect(payload.scope_booking_id).toBeNull()
+
+    expect(written.approvalRequired).toBe(true)
+    expect(written.scopePropertyId).toBe('prop-a')
+  })
+
+  it('reads a percent formula into the units the domain declares', async () => {
+    const client = new FakeSupabaseClient({
+      responses: {
+        expense_rules: {
+          data: [
+            {
+              id: 'rule-2',
+              label: 'עמלת סליקה',
+              category: 'פיננסי',
+              kind: 'variable',
+              frequency: 'one_time',
+              amount_agorot: 0,
+              // Stored as basis points. `VariableFormula.percent` is
+              // percentage points, and reading 145 as 145% would price every
+              // clearing fee a hundred times too high.
+              formula: { kind: 'percent_of_revenue', bps: 145 },
+              allocation: 'by_revenue',
+              scope_kind: 'organization',
+              scope_property_id: null,
+              scope_unit_id: null,
+              scope_booking_id: null,
+              effective_from: '2026-01-01',
+              effective_to: null,
+              approval_required: false,
+              version: 1,
+            },
+          ],
+        },
+      },
+    })
+
+    const [rule] = await new SupabaseFinanceRepository(
+      client.asDb(),
+    ).listExpenseRules({
+      organizationId: 'org-a',
+      propertyId: null,
+      kind: null,
+      limit: 10,
+    })
+
+    expect(rule.formula).toEqual({ kind: 'percent_of_revenue', percent: 1.45 })
+    // A variable rule carries no periodic amount, and the screen renders the
+    // formula rather than a ₪0 that reads as "this costs nothing".
+    expect(rule.amountAgorot).toBe(0)
+  })
+
+  it('refuses a formula whose kind the domain has no meaning for', async () => {
+    // `expense_rules_formula_kind` constrains the five, so a row arriving with
+    // a sixth is a row the database should have refused. It comes back as
+    // `null` rather than as a half-built object: `variableAmount` denies by
+    // default on a formula it does not recognise, and a shape that lies about
+    // its kind would be worse than an absent one.
+    const client = new FakeSupabaseClient({
+      responses: {
+        expense_rules: {
+          data: [
+            {
+              id: 'rule-3',
+              label: 'משהו',
+              category: 'אחר',
+              kind: 'variable',
+              frequency: 'one_time',
+              amount_agorot: 0,
+              formula: { kind: 'per_fortnight', rateAgorot: 100 },
+              allocation: 'per_booking',
+              scope_kind: 'organization',
+              scope_property_id: null,
+              scope_unit_id: null,
+              scope_booking_id: null,
+              effective_from: '2026-01-01',
+              effective_to: null,
+              approval_required: false,
+              version: 1,
+            },
+          ],
+        },
+      },
+    })
+
+    const [rule] = await new SupabaseFinanceRepository(
+      client.asDb(),
+    ).listExpenseRules({
+      organizationId: 'org-a',
+      propertyId: null,
+      kind: null,
+      limit: 10,
+    })
+
+    expect(rule.formula).toBeNull()
   })
 })

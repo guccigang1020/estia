@@ -249,6 +249,36 @@ STANDING_TASKS.forEach((plan) => {
 
 export const TASKS: readonly TaskPlan[] = TASK_PLANS
 
+/**
+ * A standing task's id, by the title it was written with.
+ *
+ * The generated ids depend on how many bookings fell inside the window, so
+ * `taskIds(30)` is not a stable reference to the pool pump — it moves the first
+ * time a stay is added. The approvals and the stock movements below have to
+ * point at *these* jobs and not at whichever job happens to be thirtieth, so
+ * they look them up by the sentence a person would recognise.
+ *
+ * Throws rather than returning undefined: a `task_id` of `undefined` in a
+ * seeded row is a foreign key that silently becomes null, and the demo would
+ * then show a repair with no cost and no explanation for the absence.
+ */
+function standingTaskId(title: string): string {
+  const found = TASK_PLANS.find((task) => task.title === title)
+  if (!found) {
+    throw new Error(
+      `No standing task titled '${title}' in dataset-operations.ts. The ` +
+        `approvals and inventory movements below are attached to tasks by ` +
+        `title, so renaming one there means renaming it here.`,
+    )
+  }
+  return found.id
+}
+
+/** The two repairs and the inspection that carry money or stock below. */
+const POOL_PUMP_TASK = standingTaskId('משאבת הבריכה מרעישה')
+const BOILER_TASK = standingTaskId('החלפת דוד שמש · חדר הגפן')
+const QUARTERLY_INSPECTION = standingTaskId('ביקורת רבעונית · וילה כחול ים')
+
 export const TASK_ROWS: DemoRow[] = TASKS.map((task) => {
   const done = task.status === 'completed' || task.status === 'verified'
   return {
@@ -563,6 +593,8 @@ type MovementSeed = {
   toState: string | null
   reason: string
   offset: number
+  /** The job that consumed it, when there was one. */
+  taskId?: string
 }
 
 const MOVEMENT_SEEDS: readonly MovementSeed[] = [
@@ -635,8 +667,15 @@ const MOVEMENT_SEEDS: readonly MovementSeed[] = [
     delta: -1,
     fromState: 'available',
     toState: 'damaged',
-    reason: 'הידית נשברה בניקוי הבריכה.',
+    reason: 'נמצאה שבורה בביקורת הרבעונית.',
     offset: -8,
+    // The one movement written against a job. `inventory_movements.task_id`
+    // exists so a repair can say what it consumed, and a maintenance screen
+    // that reads it needs at least one row that actually does — otherwise the
+    // "parts" column is a query nobody has ever seen return anything. The item
+    // and the task are both at וילה כחול ים, which is what makes it a coherent
+    // fact rather than a link that happens to satisfy a two-column key.
+    taskId: QUARTERLY_INSPECTION,
   },
 ]
 
@@ -657,7 +696,7 @@ export const INVENTORY_MOVEMENT_ROWS: DemoRow[] = MOVEMENT_SEEDS.map(
       // `inventory_movements_transfer_units`: a transfer must name a side.
       from_unit_id: seed.kind === 'transfer' ? null : null,
       to_unit_id: seed.kind === 'transfer' ? unit('RIM-01').id : null,
-      task_id: null,
+      task_id: seed.taskId ?? null,
       booking_id: null,
       reason: seed.reason,
       occurred_at: momentOn(seed.offset, '14:00'),
@@ -707,12 +746,16 @@ export const APPROVAL_ROWS: DemoRow[] = [
   {
     id: approvalIds(2),
     organization_id: ORGANIZATION_ID,
-    property_id: PROPERTY_IDS.kacholYam,
+    // אחוזת רימונים, because this is the quote for *that* pool's pump — the
+    // task below is the noise somebody reported there. An approval about a
+    // repair and the repair itself sitting in two different properties is the
+    // kind of quiet inconsistency a demo teaches people to ignore.
+    property_id: PROPERTY_IDS.rimonim,
     approval_type: 'expense',
     // Nobody has decided yet, so `decided_at` must stay null.
     status: 'requested',
     booking_id: null,
-    task_id: null,
+    task_id: POOL_PUMP_TASK,
     subject_type: null,
     subject_id: null,
     requested_by: PROPERTY_MANAGER_ID,
@@ -755,6 +798,44 @@ export const APPROVAL_ROWS: DemoRow[] = [
     metadata: {},
     created_at: momentOn(-11, '09:15'),
     updated_at: momentOn(-10, '08:30'),
+    version: 2,
+  },
+  {
+    /**
+     * The one approval that is money already committed to a repair.
+     *
+     * `approval_type` is `maintenance`, which is in `APPROVAL_TYPES` and had no
+     * row until now — so the maintenance screen's "approved cost" column had
+     * nothing to read anywhere in the dataset, and a reader could not tell an
+     * empty column from a broken query. The boiler it pays for is the task that
+     * is `blocked` waiting for a second quote: the first quote was approved,
+     * and the block is about the second. Those are consistent facts, not a
+     * contradiction.
+     */
+    id: approvalIds(4),
+    organization_id: ORGANIZATION_ID,
+    property_id: PROPERTY_IDS.rimonim,
+    approval_type: 'maintenance',
+    status: 'approved',
+    booking_id: null,
+    task_id: BOILER_TASK,
+    subject_type: null,
+    subject_id: null,
+    requested_by: PROPERTY_MANAGER_ID,
+    requested_at: momentOn(-9, '10:10'),
+    reason: 'החלפת דוד שמש בחדר הגפן — הצעה של 6,200 ₪ כולל פירוק והתקנה.',
+    requested_value_bps: null,
+    limit_value_bps: null,
+    requested_agorot: 620_000,
+    limit_agorot: 200_000,
+    // `approvals_no_self_approval`: the decider is never the requester.
+    decided_by: OWNER_ID,
+    decided_at: momentOn(-8, '09:40'),
+    decision_note: 'מאושר. הדוד מחליד ואי אפשר להשכיר את החדר בלי מים חמים.',
+    expires_at: null,
+    metadata: {},
+    created_at: momentOn(-9, '10:10'),
+    updated_at: momentOn(-8, '09:40'),
     version: 2,
   },
 ]

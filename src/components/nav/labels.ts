@@ -6,15 +6,22 @@
  * feature appearing as "תפעול" in one place and "operations" in another is the
  * kind of small inconsistency that makes a product feel unfinished.
  *
- * A code with no entry falls back to the code itself. That is deliberate: a
- * new entitlement added by another engineer should show up looking untranslated
- * rather than disappear from the screen.
+ * The map is a total Record rather than a Partial one, so an entitlement added
+ * to the catalogue without a Hebrew name fails the typecheck instead of
+ * reaching a screen as a bare code. It was Partial until `agent_network`
+ * shipped without a label and appeared, in English, in the middle of the plan
+ * list on the dashboard — the fallback was doing exactly what it promised, and
+ * what it promised was not worth having.
+ *
+ * `entitlementLabel` still takes a `string` and still falls back, because its
+ * callers hand it values read from the database, which the type system does not
+ * get to police.
  */
 
 import type { Entitlement } from '@/lib/plans/entitlements'
 import type { Scope } from '@/lib/authz/can'
 
-export const ENTITLEMENT_LABELS: Partial<Record<Entitlement, string>> = {
+export const ENTITLEMENT_LABELS: Record<Entitlement, string> = {
   core: 'ליבה',
   payments: 'סליקה',
   invoicing: 'חשבוניות',
@@ -26,6 +33,7 @@ export const ENTITLEMENT_LABELS: Partial<Record<Entitlement, string>> = {
   channels: 'ערוצי הפצה',
   dynamic_pricing: 'תמחור דינמי',
   owner_portal: 'פורטל בעלים',
+  agent_network: 'רשת סוכנים',
   approvals: 'אישורים',
   automation: 'אוטומציה',
   custom_roles: 'תפקידים מותאמים',

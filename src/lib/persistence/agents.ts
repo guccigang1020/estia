@@ -103,10 +103,11 @@ import type {
   ApprovalStore,
   CommissionStore,
 } from '../agents/repository'
-import type {
-  AgentInventoryScope,
-  AgentInvitation,
-  AgentOrganizationSettings,
+import {
+  inventoryScopeToScope,
+  type AgentInventoryScope,
+  type AgentInvitation,
+  type AgentOrganizationSettings,
 } from '../agents/types'
 import { ConflictError, NotFoundError } from '../errors'
 import { MEMBERSHIP_STATUSES, type MembershipStatus } from '../authz/can'
@@ -307,6 +308,25 @@ export class SupabaseAgentRepository
     recordWrite(tx, `agent_organization_settings(${settings.agentUserId})`)
 
     const written = toSettings(rows[0] as Row)
+
+    // The membership scope follows the terms, in the same transaction.
+    //
+    // Without this the defect is rebuilt one level down. An owner narrowing an
+    // agent from the whole portfolio to one property would write the narrower
+    // terms and leave a `membership_scopes` row still granting everything —
+    // and since `clampScope` keeps the *narrower* of the two, that particular
+    // direction would still have taken effect. The other direction would not:
+    // widening an agent back out would be silently clamped away by a stale
+    // row, and the screen would lie in exactly the way `loadRoles` was fixed
+    // for. Both directions are the same write, so both are done here.
+    await this.syncMembershipScope(
+      db,
+      tx,
+      settings.organizationId,
+      written.membershipId,
+      written.inventory,
+    )
+
     if (written.status === settings.status) return written
 
     const status = await this.setMembershipStatus(
@@ -389,6 +409,23 @@ export class SupabaseAgentRepository
    *      a role code; what happens here is a lookup and an insert.
    *
    *   4. Otherwise the terms are inserted as given.
+   *
+   *   5. The membership scope, last, because it is the only step that needs
+   *      the terms to already exist. `membership_scopes` is where `Actor.scope`
+   *      comes from, and an agent membership was written without one — so
+   *      every agent in the product resolved to the `own_records` fallback,
+   *      which reaches no property and no unit, because neither carries an
+   *      assignee. Their configured inventory reach was stored, displayed and
+   *      never consulted.
+   *
+   *      Writing it here rather than projecting the terms onto the actor is
+   *      what keeps this a grant instead of a claim: the row is the authority,
+   *      row level security decides who may write it, and
+   *      `agentScopeNarrowing` can only narrow what it says. 0026's
+   *      `membership_scopes_*_agent` policies are why a general manager can
+   *      complete this step without holding `role.assign` — and they require
+   *      `is_agent_membership`, which is true only once the terms row above
+   *      exists. Hence last.
    */
   async attachExistingUser(
     input: {
@@ -423,7 +460,19 @@ export class SupabaseAgentRepository
     await this.assignPresetRole(db, tx, organizationId, membershipId, preset)
 
     const existing = await this.loadSettings(organizationId, userId)
-    if (existing) return { ...existing, status: settings.status }
+    if (existing) {
+      // The stored ladders win, and so does the reach derived from them. A
+      // re-admitted agent gets their scope row rebuilt from the terms that
+      // survived, not from the preset defaults the caller passed down.
+      await this.syncMembershipScope(
+        db,
+        tx,
+        organizationId,
+        membershipId,
+        existing.inventory,
+      )
+      return { ...existing, status: settings.status }
+    }
 
     const { data, error } = await db
       .from('agent_organization_settings')
@@ -439,7 +488,16 @@ export class SupabaseAgentRepository
 
     if (error) throw error
     recordWrite(tx, `agent_organization_settings(${userId})`)
-    return toSettings(toRow(data))
+
+    const written = toSettings(toRow(data))
+    await this.syncMembershipScope(
+      db,
+      tx,
+      organizationId,
+      membershipId,
+      written.inventory,
+    )
+    return written
   }
 
   // ── AgentHoldStore — which is `public.holds` ────────────────────────────
@@ -794,6 +852,85 @@ export class SupabaseAgentRepository
     return asEnum(rows[0] as Row, 'status', MEMBERSHIP_STATUSES)
   }
 
+  /**
+   * Give the membership the reach its terms describe, as a real scope row.
+   *
+   * ── Why a row and not a projection ────────────────────────────────────
+   *
+   * `Actor.scope` comes from `membership_scopes`, and `scopeFor` in
+   * `authz/can.ts` **replaces** the default with a per-family override rather
+   * than intersecting the two. So projecting an agent's stored inventory reach
+   * straight onto `Actor.scopeOverrides` would take every agent from a scope
+   * that grants nothing to whatever the agent settings screen happens to say —
+   * a widening decided by a screen that is not the permissions screen, and
+   * `all_properties` converts to `all_organization`.
+   *
+   * Writing the row instead inverts that. The grant is a row an authority
+   * wrote; the terms are a request `clampScope` may honour only where it is a
+   * subset. A settings screen can then narrow an agent freely and can never
+   * widen one past what their membership holds.
+   *
+   * ── Read, then insert or update ───────────────────────────────────────
+   *
+   * `membership_scopes` has separate INSERT and UPDATE policies and a
+   * `membership_scopes_membership_key` unique constraint, so an upsert would
+   * be judged by the insert policy on a row that already exists. Reading first
+   * costs one round trip on a unique column and puts each write in front of
+   * the policy that was written for it.
+   *
+   * ── A refusal is fatal ────────────────────────────────────────────────
+   *
+   * An UPDATE a policy refuses matches zero rows rather than raising, so the
+   * count is checked. Returning quietly would leave the agent's reach saying
+   * something nobody asked for — the stale row still granting the portfolio an
+   * owner just took away, or granting nothing after an owner widened it — and
+   * on this record both directions are wrong. The whole transaction fails, and
+   * the terms roll back with it.
+   */
+  private async syncMembershipScope(
+    db: Db,
+    tx: TransactionHandle,
+    organizationId: string,
+    membershipId: string,
+    inventory: AgentInventoryScope,
+  ): Promise<void> {
+    const patch = membershipScopePatch(inventory)
+
+    const { data: held, error: heldError } = await db
+      .from('membership_scopes')
+      .select('id')
+      .eq('membership_id', membershipId)
+      .maybeSingle()
+
+    if (heldError) throw heldError
+
+    if (!held) {
+      const { error } = await db.from('membership_scopes').insert({
+        membership_id: membershipId,
+        organization_id: organizationId,
+        ...patch,
+      })
+
+      if (error) throw error
+      recordWrite(tx, `membership_scopes(${membershipId})`)
+      return
+    }
+
+    const { data, error } = await db
+      .from('membership_scopes')
+      .update(patch)
+      .eq('membership_id', membershipId)
+      .eq('organization_id', organizationId)
+      .select('id')
+
+    if (error) throw error
+    if (toRows(data).length === 0) {
+      throw new NotFoundError('membership_scope', membershipId)
+    }
+
+    recordWrite(tx, `membership_scopes(${membershipId})`)
+  }
+
   /** Restore an existing membership. Never a second one — see the header. */
   private async reactivateMembership(
     db: Db,
@@ -1020,6 +1157,36 @@ export async function loadAgentAccessForMembership(
   return toAccess(toRow(data))
 }
 
+/**
+ * The stored inventory reach behind this membership, or `null`.
+ *
+ * The second read actor resolution makes of this table, and it is separate
+ * from `loadAgentAccessForMembership` for the same reason
+ * `AGENT_ACCESS_COLUMNS` is named separately from the ladder columns: one
+ * answers "what may this agent do" and the other "where", and they are
+ * consumed by different halves of the actor.
+ *
+ * `null` means no terms row, which `SupabaseActorSource` reads as "not an
+ * agent" — no narrowing, and a membership that resolves exactly as every other
+ * membership does. That is the same reading `loadRoles` gives it, and it is
+ * the safe one here too: a narrowing invented for a membership with no terms
+ * would confine somebody to `own_records` over a row that was never written.
+ */
+export async function loadAgentInventoryForMembership(
+  db: Db,
+  membershipId: string,
+): Promise<AgentInventoryScope | null> {
+  const { data, error } = await db
+    .from('agent_organization_settings')
+    .select(AGENT_INVENTORY_COLUMNS)
+    .eq('membership_id', membershipId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) return null
+  return toInventoryScope(toRow(data))
+}
+
 // ── Column lists ──────────────────────────────────────────────────────────
 
 /**
@@ -1033,10 +1200,12 @@ export const AGENT_ACCESS_COLUMNS =
   'access_calendar, access_price, access_guest_data, access_amendments, ' +
   'access_cancellation_kind, access_cancellation_hours, access_payment_link'
 
+/** The inventory reach alone — the surface `membership_scopes` is derived from. */
+export const AGENT_INVENTORY_COLUMNS =
+  'inventory_kind, inventory_property_ids, inventory_unit_ids'
+
 /** The three ladders, shared by the settings row and the invitation. */
-const LADDER_COLUMNS =
-  AGENT_ACCESS_COLUMNS +
-  ', inventory_kind, inventory_property_ids, inventory_unit_ids'
+const LADDER_COLUMNS = AGENT_ACCESS_COLUMNS + ', ' + AGENT_INVENTORY_COLUMNS
 
 const SETTINGS_COLUMNS =
   'id, organization_id, agent_user_id, membership_id, ' +
@@ -1256,6 +1425,53 @@ function inventoryPatch(
       inventory.kind === 'properties' ? [...inventory.propertyIds] : [],
     inventory_unit_ids:
       inventory.kind === 'units' ? [...inventory.unitIds] : [],
+  }
+}
+
+/**
+ * The stored reach, as the columns of `membership_scopes`.
+ *
+ * All three arrays are written on every call. `membership_scopes_shape`
+ * requires that only the one belonging to `kind` is populated, so a patch that
+ * wrote just the new list would be refused by the constraint the first time an
+ * agent moved from named properties to named units.
+ *
+ * ── Two ways to reach nothing, both deliberate ────────────────────────────
+ *
+ * `own_records` is the answer for a reach this table cannot hold: an empty
+ * property or unit list, or a kind `inventoryScopeToScope` did not recognise.
+ * The constraint refuses an empty `properties` list outright — 0019's
+ * `inventory_shape` means the terms row cannot hold one either — so this is a
+ * guard against a scope assembled in memory rather than read from a row.
+ *
+ * Writing `own_records` there is the deny-by-default direction and not merely
+ * the compliant one: an inventory resource carries no assignee and no creator,
+ * so an `own_records` scope reaches no property and no unit at all. The agent
+ * sells nothing until somebody says which properties, which is the same answer
+ * `AgentInventoryScope` gives an empty list in the domain.
+ */
+function membershipScopePatch(
+  inventory: AgentInventoryScope,
+): Record<string, unknown> {
+  const empty = { property_ids: [], unit_ids: [], team_ids: [] }
+  const scope = inventoryScopeToScope(inventory)
+
+  switch (scope.kind) {
+    case 'all_organization':
+      return { kind: 'all_organization', ...empty }
+
+    case 'properties':
+      return scope.propertyIds.length === 0
+        ? { kind: 'own_records', ...empty }
+        : { kind: 'properties', ...empty, property_ids: [...scope.propertyIds] }
+
+    case 'units':
+      return scope.unitIds.length === 0
+        ? { kind: 'own_records', ...empty }
+        : { kind: 'units', ...empty, unit_ids: [...scope.unitIds] }
+
+    default:
+      return { kind: 'own_records', ...empty }
   }
 }
 

@@ -19,13 +19,24 @@
  *      resolution step too.
  */
 
-import type { Actor, Scope } from '../authz/can'
+import {
+  RESOURCE_FAMILIES,
+  clampScope,
+  type Actor,
+  type ResourceFamily,
+  type Scope,
+} from '../authz/can'
 import type { Grant } from '../authz/permissions'
 import { SYSTEM_ROLES, grantsForRoles, type SystemRole } from '../authz/roles'
 import type { Entitlement, PlanLimits } from '../plans/entitlements'
 import { effectiveEntitlements, effectiveLimits } from '../plans/plan'
 import { AuthorizationError, NotFoundError } from '../errors'
-import type { ActorSource, MembershipScopeRow, RoleAssignment } from './source'
+import type {
+  ActorSource,
+  MembershipScopeRow,
+  RoleAssignment,
+  ScopeNarrowing,
+} from './source'
 
 // ── Result ────────────────────────────────────────────────────────────────
 
@@ -127,6 +138,45 @@ export function scopeFromRow(row: MembershipScopeRow | null): Scope {
   }
 }
 
+// ── Narrowing → overrides ─────────────────────────────────────────────────
+
+/**
+ * Turn a source's *request* for per-family reach into the actor's answer.
+ *
+ * The membership scope row is the authority. Every value a source asks for is
+ * clamped against it, so a request can narrow the grant and can never exceed
+ * it — which is the property that decides whether `Actor.scopeOverrides` may
+ * be populated at all. `scopeFor` in `can.ts` replaces rather than intersects
+ * and says outright that whoever fills the field owns that comparison; this is
+ * where the product owns it, once, for every source.
+ *
+ * The default is clamped by the same rule and not by a softer one. An agent
+ * asks for `own_records`, which is incomparable to a `properties` grant, so
+ * `clampScope` returns the floor — `own_records` — which is both what was
+ * asked for and what every agent already resolved to before any of this
+ * existed. A source asking for something *wider* than the grant as its default
+ * gets the grant back, which is the answer it would have had with no narrowing
+ * at all.
+ *
+ * Families are walked from `RESOURCE_FAMILIES` rather than from the keys the
+ * source happened to supply, so a family added to the model next year is one
+ * this function already considers.
+ */
+export function applyScopeNarrowing(
+  granted: Scope,
+  narrowing: ScopeNarrowing,
+): { scope: Scope; scopeOverrides: Partial<Record<ResourceFamily, Scope>> } {
+  const scopeOverrides: Partial<Record<ResourceFamily, Scope>> = {}
+
+  for (const family of RESOURCE_FAMILIES) {
+    const requested = narrowing.families[family]
+    if (requested === undefined) continue
+    scopeOverrides[family] = clampScope(granted, requested)
+  }
+
+  return { scope: clampScope(granted, narrowing.scope), scopeOverrides }
+}
+
 // ── Resolution ────────────────────────────────────────────────────────────
 
 /**
@@ -161,21 +211,29 @@ export async function resolveActor(
   const plan = await source.loadPlan(organizationId)
   if (!plan) return { ok: false, reason: 'no_subscription' }
 
-  const [assignments, scopeRow] = await Promise.all([
+  const [assignments, scopeRow, narrowing] = await Promise.all([
     source.loadRoles(membership.id),
     source.loadScope(membership.id),
+    // A source written before per-family reach existed does not have the
+    // method, and a membership that carries no narrowing answers `null`. Both
+    // resolve exactly as they did: one scope, no overrides.
+    source.loadScopeNarrowing?.(membership.id) ?? null,
   ])
 
   const grants = grantsForAssignments(assignments)
   const entitlements = effectiveEntitlements(plan)
   const isPlatformStaff = assignments.some((a) => a.kind === 'platform')
+  const granted = scopeFromRow(scopeRow)
+  const reach = narrowing
+    ? applyScopeNarrowing(granted, narrowing)
+    : { scope: granted }
 
   const actor: Actor = {
     userId: membership.userId,
     organizationId: membership.organizationId,
     membershipStatus: membership.status,
     grants,
-    scope: scopeFromRow(scopeRow),
+    ...reach,
     entitlements,
     ...(isPlatformStaff ? { isPlatformStaff: true } : {}),
   }

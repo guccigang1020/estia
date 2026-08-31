@@ -1,51 +1,70 @@
 /**
  * EXECUTION CONTEXT — SERVER ONLY. The read side of the finance screens.
  *
- * ── Why this is not `SupabaseFinanceRepository` ───────────────────────────
+ * ── This file used to be `SupabaseFinanceRepository`'s absence ────────────
  *
- * It should be, and it cannot be yet. `FinanceRepository` is a per-booking
- * port: `loadPaymentsForBooking`, `loadInvoicesForBooking`,
- * `loadCommissionsForBooking`. There is no method that answers "every payment
- * in this organization", which is the only question a list screen asks, and
- * building one out of the port means one round trip per booking — an N+1 over
- * a table the business opens every morning. So the reads are plain queries
- * here, exactly as `bookings/_lib/queries.ts` does, over the same
- * request-scoped client the adapter would have used, mapped with the same
- * `@/lib/persistence` helpers and validated against the same frozen
- * vocabularies. Adding three list methods to the port would move this file
- * behind it without changing a single decision in it. That is a gap in the
- * port, and it is written down rather than worked around silently.
+ * It held its own `db.from('payments').select(…)` because the port had no
+ * method that answered "every payment in this organization" — `FinanceRepository`
+ * was per-booking, and building a list out of it meant one round trip per
+ * booking, an N+1 over the table the business opens every morning. The header
+ * that stood here said so and said the fix out loud: three list methods on the
+ * port would move this file behind it without changing a single decision in it.
  *
- * The reads are also deliberately *narrower* than the adapter's. The adapter's
- * `INVOICE_COLUMNS` asks for `snapshot_captured_at`, which every list row here
- * would carry and no screen would print — and which `asTimestamp` refuses when
- * it is null. Reading only what is shown is both cheaper and the reason these
- * queries survive a row the adapter would reject.
+ * That is what happened. `listPayments`, `listInvoices` and `listCommissions`
+ * are now on `FinanceRepository`, with the same columns, the same filters, the
+ * same newest-first ordering, the same page ceiling and the same three joins;
+ * `SupabaseFinanceRepository` implements them and `InMemoryFinanceRepository`
+ * doubles them. The two reads that raised over the demo dataset were closed at
+ * the same time — `snapshot_captured_at` is nullable and is read as such, and
+ * `payment_provider_events` is a declared, empty demo table rather than a
+ * missing one.
+ *
+ * ── What stayed here, and why it is not the repository's ──────────────────
+ *
+ * Authorization. `can()` per row and `redact()` per field decide what *this
+ * reader* may see, and a data port that took an `Actor` would put the
+ * authorization engine inside the persistence layer and force the in-memory
+ * double to reimplement it. The two reads that are themselves conditional on a
+ * grant — a booking's reference, a commission rule's label — are expressed as
+ * flags on the query: this file answers the authorization question and the port
+ * obeys the answer.
  *
  * ── Three floors, and none of them is this file alone ─────────────────────
  *
  *   1. `requireGrant` at the route refuses `payment.view` / `invoice.view` /
- *      `commission.view` before a query is built.
+ *      `commission.view` / `expense.view` before a query is built.
  *   2. `can()` per row here, with `family: 'finance'`, so a membership scoped
  *      to one property does not see another property's money even though the
- *      grant is held. Same move `loadProperties` makes for inventory.
- *   3. Row level security refuses regardless of both:
- *      `payments_select` carries `has_permission(organization_id,
- *      'payment.view')` *and* `property_in_scope`, `invoices_select` carries
- *      `invoice.view`, `commissions_select` carries `commission.view`. A wrong
- *      organization id in this file returns nothing rather than somebody
- *      else's ledger.
+ *      grant is held.
+ *   3. Row level security refuses regardless of both: `payments_select` carries
+ *      `has_permission(organization_id, 'payment.view')` *and*
+ *      `property_in_scope`, `invoices_select` carries `invoice.view`,
+ *      `commissions_select` carries `commission.view`, `expense_rules_select`
+ *      and `expense_allocations_select` carry `expense.view`.
  *
  * `redact()` is the fourth thing and is not a floor of the same kind: it
  * removes fields from rows this reader is entitled to, so that access to a
  * record is not access to every column of it.
  *
+ * ── The redaction `redact()` cannot perform ───────────────────────────────
+ *
+ * `redact` deletes keys on the record it is handed and cannot reach into a
+ * nested object, which is correct behaviour and not a bug in it: a field rule
+ * cannot know that another field's value was copied somewhere else. Three
+ * values in this module are copies one level down, and each is withheld by
+ * never being built rather than by being deleted afterwards:
+ *
+ *   · `CommissionListItem.rule.label`, derived from `commissions.explanation`,
+ *     which spells the base out in words.
+ *   · `InvoiceListItem.payments[].amountAgorot`, which is a price.
+ *   · `ExpenseRuleListItem.allocations[]`, which is what each stay was charged.
+ *
  * ── Money ─────────────────────────────────────────────────────────────────
  *
- * Integer agorot throughout, read through `asAgorot`, which refuses a float at
- * the border. Nothing here divides by 100. Every total is `sumAgorot` from the
- * finance domain over figures that are already integers — never a number this
- * file adds up its own way, and never a figure re-derived in a component.
+ * Integer agorot throughout, read through `asAgorot` at the border, which
+ * refuses a float. Nothing here divides by 100. Every total is `sumAgorot` from
+ * the finance domain over figures that are already integers — never a number
+ * this file adds up its own way, and never a figure re-derived in a component.
  */
 
 import {
@@ -56,44 +75,23 @@ import {
   type Resource,
 } from '@/lib/authz/can'
 import type { Grant } from '@/lib/authz/permissions'
+import type { CommissionStatus, PaymentStatus } from '@/lib/contracts/states'
 import {
-  COMMISSION_STATUSES,
-  PAYMENT_METHODS,
-  PAYMENT_STATUSES,
-  type CommissionBase,
-  type CommissionStatus,
-  type PaymentMethod,
-  type PaymentStatus,
-} from '@/lib/contracts/states'
-import { PRICE_LINE_KINDS, type PriceLine } from '@/lib/booking/types'
-import { localDate } from '@/lib/booking/dates'
-import {
-  COLLECTION_CHANNELS,
-  COMMISSION_BASES,
-  INVOICE_KINDS,
-  INVOICE_STATUSES,
-  PAYMENT_ATTENTIONS,
-  PAYMENT_PURPOSES,
   sumAgorot,
-  type CollectionChannel,
-  type CommissionRule,
-  type InvoiceKind,
+  type CommissionListRow,
+  type ExpenseAllocationRow,
+  type ExpenseKind,
+  type ExpenseRuleListRow,
+  type FinanceRepository,
+  type InvoiceListRow,
+  type InvoicePaymentLinkRow,
   type InvoiceStatus,
-  type PaymentAttention,
-  type PaymentPurpose,
+  type PaymentListRow,
 } from '@/lib/finance'
 import {
   asAgorot,
-  asBoolean,
-  asEnum,
-  asEnumOrNull,
-  asJsonRecord,
-  asNumber,
-  asNumberOrNull,
   asString,
   asStringOrNull,
-  asTimestamp,
-  asTimestampOrNull,
   toRow,
   toRows,
   type Db,
@@ -114,7 +112,8 @@ import type { StatusFilter } from './filters'
 export const FINANCE_PAGE_SIZE = 100
 
 export type FinanceListArgs<S extends string> = {
-  db: Db
+  /** The port, not a client. See the header. */
+  repo: FinanceRepository
   actor: Actor
   organizationId: string
   /** A single property, or null for every property in scope. */
@@ -122,6 +121,16 @@ export type FinanceListArgs<S extends string> = {
   filter: StatusFilter<S>
   limit?: number
 }
+
+/**
+ * A record whose listed keys `redact()` may delete.
+ *
+ * The port answers with every field present; what a given reader sees is
+ * decided here. Writing the item type as the row type with those keys made
+ * optional keeps one definition of what a payment row *is*, so a column added
+ * to the port cannot be forgotten on the screen.
+ */
+type Redactable<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
 /** The resource an authorization question about a finance row is asked about. */
 function financeResource(
@@ -133,62 +142,20 @@ function financeResource(
   return resource
 }
 
-/**
- * A `timestamptz` as the calendar date it fell on at the property.
- *
- * Not `iso.slice(0, 10)`. A payment taken at 00:30 in Israel is `21:30Z` the
- * previous day, and slicing the ISO string would file it under yesterday — on
- * the screen a bookkeeper uses to reconcile a day's takings. `localDate` is the
- * domain's own conversion, against `PROPERTY_TIME_ZONE`.
- */
-function propertyDate(row: Row, column: string): string | null {
-  const value = asTimestampOrNull(row, column)
-  return value === null ? null : localDate(new Date(value))
-}
-
-function requiredPropertyDate(row: Row, column: string): string {
-  return localDate(new Date(asTimestamp(row, column)))
-}
-
 /* -------------------------------------------------------------- payments -- */
 
 /**
  * One line of the payments list.
- *
- * Deliberately not a `Payment`. The domain record carries `appliedEventIds`,
- * which is a second query per row against `payment_attempts`, and the list
- * shows none of it. Everything here is a column on the row.
  *
  * The optional fields are optional in the type because `redact()` genuinely
  * removes them: a reader without `guest.view_name` has no `payerName` key at
  * all, and the type says so rather than letting a component read `undefined`
  * out of a field it was told was a string.
  */
-export type PaymentListItem = {
-  id: string
-  bookingId: string
-  propertyId: string
-  /** The booking's own reference, or the payment's snapshot of it. */
-  bookingReference: string | null
-  status: PaymentStatus
-  method: PaymentMethod
-  purpose: PaymentPurpose
-  channel: CollectionChannel
-  /** Set when a person must intervene. Never cleared by automation. */
-  requiresAttention: PaymentAttention | null
-  /** When the provider stopped answering, as a property-local date. */
-  unknownSince: string | null
-  /** When the payment was recorded. Always present. */
-  recordedOn: string
-  /** When the money actually arrived, or null because it has not. */
-  paidOn: string | null
-  /** Withheld without `guest.view_name`. Never replaced by "אורח". */
-  payerName?: string | null
-  /** The three amounts, withheld together without `booking.view_price`. */
-  amountAgorot?: number
-  capturedAgorot?: number
-  refundedAgorot?: number
-}
+export type PaymentListItem = Redactable<
+  PaymentListRow,
+  'payerName' | 'amountAgorot' | 'capturedAgorot' | 'refundedAgorot'
+>
 
 /**
  * The fields a reader may hold `payment.view` and still not see.
@@ -208,93 +175,43 @@ const PAYMENT_REDACTIONS = [
   { key: 'refundedAgorot', requires: 'booking.view_price' },
 ] as const satisfies ReadonlyArray<{
   key: keyof PaymentListItem
-  requires: Parameters<typeof can>[1]
+  requires: Grant
 }>
 
-const PAYMENT_COLUMNS =
-  'id, booking_id, property_id, status, method, purpose, channel, ' +
-  'amount_agorot, captured_agorot, amount_refunded_agorot, payer_name, ' +
-  'payer_reference, requires_attention, unknown_since, paid_at, created_at'
-
-/**
- * The payments this reader may see, newest first.
- *
- * Ordered by `created_at` rather than by `paid_at`: a pending or failed
- * payment has no `paid_at`, and ordering by it would sort exactly the rows
- * somebody is looking for to the bottom of the list.
- */
+/** The payments this reader may see, newest first. */
 export async function listPayments(
   args: FinanceListArgs<PaymentStatus>,
 ): Promise<readonly PaymentListItem[]> {
-  const { db, actor, organizationId, propertyId, filter } = args
+  const { repo, actor, organizationId, propertyId, filter } = args
 
-  let query = db
-    .from('payments')
-    .select(PAYMENT_COLUMNS)
-    .eq('organization_id', organizationId)
-
-  if (propertyId !== null) query = query.eq('property_id', propertyId)
-  if (filter.status !== null) query = query.eq('status', filter.status)
-
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-    .limit(args.limit ?? FINANCE_PAGE_SIZE)
-
-  if (error) throw error
-
-  const rows = toRows(data).filter((row) =>
-    can(
-      actor,
-      'payment.view',
-      financeResource(organizationId, asString(row, 'property_id')),
-    ),
-  )
-
-  const references = await bookingReferences(
-    db,
-    actor,
+  const rows = await repo.listPayments({
     organizationId,
-    rows.map((row) => asString(row, 'booking_id')),
-  )
-
-  return rows.map((row) => {
-    const bookingId = asString(row, 'booking_id')
-    const propertyOfRow = asString(row, 'property_id')
-
-    const item: PaymentListItem = {
-      id: asString(row, 'id'),
-      bookingId,
-      propertyId: propertyOfRow,
-      // The booking's own reference where it is readable, and otherwise the
-      // one the payment recorded when it was taken. Both are real; neither is
-      // invented, and null is a real answer.
-      bookingReference:
-        references.get(bookingId) ?? asStringOrNull(row, 'payer_reference'),
-      status: asEnum(row, 'status', PAYMENT_STATUSES),
-      method: asEnum(row, 'method', PAYMENT_METHODS),
-      purpose: asEnum(row, 'purpose', PAYMENT_PURPOSES),
-      channel: asEnum(row, 'channel', COLLECTION_CHANNELS),
-      requiresAttention: asEnumOrNull(
-        row,
-        'requires_attention',
-        PAYMENT_ATTENTIONS,
-      ),
-      unknownSince: propertyDate(row, 'unknown_since'),
-      recordedOn: requiredPropertyDate(row, 'created_at'),
-      paidOn: propertyDate(row, 'paid_at'),
-      payerName: asStringOrNull(row, 'payer_name'),
-      amountAgorot: asAgorot(row, 'amount_agorot'),
-      capturedAgorot: asAgorot(row, 'captured_agorot'),
-      refundedAgorot: asAgorot(row, 'amount_refunded_agorot'),
-    }
-
-    return redact(
-      actor,
-      item,
-      PAYMENT_REDACTIONS,
-      financeResource(organizationId, propertyOfRow),
-    )
+    propertyId,
+    status: filter.status,
+    limit: args.limit ?? FINANCE_PAGE_SIZE,
+    // `holdsGrant`, not `can(..., resource)`: the question is whether this
+    // person may read bookings at all. The scope question is answered per row
+    // below, and asking it here against a resource carrying no property would
+    // refuse every property-scoped reader.
+    withBookingReferences: holdsGrant(actor, 'booking.view'),
   })
+
+  return rows
+    .filter((row) =>
+      can(
+        actor,
+        'payment.view',
+        financeResource(organizationId, row.propertyId),
+      ),
+    )
+    .map((row) =>
+      redact(
+        actor,
+        { ...row } as PaymentListItem,
+        PAYMENT_REDACTIONS,
+        financeResource(organizationId, row.propertyId),
+      ),
+    )
 }
 
 /**
@@ -359,70 +276,28 @@ export function paymentsNeedingAttention(
 
 /** How many payments exist for this organization and property, before any filter. */
 export async function countPayments(
-  db: Db,
+  repo: FinanceRepository,
   organizationId: string,
   propertyId: string | null,
 ): Promise<number> {
-  return countRows(db, 'payments', organizationId, propertyId)
+  return repo.countPayments(organizationId, propertyId)
 }
 
 /* -------------------------------------------------------------- invoices -- */
 
-/** One payment an invoice accounts for, as much of it as this reader may see. */
-export type InvoicePaymentLink = {
-  id: string
-  status: PaymentStatus
-  method: PaymentMethod
-  amountAgorot?: number
-  paidOn: string | null
-}
+/** One payment an invoice accounts for. The port's row, named for the screen. */
+export type InvoicePaymentLink = InvoicePaymentLinkRow
 
-export type InvoiceListItem = {
-  id: string
-  bookingId: string
-  propertyId: string
-  kind: InvoiceKind
-  status: InvoiceStatus
-  series: string
-  year: number
-  number: number | null
-  /** What is printed. Null on a draft, which has not been allocated one. */
-  displayNumber: string | null
-  issuedOn: string | null
-  cancelledOn: string | null
-  cancellationReason: string | null
-  recordedOn: string
-  taxRateBps: number | null
-  touristVatExempt: boolean
-  /**
-   * The itemisation, and the sum of it.
-   *
-   * `linesTotalAgorot` is `sumLines` over the lines below — the domain's own
-   * sum, computed here so that no component adds anything up. It is carried
-   * *beside* the document's stored total rather than instead of it: an issued
-   * invoice's total is frozen and may not be recomputed, and a screen that
-   * silently rendered the sum of the lines in its place would be quietly
-   * correcting a legal document.
-   */
-  lines?: readonly PriceLine[]
-  linesTotalAgorot?: number
-  subtotalAgorot?: number
-  taxAgorot?: number
-  totalAgorot?: number
-  /** Withheld without `guest.view_name`. */
-  customerName?: string
-  customerTaxId?: string | null
-  /**
-   * The payments this document accounts for, read from `invoice_payments`.
-   *
-   * `linkedPaymentCount` is the number of links and needs only `invoice.view`;
-   * `payments` needs `payment.view` as well, because the amounts and the
-   * statuses are on the payment rows. A reader holding one and not the other
-   * is told how many payments there are rather than shown none.
-   */
-  linkedPaymentCount: number
-  payments: readonly InvoicePaymentLink[] | null
-}
+export type InvoiceListItem = Redactable<
+  InvoiceListRow,
+  | 'customerName'
+  | 'customerTaxId'
+  | 'lines'
+  | 'linesTotalAgorot'
+  | 'subtotalAgorot'
+  | 'taxAgorot'
+  | 'totalAgorot'
+>
 
 const INVOICE_REDACTIONS = [
   { key: 'customerName', requires: 'guest.view_name' },
@@ -434,157 +309,61 @@ const INVOICE_REDACTIONS = [
   { key: 'totalAgorot', requires: 'booking.view_price' },
 ] as const satisfies ReadonlyArray<{
   key: keyof InvoiceListItem
-  requires: Parameters<typeof can>[1]
+  requires: Grant
 }>
-
-/**
- * `invoice_payments(payment_id)`, and never `metadata.payment_ids`.
- *
- * 0022 created the join table and 0024 dropped the array after proving nothing
- * was lost. A fallback to the array here would resurrect links somebody
- * deliberately removed, on a deployment where the key still happens to exist.
- */
-const INVOICE_COLUMNS =
-  'id, booking_id, property_id, kind, status, series, year, number, ' +
-  'display_number, customer_name, customer_tax_id, subtotal_agorot, ' +
-  'tax_agorot, total_agorot, tax_rate_bps, tourist_vat_exempt, issued_at, ' +
-  'cancelled_at, cancellation_reason, created_at, ' +
-  'invoice_lines(kind, label, amount_agorot, quantity, line_date, sort_order), ' +
-  'invoice_payments(payment_id)'
 
 export async function listInvoices(
   args: FinanceListArgs<InvoiceStatus>,
 ): Promise<readonly InvoiceListItem[]> {
-  const { db, actor, organizationId, propertyId, filter } = args
+  const { repo, actor, organizationId, propertyId, filter } = args
 
-  let query = db
-    .from('invoices')
-    .select(INVOICE_COLUMNS)
-    .eq('organization_id', organizationId)
-
-  if (propertyId !== null) query = query.eq('property_id', propertyId)
-  if (filter.status !== null) query = query.eq('status', filter.status)
-
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-    .limit(args.limit ?? FINANCE_PAGE_SIZE)
-
-  if (error) throw error
-
-  const rows = toRows(data).filter((row) =>
-    can(
-      actor,
-      'invoice.view',
-      financeResource(organizationId, asString(row, 'property_id')),
-    ),
-  )
-
-  const linkedIds = rows.flatMap(paymentIdsOf)
-  const linked = await linkedPayments(db, actor, organizationId, linkedIds)
-
-  return rows.map((row) => {
-    const propertyOfRow = asString(row, 'property_id')
-    const ids = paymentIdsOf(row)
-    const lines = toPriceLines(row, 'invoice_lines')
-
-    const item: InvoiceListItem = {
-      id: asString(row, 'id'),
-      bookingId: asString(row, 'booking_id'),
-      propertyId: propertyOfRow,
-      kind: asEnum(row, 'kind', INVOICE_KINDS),
-      status: asEnum(row, 'status', INVOICE_STATUSES),
-      series: asString(row, 'series'),
-      year: asNumber(row, 'year'),
-      number: asNumberOrNull(row, 'number'),
-      displayNumber: asStringOrNull(row, 'display_number'),
-      issuedOn: propertyDate(row, 'issued_at'),
-      cancelledOn: propertyDate(row, 'cancelled_at'),
-      cancellationReason: asStringOrNull(row, 'cancellation_reason'),
-      recordedOn: requiredPropertyDate(row, 'created_at'),
-      taxRateBps: asNumberOrNull(row, 'tax_rate_bps'),
-      touristVatExempt: asBoolean(row, 'tourist_vat_exempt'),
-      lines,
-      linesTotalAgorot: sumAgorot(lines.map((line) => line.amount)),
-      subtotalAgorot: asAgorot(row, 'subtotal_agorot'),
-      taxAgorot: asAgorot(row, 'tax_agorot'),
-      totalAgorot: asAgorot(row, 'total_agorot'),
-      customerName: asString(row, 'customer_name'),
-      customerTaxId: asStringOrNull(row, 'customer_tax_id'),
-      linkedPaymentCount: ids.length,
-      payments:
-        linked === null
-          ? null
-          : ids
-              .map((id) => linked.get(id))
-              .filter((entry): entry is InvoicePaymentLink => entry !== undefined),
-    }
-
-    return redact(
-      actor,
-      item,
-      INVOICE_REDACTIONS,
-      financeResource(organizationId, propertyOfRow),
-    )
+  const rows = await repo.listInvoices({
+    organizationId,
+    propertyId,
+    status: filter.status,
+    limit: args.limit ?? FINANCE_PAGE_SIZE,
+    // `null` and an empty list are different answers and the screen says so
+    // differently: "this invoice has settled nothing yet" versus "there are two
+    // payments here and you may not see them". Collapsing the two would tell a
+    // reader an invoice is unpaid because of their own permissions.
+    withLinkedPayments: holdsGrant(actor, 'payment.view'),
+    withLinkedAmounts: holdsGrant(actor, 'booking.view_price'),
   })
+
+  return rows
+    .filter((row) =>
+      can(
+        actor,
+        'invoice.view',
+        financeResource(organizationId, row.propertyId),
+      ),
+    )
+    .map((row) =>
+      redact(
+        actor,
+        { ...row } as InvoiceListItem,
+        INVOICE_REDACTIONS,
+        financeResource(organizationId, row.propertyId),
+      ),
+    )
 }
 
 export async function countInvoices(
-  db: Db,
+  repo: FinanceRepository,
   organizationId: string,
   propertyId: string | null,
 ): Promise<number> {
-  return countRows(db, 'invoices', organizationId, propertyId)
+  return repo.countInvoices(organizationId, propertyId)
 }
 
 /* ----------------------------------------------------------- commissions -- */
 
-/**
- * Who the money is owed to.
- *
- * `agent_user_id` is nullable and `agency_id` is nullable, and
- * `commissions_has_a_payee` requires one of the two — an agency keeps the
- * commercial relationship when the individual leaves. `kind` says which of the
- * two answered, so a screen never has to infer it from a name being present.
- *
- * `unknown` is reachable: the person's `auth.users` row is `on delete set
- * null` and the agency may be unreadable to this member. It is rendered as
- * "the payee is not identifiable", which is a row somebody must look at — not
- * papered over with the agency's name or the agent's id.
- */
-export type CommissionPayee =
-  | { kind: 'agent'; name: string | null; agencyName: string | null }
-  | { kind: 'agency'; name: string | null }
-  | { kind: 'unknown' }
+export type { CommissionPayee } from '@/lib/finance'
 
-export type CommissionListItem = {
-  id: string
-  bookingId: string
-  propertyId: string
-  bookingReference: string | null
-  status: CommissionStatus
-  payee: CommissionPayee
-  /** What is owed. Visible to anybody holding `commission.view`. */
-  amountAgorot: number
-  /** Basis points — 1200 is 12%. Null for a fixed-amount commission. */
-  rateBps: number | null
-  /** Which base was agreed. The *name* of it, never the figure. */
-  basis: CommissionBase
-  rule: CommissionRule
-  /**
-   * The stay revenue the percentage was applied to, withheld without
-   * `booking.view_price`. The rule's own free-text label travels with it —
-   * see `COMMISSION_REDACTIONS`.
-   */
-  basisAgorot?: number
-  explanation?: string | null
-  becameEligibleOn: string | null
-  approvedOn: string | null
-  paidOn: string | null
-  cancellationReason: string | null
-  /** Paid, and then the booking was refunded. Somebody must claw it back. */
-  clawbackRequired: boolean
-  recordedOn: string
-}
+export type CommissionListItem = Redactable<
+  CommissionListRow,
+  'basisAgorot' | 'explanation'
+>
 
 /**
  * The base is stay revenue, so it is gated on `booking.view_price` — and so is
@@ -594,7 +373,9 @@ export type CommissionListItem = {
  * written when the commission was created, and the demo's own rows read
  * "10% מסך הלינות (4,500 ₪)" — the base, spelled out in a sentence. Withholding
  * `basis_agorot` while printing that would be a redaction that redacts nothing.
- * Anything derived from the base travels with the base.
+ * Anything derived from the base travels with the base, including the copy of
+ * it inside `rule.label`, which is withheld at the port because `redact()`
+ * cannot reach one level down.
  *
  * `amountAgorot` and `rateBps` are deliberately *not* here: what an agent is
  * owed and at what rate is exactly what `commission.view` is the right to see,
@@ -606,85 +387,39 @@ const COMMISSION_REDACTIONS = [
   { key: 'explanation', requires: 'booking.view_price' },
 ] as const satisfies ReadonlyArray<{
   key: keyof CommissionListItem
-  requires: Parameters<typeof can>[1]
+  requires: Grant
 }>
-
-const COMMISSION_COLUMNS =
-  'id, booking_id, property_id, agent_user_id, agency_id, status, base, ' +
-  'basis_agorot, rate_bps, amount_agorot, explanation, eligible_at, ' +
-  'approved_at, paid_at, cancellation_reason, clawback_required, metadata, ' +
-  'created_at'
 
 export async function listCommissions(
   args: FinanceListArgs<CommissionStatus>,
 ): Promise<readonly CommissionListItem[]> {
-  const { db, actor, organizationId, propertyId, filter } = args
+  const { repo, actor, organizationId, propertyId, filter } = args
 
-  let query = db
-    .from('commissions')
-    .select(COMMISSION_COLUMNS)
-    .eq('organization_id', organizationId)
-
-  if (propertyId !== null) query = query.eq('property_id', propertyId)
-  if (filter.status !== null) query = query.eq('status', filter.status)
-
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-    .limit(args.limit ?? FINANCE_PAGE_SIZE)
-
-  if (error) throw error
-
-  const rows = toRows(data).filter((row) =>
-    can(
-      actor,
-      'commission.view',
-      financeResource(organizationId, asString(row, 'property_id')),
-    ),
-  )
-
-  const [references, people, agencies] = await Promise.all([
-    bookingReferences(
-      db,
-      actor,
-      organizationId,
-      rows.map((row) => asString(row, 'booking_id')),
-    ),
-    profileNames(db, namesNeeded(rows, 'agent_user_id')),
-    agencyNames(db, namesNeeded(rows, 'agency_id')),
-  ])
-
-  return rows.map((row) => {
-    const propertyOfRow = asString(row, 'property_id')
-    const bookingId = asString(row, 'booking_id')
-
-    const item: CommissionListItem = {
-      id: asString(row, 'id'),
-      bookingId,
-      propertyId: propertyOfRow,
-      bookingReference: references.get(bookingId) ?? null,
-      status: asEnum(row, 'status', COMMISSION_STATUSES),
-      payee: toPayee(row, people, agencies),
-      amountAgorot: asAgorot(row, 'amount_agorot'),
-      rateBps: asNumberOrNull(row, 'rate_bps'),
-      basis: asEnum(row, 'base', COMMISSION_BASES),
-      rule: toCommissionRule(row),
-      basisAgorot: asAgorot(row, 'basis_agorot'),
-      explanation: asStringOrNull(row, 'explanation'),
-      becameEligibleOn: propertyDate(row, 'eligible_at'),
-      approvedOn: propertyDate(row, 'approved_at'),
-      paidOn: propertyDate(row, 'paid_at'),
-      cancellationReason: asStringOrNull(row, 'cancellation_reason'),
-      clawbackRequired: asBoolean(row, 'clawback_required'),
-      recordedOn: requiredPropertyDate(row, 'created_at'),
-    }
-
-    return redact(
-      actor,
-      item,
-      COMMISSION_REDACTIONS,
-      financeResource(organizationId, propertyOfRow),
-    )
+  const rows = await repo.listCommissions({
+    organizationId,
+    propertyId,
+    status: filter.status,
+    limit: args.limit ?? FINANCE_PAGE_SIZE,
+    withBookingReferences: holdsGrant(actor, 'booking.view'),
+    withRuleLabel: holdsGrant(actor, 'booking.view_price'),
   })
+
+  return rows
+    .filter((row) =>
+      can(
+        actor,
+        'commission.view',
+        financeResource(organizationId, row.propertyId),
+      ),
+    )
+    .map((row) =>
+      redact(
+        actor,
+        { ...row } as CommissionListItem,
+        COMMISSION_REDACTIONS,
+        financeResource(organizationId, row.propertyId),
+      ),
+    )
 }
 
 /** What is owed across the listed commissions, by the domain's own sum. */
@@ -695,53 +430,538 @@ export function commissionTotalAgorot(
 }
 
 export async function countCommissions(
-  db: Db,
+  repo: FinanceRepository,
   organizationId: string,
   propertyId: string | null,
 ): Promise<number> {
-  return countRows(db, 'commissions', organizationId, propertyId)
+  return repo.countCommissions(organizationId, propertyId)
+}
+
+/* -------------------------------------------------------------- expenses -- */
+
+/**
+ * One expense rule, and what it has actually cost.
+ *
+ * There is no `expenses` table and this list is not a ledger. `expense_rules`
+ * says what recurs and `expense_allocations` says which booking carried a share
+ * of it, which is how this schema models cost — so the screen shows a rule and
+ * the shares recorded under it, and never a row per month that nobody wrote.
+ *
+ * `allocations` and `allocatedAgorot` are what each *stay* was charged, which
+ * is booking profitability rather than a cost the business incurred. They are
+ * gated on `booking.view_profitability` — the grant `FINANCE_CORE` carries and
+ * an operations manager does not — while the rule's own amount is visible to
+ * anybody holding `expense.view`, because what the business spends on laundry
+ * is exactly what that grant is the right to see.
+ */
+export type ExpenseRuleListItem = Omit<
+  ExpenseRuleListRow,
+  'scopePropertyId'
+> & {
+  /** Null for an organization-wide rule, which applies to every property. */
+  scopePropertyId: string | null
+  /** The property's own name, when the scope names one and it is readable. */
+  scopePropertyName: string | null
+  /** How many stays have carried a share. Needs `booking.view_profitability`. */
+  allocationCount?: number
+  /** `sumAgorot` over those shares. */
+  allocatedAgorot?: number
+  allocations?: readonly ExpenseAllocationListItem[]
+}
+
+export type ExpenseAllocationListItem = {
+  id: string
+  bookingId: string
+  bookingReference: string | null
+  amountAgorot: number
+  periodStart: string
+  periodEnd: string
+  /** Hebrew, one line, written when the allocation ran. */
+  basis: string | null
+  allocatedOn: string
+}
+
+/**
+ * Both keys, deleted together.
+ *
+ * `allocations` is a nested array carrying an amount per booking, so the array
+ * itself is never built for a reader who may not see it — see `listExpenseRules`
+ * below. This entry is the second half of the same decision, so that the keys
+ * are *absent* rather than present and empty: an empty allocation list reads as
+ * "no stay has carried this cost", which is a different and false statement.
+ */
+const EXPENSE_REDACTIONS = [
+  { key: 'allocationCount', requires: 'booking.view_profitability' },
+  { key: 'allocatedAgorot', requires: 'booking.view_profitability' },
+  { key: 'allocations', requires: 'booking.view_profitability' },
+] as const satisfies ReadonlyArray<{
+  key: keyof ExpenseRuleListItem
+  requires: Grant
+}>
+
+export type ExpenseListArgs = {
+  repo: FinanceRepository
+  /** For the two names the port does not carry: the property and the booking. */
+  db: Db
+  actor: Actor
+  organizationId: string
+  propertyId: string | null
+  filter: StatusFilter<ExpenseKind>
+  limit?: number
+}
+
+/**
+ * The expense rules this reader may see.
+ *
+ * `can()` is asked with the property the *scope* names, which for an
+ * organization-wide rule is nothing at all — and a resource carrying no
+ * location is only reachable by an organization-wide scope, by the engine's own
+ * rule. So a manager scoped to one property sees that property's rules and not
+ * the organization's, which is the model working rather than a filter this file
+ * invented.
+ */
+export async function listExpenseRules(
+  args: ExpenseListArgs,
+): Promise<readonly ExpenseRuleListItem[]> {
+  const { repo, db, actor, organizationId, propertyId, filter } = args
+
+  const rules = (
+    await repo.listExpenseRules({
+      organizationId,
+      propertyId,
+      kind: filter.status,
+      limit: args.limit ?? FINANCE_PAGE_SIZE,
+    })
+  ).filter((rule) =>
+    can(
+      actor,
+      'expense.view',
+      financeResource(organizationId, rule.scopePropertyId),
+    ),
+  )
+
+  // Never built for a reader who may not see it. `redact` deletes keys on the
+  // record it is handed and cannot reach into the array, so the array must not
+  // exist — and skipping the read is the other half of the same sentence.
+  const maySeeShares = holdsGrant(actor, 'booking.view_profitability')
+
+  const allocations = maySeeShares
+    ? await repo.listExpenseAllocations(
+        organizationId,
+        rules.map((rule) => rule.id),
+      )
+    : []
+
+  const [propertyNames, references] = await Promise.all([
+    propertyNamesFor(
+      db,
+      actor,
+      organizationId,
+      rules.map((rule) => rule.scopePropertyId),
+    ),
+    bookingReferences(
+      db,
+      actor,
+      organizationId,
+      allocations.map((allocation) => allocation.bookingId),
+    ),
+  ])
+
+  const byRule = new Map<string, ExpenseAllocationRow[]>()
+  for (const allocation of allocations) {
+    const list = byRule.get(allocation.ruleId) ?? []
+    list.push(allocation)
+    byRule.set(allocation.ruleId, list)
+  }
+
+  return rules.map((rule) => {
+    const mine = byRule.get(rule.id) ?? []
+
+    const item: ExpenseRuleListItem = {
+      ...rule,
+      scopePropertyName:
+        rule.scopePropertyId === null
+          ? null
+          : (propertyNames.get(rule.scopePropertyId) ?? null),
+    }
+
+    if (maySeeShares) {
+      item.allocationCount = mine.length
+      item.allocatedAgorot = sumAgorot(mine.map((entry) => entry.amountAgorot))
+      item.allocations = mine.map((entry) => ({
+        id: entry.id,
+        bookingId: entry.bookingId,
+        bookingReference: references.get(entry.bookingId) ?? null,
+        amountAgorot: entry.amountAgorot,
+        periodStart: entry.periodStart,
+        periodEnd: entry.periodEnd,
+        basis: entry.basis,
+        allocatedOn: entry.allocatedOn,
+      }))
+    }
+
+    return redact(
+      actor,
+      item,
+      EXPENSE_REDACTIONS,
+      financeResource(organizationId, rule.scopePropertyId),
+    )
+  })
+}
+
+export async function countExpenseRules(
+  repo: FinanceRepository,
+  organizationId: string,
+): Promise<number> {
+  return repo.countExpenseRules(organizationId)
+}
+
+/**
+ * What the listed rules commit the business to, split the way they behave.
+ *
+ * Fixed and variable are not added together, and the reason is not tidiness: a
+ * fixed rule's amount is a figure per period — ₪3,100 a month — and a variable
+ * rule's is a rate per stay or a percentage of revenue. Summing the two
+ * produces a number whose unit is nothing.
+ *
+ * `allocatedAgorot` is `null` rather than zero when the shares were withheld.
+ */
+export type ExpenseTotals = {
+  fixedAgorot: number
+  variableCount: number
+  allocatedAgorot: number | null
+}
+
+export function expenseTotals(
+  rules: readonly ExpenseRuleListItem[],
+): ExpenseTotals {
+  const fixed = rules.filter((rule) => rule.kind === 'fixed')
+  const withheld = rules.some((rule) => rule.allocatedAgorot === undefined)
+
+  return {
+    fixedAgorot: sumAgorot(fixed.map((rule) => rule.amountAgorot)),
+    variableCount: rules.length - fixed.length,
+    allocatedAgorot: withheld
+      ? null
+      : sumAgorot(rules.map((rule) => rule.allocatedAgorot ?? 0)),
+  }
+}
+
+/* -------------------------------------------------------- reconciliation -- */
+
+/**
+ * What one booking was billed, against what actually arrived.
+ *
+ * Not `reconcile()` from the finance domain — that one compares our ledger with
+ * a *processor's* file, which is a different question and needs a file nobody
+ * has uploaded. This is the other reconciliation a business does every week:
+ * the stay was quoted at ₪4,200, ₪1,260 arrived as a deposit, and the balance
+ * is either late, short, or sitting in a state nobody can resolve.
+ *
+ * `unresolvedAgorot` is the reason the screen exists. A processor that timed
+ * out leaves money that is neither a success nor a failure, and folding it into
+ * either one is a lie: counted as arrived, the booking looks settled; counted
+ * as missing, somebody chases a guest who has already paid. It is its own
+ * figure and it is stated first.
+ */
+export type ReconciliationRow = {
+  bookingId: string
+  propertyId: string
+  bookingReference: string | null
+  /** What the booking was billed. Null when the reader may not see prices. */
+  expectedAgorot: number | null
+  /** Captured minus refunded, over the payments on this booking. */
+  receivedAgorot: number
+  /** Asked for, in a state nobody can resolve. Never counted as received. */
+  unresolvedAgorot: number
+  /** `expected − received`. Null when the expectation is unreadable. */
+  differenceAgorot: number | null
+  paymentCount: number
+  unresolvedCount: number
+  outcome: ReconciliationOutcome
+  /** The most recent moment money moved on this booking, or null. */
+  lastMovedOn: string | null
+}
+
+/**
+ * The three answers, and they are ordered by how much attention they need.
+ *
+ * `unresolved` outranks `difference` deliberately: a booking that is ₪500 short
+ * *and* holds an unknown payment is not a short booking, it is a booking nobody
+ * can yet say anything about.
+ */
+export const RECONCILIATION_OUTCOMES = [
+  'unresolved',
+  'difference',
+  'matched',
+] as const
+
+export type ReconciliationOutcome = (typeof RECONCILIATION_OUTCOMES)[number]
+
+export type ReconciliationTotals = {
+  expectedAgorot: number | null
+  receivedAgorot: number
+  unresolvedAgorot: number
+  differenceAgorot: number | null
+}
+
+/**
+ * Group the payments on screen by the booking they belong to.
+ *
+ * The expectation comes from `bookings.total_agorot` — the booking's own
+ * billed figure — and is read separately because it is not on a payment row and
+ * because a reader without `booking.view_price` may not have it. When it is
+ * absent the row still says what arrived: "₪1,260 came in against this stay"
+ * is true and useful without knowing what the stay cost.
+ */
+export async function reconcilePayments(args: {
+  db: Db
+  actor: Actor
+  organizationId: string
+  payments: readonly PaymentListItem[]
+}): Promise<readonly ReconciliationRow[]> {
+  const { db, actor, organizationId, payments } = args
+
+  const billed = await billedTotals(
+    db,
+    actor,
+    organizationId,
+    payments.map((payment) => payment.bookingId),
+  )
+
+  const byBooking = new Map<string, PaymentListItem[]>()
+  for (const payment of payments) {
+    const list = byBooking.get(payment.bookingId) ?? []
+    list.push(payment)
+    byBooking.set(payment.bookingId, list)
+  }
+
+  const rows: ReconciliationRow[] = []
+
+  for (const [bookingId, group] of byBooking) {
+    const unresolved = paymentsNeedingAttention(group)
+
+    // Withheld amounts make the arithmetic unanswerable rather than smaller.
+    // A reader who may not see one payment's amount must not be shown a total
+    // that silently omits it.
+    const amountsVisible = group.every(
+      (payment) =>
+        payment.capturedAgorot !== undefined &&
+        payment.refundedAgorot !== undefined &&
+        payment.amountAgorot !== undefined,
+    )
+
+    const received = amountsVisible
+      ? sumAgorot(
+          group.map(
+            (payment) =>
+              (payment.capturedAgorot ?? 0) - (payment.refundedAgorot ?? 0),
+          ),
+        )
+      : 0
+    const unresolvedAgorot = amountsVisible
+      ? sumAgorot(unresolved.map((payment) => payment.amountAgorot ?? 0))
+      : 0
+
+    const expected = amountsVisible ? (billed.get(bookingId) ?? null) : null
+    const difference = expected === null ? null : expected - received
+
+    const moments = group
+      .map((payment) => payment.paidOn)
+      .filter((day): day is string => day !== null)
+      .sort()
+
+    rows.push({
+      bookingId,
+      propertyId: group[0].propertyId,
+      bookingReference: group[0].bookingReference,
+      expectedAgorot: expected,
+      receivedAgorot: received,
+      unresolvedAgorot,
+      differenceAgorot: difference,
+      paymentCount: group.length,
+      unresolvedCount: unresolved.length,
+      outcome:
+        unresolved.length > 0
+          ? 'unresolved'
+          : difference === null || difference === 0
+            ? 'matched'
+            : 'difference',
+      lastMovedOn: moments.length > 0 ? moments[moments.length - 1] : null,
+    })
+  }
+
+  // Worst first, then by size of the gap, then by reference so the order is
+  // stable between two runs that found the same thing.
+  const rank: Record<ReconciliationOutcome, number> = {
+    unresolved: 0,
+    difference: 1,
+    matched: 2,
+  }
+
+  return rows.sort((a, b) => {
+    if (rank[a.outcome] !== rank[b.outcome]) {
+      return rank[a.outcome] - rank[b.outcome]
+    }
+    const gap =
+      Math.abs(b.differenceAgorot ?? 0) - Math.abs(a.differenceAgorot ?? 0)
+    if (gap !== 0) return gap
+    return (a.bookingReference ?? '').localeCompare(b.bookingReference ?? '')
+  })
+}
+
+export function reconciliationTotals(
+  rows: readonly ReconciliationRow[],
+): ReconciliationTotals {
+  const expectations = rows.map((row) => row.expectedAgorot)
+  const complete = expectations.every((value) => value !== null)
+
+  const expected = complete
+    ? sumAgorot(expectations.map((value) => value ?? 0))
+    : null
+  const received = sumAgorot(rows.map((row) => row.receivedAgorot))
+
+  return {
+    expectedAgorot: expected,
+    receivedAgorot: received,
+    unresolvedAgorot: sumAgorot(rows.map((row) => row.unresolvedAgorot)),
+    differenceAgorot: expected === null ? null : expected - received,
+  }
+}
+
+/* ---------------------------------------------------------------- owners -- */
+
+/**
+ * An external property owner.
+ *
+ * There is no `owners` table and no `owner_statements` table — the schema
+ * models an external owner as what they are to the system: a membership holding
+ * the `property_owner` role, scoped to the properties they own. So that is what
+ * this reads, rather than inventing a table to make the screen look fuller.
+ *
+ * Reachable only with the `owner_portal` entitlement. Every grant in the owner
+ * family is mapped to it in `ENTITLEMENT_FOR_GRANT`, so `holdsGrant` is false
+ * for the whole family on a package that does not include it, and the screen
+ * renders the lock rather than an empty list.
+ */
+export type OwnerListItem = {
+  membershipId: string
+  userId: string
+  /** Withheld without `user.view`. The properties are still named. */
+  name?: string | null
+  email?: string | null
+  membershipStatus: string
+  /** The properties their membership scope reaches, named where readable. */
+  properties: readonly { id: string; name: string | null }[]
+}
+
+const OWNER_REDACTIONS = [
+  { key: 'name', requires: 'user.view' },
+  { key: 'email', requires: 'user.view' },
+] as const satisfies ReadonlyArray<{
+  key: keyof OwnerListItem
+  requires: Grant
+}>
+
+/** The system role an external property owner's membership carries. */
+const OWNER_ROLE_CODE = 'property_owner'
+
+export async function listOwners(args: {
+  db: Db
+  actor: Actor
+  organizationId: string
+}): Promise<readonly OwnerListItem[]> {
+  const { db, actor, organizationId } = args
+
+  // Refused before a query is built, for the same reason the route refuses:
+  // the whole owner family is gated on `owner_portal`, and a package without it
+  // has no owners to read.
+  if (
+    !holdsGrant(actor, 'owner.view') &&
+    !holdsGrant(actor, 'owner_statement.view')
+  ) {
+    return []
+  }
+
+  const { data: roleRows, error: roleError } = await db
+    .from('membership_roles')
+    .select('membership_id, roles(code)')
+    .eq('organization_id', organizationId)
+
+  if (roleError) throw roleError
+
+  const membershipIds = toRows(roleRows)
+    .filter((row) => roleCodeOf(row) === OWNER_ROLE_CODE)
+    .map((row) => asString(row, 'membership_id'))
+
+  if (membershipIds.length === 0) return []
+
+  const [memberships, scopes] = await Promise.all([
+    db
+      .from('memberships')
+      .select('id, user_id, status')
+      .eq('organization_id', organizationId)
+      .in('id', membershipIds),
+    db
+      .from('membership_scopes')
+      .select('membership_id, kind, property_ids')
+      .eq('organization_id', organizationId)
+      .in('membership_id', membershipIds),
+  ])
+
+  if (memberships.error) throw memberships.error
+  if (scopes.error) throw scopes.error
+
+  const scopeRows = toRows(scopes.data)
+  const membershipRows = toRows(memberships.data)
+
+  const [profiles, propertyNames] = await Promise.all([
+    profileNames(
+      db,
+      membershipRows.map((row) => asString(row, 'user_id')),
+    ),
+    propertyNamesFor(
+      db,
+      actor,
+      organizationId,
+      scopeRows.flatMap(propertyIdsOf),
+    ),
+  ])
+
+  return membershipRows.map((row) => {
+    const membershipId = asString(row, 'id')
+    const userId = asString(row, 'user_id')
+    const profile = profiles.get(userId)
+
+    const properties = scopeRows
+      .filter((scope) => asString(scope, 'membership_id') === membershipId)
+      .flatMap(propertyIdsOf)
+      .map((id) => ({ id, name: propertyNames.get(id) ?? null }))
+
+    const item: OwnerListItem = {
+      membershipId,
+      userId,
+      name: profile?.name ?? null,
+      email: profile?.email ?? null,
+      membershipStatus: asString(row, 'status'),
+      properties,
+    }
+
+    return redact(actor, item, OWNER_REDACTIONS, {
+      organizationId,
+      family: 'finance',
+    })
+  })
 }
 
 /* --------------------------------------------------------------- shared -- */
 
 /**
- * A `head` count, so "you have never taken a payment" and "your filter matched
- * nothing" can be told apart without paying for the rows.
- *
- * The distinction is the whole reason `resolveEmptyReason` takes two numbers:
- * showing a business with fifty invoices the onboarding copy tells them the
- * system lost their documents.
- */
-async function countRows(
-  db: Db,
-  table: 'payments' | 'invoices' | 'commissions',
-  organizationId: string,
-  propertyId: string | null,
-): Promise<number> {
-  let query = db
-    .from(table)
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', organizationId)
-
-  if (propertyId !== null) query = query.eq('property_id', propertyId)
-
-  const { count, error } = await query
-  if (error) throw error
-  return count ?? 0
-}
-
-/**
  * Booking references for the rows on screen, in one query.
- *
- * Not an embed: there is no `payments.bookings` relation declared for the
- * transaction compiler or the demo client, and adding one for a single text
- * column would widen a surface both files keep deliberately narrow. One `in`
- * over at most a page of ids is cheaper than the embed would have been anyway.
  *
  * Skipped entirely without `booking.view`, because `bookings_select` would
  * return nothing and the query would be a round trip that cannot succeed. An
- * empty map is a real answer: the caller falls back to what the row itself
- * recorded, or renders null.
+ * empty map is a real answer: the caller renders null rather than an id.
  */
 async function bookingReferences(
   db: Db,
@@ -751,7 +971,7 @@ async function bookingReferences(
 ): Promise<ReadonlyMap<string, string>> {
   const unique = [...new Set(bookingIds)]
   if (unique.length === 0) return new Map()
-  if (!can(actor, 'booking.view', { organizationId })) return new Map()
+  if (!holdsGrant(actor, 'booking.view')) return new Map()
 
   const { data, error } = await db
     .from('bookings')
@@ -769,133 +989,62 @@ async function bookingReferences(
 }
 
 /**
- * The payments an invoice accounts for, or `null` when this reader may not see
- * payments at all.
+ * What each booking was billed.
  *
- * `null` and an empty map are different answers and the screen says so
- * differently: "this invoice has settled nothing yet" versus "there are two
- * payments here and you may not see them". Collapsing the two would tell a
- * reader an invoice is unpaid because of their own permissions.
+ * `booking.view_price` and not `booking.view`: the reference is a label and the
+ * total is a price, and a reader may hold the first without the second. An
+ * absent entry makes the expectation null rather than zero, so the screen says
+ * "what arrived" instead of claiming the stay was free.
  */
-async function linkedPayments(
+async function billedTotals(
   db: Db,
   actor: Actor,
   organizationId: string,
-  paymentIds: readonly string[],
-): Promise<ReadonlyMap<string, InvoicePaymentLink> | null> {
-  if (!can(actor, 'payment.view', { organizationId })) return null
-
-  const unique = [...new Set(paymentIds)]
+  bookingIds: readonly string[],
+): Promise<ReadonlyMap<string, number>> {
+  const unique = [...new Set(bookingIds)]
   if (unique.length === 0) return new Map()
+  if (!holdsGrant(actor, 'booking.view_price')) return new Map()
 
   const { data, error } = await db
-    .from('payments')
-    .select('id, status, method, amount_agorot, paid_at')
+    .from('bookings')
+    .select('id, total_agorot')
     .eq('organization_id', organizationId)
     .in('id', unique)
 
   if (error) throw error
 
-  const maySeeAmounts = can(actor, 'booking.view_price', { organizationId })
-  const links = new Map<string, InvoicePaymentLink>()
-
+  const totals = new Map<string, number>()
   for (const row of toRows(data)) {
-    const link: InvoicePaymentLink = {
-      id: asString(row, 'id'),
-      status: asEnum(row, 'status', PAYMENT_STATUSES),
-      method: asEnum(row, 'method', PAYMENT_METHODS),
-      paidOn: propertyDate(row, 'paid_at'),
-    }
-    if (maySeeAmounts) link.amountAgorot = asAgorot(row, 'amount_agorot')
-    links.set(link.id, link)
+    totals.set(asString(row, 'id'), asAgorot(row, 'total_agorot'))
   }
-  return links
-}
-
-function paymentIdsOf(row: Row): string[] {
-  const embedded = row.invoice_payments
-  if (!Array.isArray(embedded)) return []
-  return embedded.map((entry) => asString(toRow(entry), 'payment_id'))
+  return totals
 }
 
 /**
- * The invoice's lines, sorted the way the adapter sorts them.
+ * Property names for the rows on screen.
  *
- * `sort_order` is the document's own ordering and the only one that can be
- * right: an invoice whose lines arrive in insertion order reads differently
- * from the document that was sent to the customer.
+ * `property.view` is asked once rather than per row: `properties_select`
+ * already narrows to the reader's scope, and a name that does not come back
+ * leaves the label null rather than printing a uuid at somebody.
  */
-function toPriceLines(row: Row, column: string): PriceLine[] {
-  const raw = row[column]
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map((entry) => toRow(entry))
-    .sort((a, b) => asNumber(a, 'sort_order') - asNumber(b, 'sort_order'))
-    .map((line) => ({
-      kind: asEnum(line, 'kind', PRICE_LINE_KINDS),
-      label: asString(line, 'label'),
-      amount: asAgorot(line, 'amount_agorot'),
-      quantity: asNumber(line, 'quantity'),
-      date: asStringOrNull(line, 'line_date'),
-    }))
-}
-
-function namesNeeded(rows: readonly Row[], column: string): string[] {
-  const ids = new Set<string>()
-  for (const row of rows) {
-    const value = asStringOrNull(row, column)
-    if (value !== null) ids.add(value)
-  }
-  return [...ids]
-}
-
-/**
- * Display names for the people a commission is owed to.
- *
- * `user_profiles_select` admits anybody who shares an organization with the
- * subject, so this is readable by every member — and it is only ever asked for
- * ids that appeared on a commission row this reader was already admitted to.
- * A missing name is left null rather than filled with the uuid.
- */
-async function profileNames(
+async function propertyNamesFor(
   db: Db,
-  userIds: readonly string[],
+  actor: Actor,
+  organizationId: string,
+  propertyIds: readonly (string | null)[],
 ): Promise<ReadonlyMap<string, string>> {
-  if (userIds.length === 0) return new Map()
+  const unique = [
+    ...new Set(propertyIds.filter((id): id is string => id !== null)),
+  ]
+  if (unique.length === 0) return new Map()
+  if (!holdsGrant(actor, 'property.view')) return new Map()
 
   const { data, error } = await db
-    .from('user_profiles')
-    .select('id, full_name')
-    .in('id', [...userIds])
-
-  if (error) throw error
-
-  const names = new Map<string, string>()
-  for (const row of toRows(data)) {
-    const name = asStringOrNull(row, 'full_name')
-    if (name !== null) names.set(asString(row, 'id'), name)
-  }
-  return names
-}
-
-/**
- * Agency names.
- *
- * `agencies_select` admits an agency this organization works with, which is
- * exactly the set that can appear on one of its commissions. A row this reader
- * cannot see leaves the name null and the payee renders as an agency without a
- * name, which is true.
- */
-async function agencyNames(
-  db: Db,
-  agencyIds: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
-  if (agencyIds.length === 0) return new Map()
-
-  const { data, error } = await db
-    .from('agencies')
+    .from('properties')
     .select('id, name')
-    .in('id', [...agencyIds])
+    .eq('organization_id', organizationId)
+    .in('id', unique)
 
   if (error) throw error
 
@@ -907,60 +1056,53 @@ async function agencyNames(
 }
 
 /**
- * The payee, decided the way the domain decides it.
+ * Display name and email for the people behind a membership.
  *
- * `payeeKey` in `finance/commissions.ts` prefers `agentUserId` and falls back
- * to the agency, and this follows that order rather than inventing a second
- * rule — the two must agree, because one groups a statement and the other
- * labels it.
+ * `user_profiles_select` admits anybody who shares an organization with the
+ * subject, and this is only ever asked for ids that appeared on a membership
+ * this reader was already admitted to. What the *reader* may see of it is
+ * decided by `redact` at the call site.
  */
-function toPayee(
-  row: Row,
-  people: ReadonlyMap<string, string>,
-  agencies: ReadonlyMap<string, string>,
-): CommissionPayee {
-  const agentUserId = asStringOrNull(row, 'agent_user_id')
-  const agencyId = asStringOrNull(row, 'agency_id')
+async function profileNames(
+  db: Db,
+  userIds: readonly string[],
+): Promise<ReadonlyMap<string, { name: string | null; email: string | null }>> {
+  const unique = [...new Set(userIds)]
+  if (unique.length === 0) return new Map()
 
-  if (agentUserId !== null) {
-    return {
-      kind: 'agent',
-      name: people.get(agentUserId) ?? null,
-      agencyName: agencyId === null ? null : (agencies.get(agencyId) ?? null),
-    }
+  const { data, error } = await db
+    .from('user_profiles')
+    .select('id, full_name, email')
+    .in('id', unique)
+
+  if (error) throw error
+
+  const profiles = new Map<
+    string,
+    { name: string | null; email: string | null }
+  >()
+  for (const row of toRows(data)) {
+    profiles.set(asString(row, 'id'), {
+      name: asStringOrNull(row, 'full_name'),
+      email: asStringOrNull(row, 'email'),
+    })
   }
-  if (agencyId !== null) {
-    return { kind: 'agency', name: agencies.get(agencyId) ?? null }
-  }
-  return { kind: 'unknown' }
+  return profiles
 }
 
-/**
- * The rule a commission was computed under, read the way the adapter reads it.
- *
- * `metadata.rule` is what the domain wrote, and it is taken whole. When it is
- * absent the rule is derived from the columns that *reproduce the money* — the
- * base, the rate and the amount — so a derived rule cannot contradict the
- * figure beside it. `basis` always comes from the `base` column, which is the
- * constrained one. This mirrors `toCommissionRule` in
- * `persistence/finance.ts`; when the port grows a list method, both disappear
- * into it.
- */
-function toCommissionRule(row: Row): CommissionRule {
-  const basis = asEnum(row, 'base', COMMISSION_BASES)
-  const stored = asJsonRecord(row, 'metadata').rule
+/** `membership_roles.roles(code)`, embedded one-to-one. */
+function roleCodeOf(row: Row): string | null {
+  const embedded = row.roles
+  if (embedded === null || embedded === undefined) return null
+  const one = Array.isArray(embedded) ? embedded[0] : embedded
+  if (one === null || one === undefined) return null
+  return asStringOrNull(toRow(one), 'code')
+}
 
-  if (stored !== null && typeof stored === 'object' && !Array.isArray(stored)) {
-    return { ...(stored as CommissionRule), basis }
-  }
-
-  const rateBps = asNumberOrNull(row, 'rate_bps')
-  return {
-    basis,
-    kind: rateBps === null ? 'fixed' : 'percent',
-    // Percentage points for `percent`, agorot for `fixed` — the units the
-    // domain's own type declares.
-    value: rateBps === null ? asAgorot(row, 'amount_agorot') : rateBps / 100,
-    label: asStringOrNull(row, 'explanation') ?? '',
-  }
+/** `membership_scopes.property_ids`, which is an array column and may be empty. */
+function propertyIdsOf(row: Row): string[] {
+  if (asStringOrNull(row, 'kind') !== 'properties') return []
+  const raw = row.property_ids
+  if (!Array.isArray(raw)) return []
+  return raw.filter((value): value is string => typeof value === 'string')
 }

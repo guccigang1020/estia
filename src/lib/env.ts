@@ -59,3 +59,26 @@ export function serviceRoleKey(): string {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   )
 }
+
+/**
+ * Is the service role key configured at all?
+ *
+ * `serviceRoleKey()` throws when it is missing, which is right for a caller
+ * about to use it and wrong for a caller deciding *whether* it can. Onboarding
+ * is the second kind: it chooses between an atomic write, a compensated one and
+ * an honest refusal, and it has to make that choice without an exception.
+ *
+ * Without this it read `process.env` itself — a second place naming the one
+ * variable that bypasses row level security, which is exactly what the secret
+ * check refuses. One reader, in one module, is the whole point of this file.
+ *
+ * It reports absence rather than handing back the value, because presence is
+ * all a decision needs and a helper that returns the key to answer a yes/no
+ * question is a wider door than the question deserves.
+ */
+export function hasServiceRoleKey(): boolean {
+  if (typeof window !== 'undefined') return false
+
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  return typeof key === 'string' && key.trim() !== ''
+}

@@ -120,9 +120,7 @@ function Comparison({ metric }: { metric: MetricResult }) {
 
   if (comparison === null) {
     return (
-      <p className="text-xs text-muted-foreground">
-        לא נבחרה תקופת השוואה.
-      </p>
+      <p className="text-xs text-muted-foreground">לא נבחרה תקופת השוואה.</p>
     )
   }
 
@@ -173,11 +171,7 @@ function Comparison({ metric }: { metric: MetricResult }) {
   )
 }
 
-export function MetricGrid({
-  metrics,
-}: {
-  metrics: readonly MetricResult[]
-}) {
+export function MetricGrid({ metrics }: { metrics: readonly MetricResult[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {metrics.map((metric) => (

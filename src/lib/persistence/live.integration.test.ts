@@ -571,6 +571,26 @@ describe.skipIf(!CREDENTIALS)('live: the storage 0018–0023 provisioned', () =>
     // `numeric(6,3)` arrives as a string over the wire. This is the assertion
     // that would catch it being carried into the domain as one.
     expect(typeof loaded?.discountCap.maxPercent).toBe('number')
+
+    // And the scope row, which is the half that used to be missing entirely.
+    // `Actor.scope` comes from here; without it this agent resolves to the
+    // `own_records` fallback, which reaches no property and no unit, and the
+    // `all_properties` asserted above is a setting nothing consults.
+    //
+    // `all_organization` and not a snapshot of today's property ids: an agent
+    // given everything must reach the property bought next month.
+    const { data: scope } = await db
+      .from('membership_scopes')
+      .select('kind, property_ids, unit_ids, team_ids')
+      .eq('membership_id', attached.membershipId)
+      .maybeSingle()
+
+    expect(scope).toMatchObject({
+      kind: 'all_organization',
+      property_ids: [],
+      unit_ids: [],
+      team_ids: [],
+    })
   }, 60_000)
 
   it('refuses a settings save against a version somebody else moved', async () => {

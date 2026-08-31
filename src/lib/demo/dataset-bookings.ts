@@ -71,6 +71,37 @@ type GuestSeed = {
   city: string
   tags: readonly string[]
   consent: boolean
+  /**
+   * What the desk wrote down about this person.
+   *
+   * Seeded on a handful rather than on everybody, and the ratio is the point:
+   * a guest card whose notes panel is always full never demonstrates the empty
+   * state, and one that is always empty leaves a whole panel undemonstrated.
+   *
+   * `guests.notes` has no field-level grant of its own — unlike
+   * `bookings.internal_notes`, which `booking.note.internal` guards — so
+   * whatever is written here is read by anybody holding `guest.view`. The text
+   * is written with that in mind: operational, never a judgement about the
+   * person.
+   */
+  notes?: string
+  /**
+   * An identity document, on the two guests who arrived with a passport.
+   *
+   * `guest.view_document_id` is a grant no shipped preset in `roles.ts`
+   * carries, which is the schema's stated intent — "almost no role needs to
+   * see this". That is exactly why these are seeded: a redaction with nothing
+   * behind it proves nothing, and the test beside the guest screens asserts
+   * that even the owner does not receive the number.
+   *
+   * `guests_id_document_type` allows only these four values, and
+   * `guests_country_format` requires two upper-case letters.
+   */
+  document?: {
+    type: 'id_card' | 'passport' | 'driver_license' | 'other'
+    number: string
+    country: string
+  }
 }
 
 const GUEST_SEEDS: readonly GuestSeed[] = [
@@ -81,6 +112,7 @@ const GUEST_SEEDS: readonly GuestSeed[] = [
     city: 'תל אביב',
     tags: ['חוזרת'],
     consent: true,
+    notes: 'מעדיפה קומה עליונה ושקט. הגיעה שלוש פעמים, תמיד באמצע השבוע.',
   },
   {
     name: 'אורי בן-דוד',
@@ -97,6 +129,7 @@ const GUEST_SEEDS: readonly GuestSeed[] = [
     city: 'חיפה',
     tags: ['ירח דבש'],
     consent: true,
+    notes: 'אלרגיה לאגוזים — לעדכן את הניקיון לפני סידור סל הקבלה.',
   },
   {
     name: 'יעל ורדי',
@@ -241,6 +274,8 @@ const GUEST_SEEDS: readonly GuestSeed[] = [
     city: 'Lyon',
     tags: ['תייר'],
     consent: true,
+    notes: 'מדברת אנגלית בלבד. ביקשה הוראות הגעה בכתב לפני הנחיתה.',
+    document: { type: 'passport', number: '19FR84221', country: 'FR' },
   },
   {
     name: 'Michael Brennan',
@@ -249,6 +284,7 @@ const GUEST_SEEDS: readonly GuestSeed[] = [
     city: 'Manchester',
     tags: ['תייר'],
     consent: true,
+    document: { type: 'passport', number: '533901882', country: 'GB' },
   },
   {
     name: 'נועם אלימלך',
@@ -297,6 +333,7 @@ const BLOCKED_GUEST: GuestSeed = {
   city: 'לא ידוע',
   tags: ['חסום'],
   consent: false,
+  notes: 'לא לאשר הזמנה חדשה בלי אישור של מנהל הנכס.',
 }
 
 const ALL_GUESTS: readonly GuestSeed[] = [...GUEST_SEEDS, BLOCKED_GUEST]
@@ -320,16 +357,16 @@ export const GUEST_ROWS: DemoRow[] = ALL_GUESTS.map((seed, index) => {
     nationality:
       seed.city === 'Lyon' ? 'FR' : seed.city === 'Manchester' ? 'GB' : 'IL',
     date_of_birth: null,
-    id_document_type: null,
-    id_document_number: null,
-    id_document_country: null,
+    id_document_type: seed.document?.type ?? null,
+    id_document_number: seed.document?.number ?? null,
+    id_document_country: seed.document?.country ?? null,
     address_line1: null,
     city: seed.city,
     postal_code: null,
     country:
       seed.city === 'Lyon' ? 'FR' : seed.city === 'Manchester' ? 'GB' : 'IL',
     tags: [...seed.tags],
-    notes: null,
+    notes: seed.notes ?? null,
     marketing_consent: seed.consent,
     marketing_consent_at: seed.consent ? momentOn(-200, '11:00') : null,
     is_blocked: blocked,

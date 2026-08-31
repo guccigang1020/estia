@@ -12,11 +12,14 @@ import {
   assertCan,
   authorize,
   can,
+  clampScope,
   isWithinScope,
   redact,
+  scopeContains,
   type Actor,
   type MembershipStatus,
   type Resource,
+  type Scope,
 } from './can'
 import type { Grant } from './permissions'
 import { ENTITLEMENTS, type Entitlement } from '../plans/entitlements'
@@ -396,11 +399,13 @@ describe('scope is not consulted when no resource is named', () => {
  * `own_records`, which reaches no property or unit at all, against an
  * inventory override naming properties.
  *
- * This is why `resolveActor` still does not populate the field from an agent's
- * stored inventory reach. Doing so would hand an agent whose membership scope
- * row is absent — every agent in the product today, since `attachExistingUser`
- * writes no `membership_scopes` row — an inventory reach their membership
- * never granted, and `all_properties` converts to `all_organization`.
+ * That is why nothing may be written into the field unchecked, and it is the
+ * whole reason `clampScope` below exists. `resolveActor` does now populate
+ * `scopeOverrides` from an agent's stored inventory reach — but only after
+ * clamping it against the scope their membership was actually granted, so the
+ * last test in this block, which demonstrates the widening, describes a shape
+ * the resolver can no longer produce. It is kept exactly because it is the
+ * reason the clamp is there.
  */
 describe('a per-family scope override replaces the default rather than intersecting it', () => {
   const grants: readonly Grant[] = ['availability.view']
@@ -456,6 +461,130 @@ describe('a per-family scope override replaces the default rather than intersect
     expect(
       can(actor, 'availability.view', { ...unit, family: 'inventory' }),
     ).toBe(true)
+  })
+})
+
+// ── Comparing two scopes ──────────────────────────────────────────────────
+
+/**
+ * The comparison `scopeFor` cannot make, and the clamp built on it.
+ *
+ * These two functions are the difference between an override that is a
+ * narrowing and one that is a widening, so the interesting assertions here are
+ * the refusals: the pairs that are *not* contained, and the pairs that fall to
+ * the floor rather than being guessed at.
+ */
+describe('scopeContains', () => {
+  const org: Scope = { kind: 'all_organization' }
+  const own: Scope = { kind: 'own_records' }
+  const p1: Scope = { kind: 'properties', propertyIds: ['prop-1'] }
+  const p12: Scope = {
+    kind: 'properties',
+    propertyIds: ['prop-1', 'prop-2'],
+  }
+  const u1: Scope = { kind: 'units', unitIds: ['unit-1'] }
+
+  it('holds every other scope inside all_organization', () => {
+    for (const inner of [org, own, p1, p12, u1]) {
+      expect(scopeContains(org, inner)).toBe(true)
+    }
+  })
+
+  it('compares property lists by subset, in one direction only', () => {
+    expect(scopeContains(p12, p1)).toBe(true)
+    expect(scopeContains(p1, p12)).toBe(false)
+    expect(scopeContains(p1, p1)).toBe(true)
+  })
+
+  it('treats an empty list as a subset of anything of its kind', () => {
+    // An empty `properties` scope reaches no property, so it genuinely is
+    // inside every other property scope. This is the shape a terms row that
+    // named nothing would produce.
+    expect(scopeContains(p1, { kind: 'properties', propertyIds: [] })).toBe(
+      true,
+    )
+  })
+
+  it('refuses to compare units against properties in either direction', () => {
+    // A unit is inside some property, and this function cannot know which
+    // without a lookup. "Cannot tell" is spelled `false`, both ways round.
+    expect(scopeContains(p1, u1)).toBe(false)
+    expect(scopeContains(u1, p1)).toBe(false)
+  })
+
+  it('places own_records inside all_organization and nothing else', () => {
+    expect(scopeContains(org, own)).toBe(true)
+    expect(scopeContains(own, own)).toBe(true)
+    // Both directions false, and both for a real reason: a record the person
+    // created in a property they no longer hold is reached by `own_records`
+    // and not by `properties`, and a colleague's record inside that property
+    // is reached by `properties` and not by `own_records`.
+    expect(scopeContains(p1, own)).toBe(false)
+    expect(scopeContains(own, p1)).toBe(false)
+  })
+})
+
+describe('clampScope', () => {
+  const org: Scope = { kind: 'all_organization' }
+  const own: Scope = { kind: 'own_records' }
+  const p1: Scope = { kind: 'properties', propertyIds: ['prop-1'] }
+  const p12: Scope = {
+    kind: 'properties',
+    propertyIds: ['prop-1', 'prop-2'],
+  }
+  const p3: Scope = { kind: 'properties', propertyIds: ['prop-3'] }
+
+  it('honours a request that is inside the grant', () => {
+    expect(clampScope(org, p1)).toEqual(p1)
+    expect(clampScope(p12, p1)).toEqual(p1)
+  })
+
+  it('refuses a request that is wider than the grant, and answers with the grant', () => {
+    // The defect in one line: a settings screen asking for the whole portfolio
+    // on a membership granted one property gets the one property.
+    expect(clampScope(p1, org)).toEqual(p1)
+    expect(clampScope(p1, p12)).toEqual(p1)
+  })
+
+  it('falls to the floor when neither contains the other', () => {
+    expect(clampScope(p1, p3)).toEqual({ kind: 'own_records' })
+    expect(clampScope(p1, { kind: 'units', unitIds: ['unit-1'] })).toEqual({
+      kind: 'own_records',
+    })
+  })
+
+  it('gives a membership with no scope row no inventory reach at all', () => {
+    // `scopeFromRow` answers `own_records` when no row exists, which is every
+    // agent membership written before one was. A terms row naming properties
+    // is incomparable to it, so the clamp answers with the floor — and an
+    // inventory resource carries no assignee, so the floor reaches nothing.
+    // This is the assertion that says the fix cannot widen a legacy agent.
+    expect(clampScope(own, p1)).toEqual({ kind: 'own_records' })
+    expect(clampScope(own, org)).toEqual({ kind: 'own_records' })
+  })
+
+  it('never returns anything the grant does not already contain', () => {
+    // The property the whole design rests on, asserted over every pair rather
+    // than argued for in a comment. `own_records` is the one permitted escape
+    // and it is the floor `resolve.ts` already falls back to.
+    const scopes: Scope[] = [
+      org,
+      own,
+      p1,
+      p12,
+      p3,
+      { kind: 'units', unitIds: ['unit-1'] },
+      { kind: 'team', teamIds: ['team-1'] },
+    ]
+
+    for (const granted of scopes) {
+      for (const requested of scopes) {
+        const result = clampScope(granted, requested)
+        expect(
+          scopeContains(granted, result) || result.kind === 'own_records',
+        ).toBe(true)
+      }
+    }
   })
 })
 

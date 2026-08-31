@@ -32,19 +32,19 @@
 
 ## 2. משתמשים והרשאות
 
-| תפקיד | מה הוא עושה כאן | הרשאות | טווח | מה הוא **לא** רואה |
-| --- | --- | --- | --- | --- |
-| `organization_owner` | קובע מחירון, רצפות ותקרות, מאשר תמחור דינמי | `pricing.manage` · `rate.view_public` · `rate.view_agent` · `rate.view_net` · `booking.override_price` | `all_organization` | — |
-| `revenue_manager` | הבעלים המקצועי של המודול: לוח מחירים, עונות, מבצעים, מדיניות AI | `pricing.manage` · שלוש הרשאות ה-`rate.view_*` · `booking.override_price` · `agent_limits.manage` | `all_organization` או `properties[]` | עלויות בפועל, רווחיות ברמת הזמנה (`booking.view_profitability`), מסמכי מס |
-| `general_manager` | מאשר חריגה מתחת לרצפה, רואה הכול | `pricing.manage` · `rate.view_*` · `booking.override_price` | `all_organization` | — |
-| `property_manager` | מחירים של הנכסים שלו בלבד | `pricing.manage` · `rate.view_public` · `rate.view_agent` | `properties[]` | `rate.net` של נכסים שאינם שלו, וכל נכס מחוץ לטווח — נאכף ב-RLS ולא בסינון תוצאה |
-| `reservation_manager` · `reception` | מצטט מחיר, מפעיל קופון, לא משנה מחירון | `quote.create` · `quote.send` · `rate.view_public` · `booking.amend_price` | `all_organization` | `rate.agent`, `rate.net`, מסך עריכת המחירון |
-| `sales_agent` · `senior_agent` | מוכר לפי תוכנית תעריפים של סוכן | `availability.view` · `quote.*` · הסולם `PRICE_LEVELS` (ראה `src/lib/authz/roles.ts`) | `properties[]` או `units[]` | כל תעריף מעל הדרגה שהוקצתה לו. `net` בלי `agent` הוא צירוף בלתי ניתן לייצוג — הסולם מונע אותו |
-| `referral_agent` | מפנה לקוח, לא מצטט | `availability.view` | מוגבל | **כל מחיר.** `PRICE_LEVELS = 'none'` |
-| `cleaner` · `maintenance` | — | — | `own_records` | **כל המודול.** אין לו אף `rate.view_*` ואף `booking.view_price` |
-| `property_owner` | רואה את התעריף הציבורי של הנכס שלו | `rate.view_public` · `owner_statement.view` | `properties[]` | `rate.agent`, `rate.net`, מבצעים, המלצות AI, מחירים של נכסים אחרים |
-| `accountant` | קורא מה נגבה, לא קובע מה ייגבה | `finance.view` · `booking.view_price` | `all_organization` | `pricing.manage`. חשבונאי לא משנה תאריכים ולא משנה מחירון |
-| `ai_agent` (מנוע ההמלצות) | מציע מחיר, לעולם לא קובע | בדיוק ההרשאות של המשתמש שהוא משרת — ראה §12 | הטווח של אותו משתמש | כל מה שאותו משתמש לא רואה |
+| תפקיד                               | מה הוא עושה כאן                                                 | הרשאות                                                                                                 | טווח                                 | מה הוא **לא** רואה                                                                            |
+| ----------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `organization_owner`                | קובע מחירון, רצפות ותקרות, מאשר תמחור דינמי                     | `pricing.manage` · `rate.view_public` · `rate.view_agent` · `rate.view_net` · `booking.override_price` | `all_organization`                   | —                                                                                             |
+| `revenue_manager`                   | הבעלים המקצועי של המודול: לוח מחירים, עונות, מבצעים, מדיניות AI | `pricing.manage` · שלוש הרשאות ה-`rate.view_*` · `booking.override_price` · `agent_limits.manage`      | `all_organization` או `properties[]` | עלויות בפועל, רווחיות ברמת הזמנה (`booking.view_profitability`), מסמכי מס                     |
+| `general_manager`                   | מאשר חריגה מתחת לרצפה, רואה הכול                                | `pricing.manage` · `rate.view_*` · `booking.override_price`                                            | `all_organization`                   | —                                                                                             |
+| `property_manager`                  | מחירים של הנכסים שלו בלבד                                       | `pricing.manage` · `rate.view_public` · `rate.view_agent`                                              | `properties[]`                       | `rate.net` של נכסים שאינם שלו, וכל נכס מחוץ לטווח — נאכף ב-RLS ולא בסינון תוצאה               |
+| `reservation_manager` · `reception` | מצטט מחיר, מפעיל קופון, לא משנה מחירון                          | `quote.create` · `quote.send` · `rate.view_public` · `booking.amend_price`                             | `all_organization`                   | `rate.agent`, `rate.net`, מסך עריכת המחירון                                                   |
+| `sales_agent` · `senior_agent`      | מוכר לפי תוכנית תעריפים של סוכן                                 | `availability.view` · `quote.*` · הסולם `PRICE_LEVELS` (ראה `src/lib/authz/roles.ts`)                  | `properties[]` או `units[]`          | כל תעריף מעל הדרגה שהוקצתה לו. `net` בלי `agent` הוא צירוף בלתי ניתן לייצוג — הסולם מונע אותו |
+| `referral_agent`                    | מפנה לקוח, לא מצטט                                              | `availability.view`                                                                                    | מוגבל                                | **כל מחיר.** `PRICE_LEVELS = 'none'`                                                          |
+| `cleaner` · `maintenance`           | —                                                               | —                                                                                                      | `own_records`                        | **כל המודול.** אין לו אף `rate.view_*` ואף `booking.view_price`                               |
+| `property_owner`                    | רואה את התעריף הציבורי של הנכס שלו                              | `rate.view_public` · `owner_statement.view`                                                            | `properties[]`                       | `rate.agent`, `rate.net`, מבצעים, המלצות AI, מחירים של נכסים אחרים                            |
+| `accountant`                        | קורא מה נגבה, לא קובע מה ייגבה                                  | `finance.view` · `booking.view_price`                                                                  | `all_organization`                   | `pricing.manage`. חשבונאי לא משנה תאריכים ולא משנה מחירון                                     |
+| `ai_agent` (מנוע ההמלצות)           | מציע מחיר, לעולם לא קובע                                        | בדיוק ההרשאות של המשתמש שהוא משרת — ראה §12                                                            | הטווח של אותו משתמש                  | כל מה שאותו משתמש לא רואה                                                                     |
 
 **שלושה מחירים לאותו לילה, שלושה מעגלי אמון** — `rate.public` · `rate.agent` ·
 `rate.net`, כפי שהם מוגדרים ב-`SENSITIVE_FIELDS`. אף אחד מהם אינו גורר את השני.
@@ -62,23 +62,23 @@
 
 ### 3.1 `rate_plans` — תוכנית תעריפים
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` | `uuid` | |
-| `organization_id` · `property_id` | `uuid` | `property_id` nullable: תוכנית ברמת הארגון חלה על כל הנכסים |
-| `code` | `text` | מזהה מכונה יציב. לא משתנה כשהשם משתנה — אותו היגיון כמו `plans.code` |
-| `name` | `text` | עברית, מוצג |
-| `kind` | `rate_plan_kind` | `flexible` · `non_refundable` · `direct` · `agent` · `ota` · `corporate` · `owner_special` |
-| `channel_scope` | `booking_source[]` | לאילו ערוצים התוכנית זמינה. ריק = כולם |
-| `requires_grant` | `text` | ה-`Grant` שהמשתמש חייב להחזיק כדי לבחור אותה. `agent` דורש `rate.view_agent` |
-| `derivation` | `jsonb` | `null` = תעריף עצמאי. אחרת `{ from_rate_plan_id, adjust: { kind: 'percent'\|'fixed', value } }` |
-| `min_nights` · `max_nights` | `integer` | דורס את `units.min_nights` כשקיים |
-| `advance_days_min` · `advance_days_max` | `integer` | חלון ההזמנה מראש. הבסיס של early bird ו-last minute |
-| `cancellation_policy` | `jsonb` | מבנה מדרגות. נצרב ל-`bookings` — ראה §3.7 |
-| `floor_agorot` · `ceiling_agorot` | `integer` | הגבולות הדטרמיניסטיים של §6 חוק 22 |
-| `priority` | `integer` | קובע בחירה כשכמה תוכניות כשירות |
-| `is_active` | `boolean` | |
-| `effective_from` · `effective_to` | `date` | חצי־פתוח, כמו כל טווח במוצר |
+| עמודה                                   | טיפוס              | הערה                                                                                            |
+| --------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------- |
+| `id`                                    | `uuid`             |                                                                                                 |
+| `organization_id` · `property_id`       | `uuid`             | `property_id` nullable: תוכנית ברמת הארגון חלה על כל הנכסים                                     |
+| `code`                                  | `text`             | מזהה מכונה יציב. לא משתנה כשהשם משתנה — אותו היגיון כמו `plans.code`                            |
+| `name`                                  | `text`             | עברית, מוצג                                                                                     |
+| `kind`                                  | `rate_plan_kind`   | `flexible` · `non_refundable` · `direct` · `agent` · `ota` · `corporate` · `owner_special`      |
+| `channel_scope`                         | `booking_source[]` | לאילו ערוצים התוכנית זמינה. ריק = כולם                                                          |
+| `requires_grant`                        | `text`             | ה-`Grant` שהמשתמש חייב להחזיק כדי לבחור אותה. `agent` דורש `rate.view_agent`                    |
+| `derivation`                            | `jsonb`            | `null` = תעריף עצמאי. אחרת `{ from_rate_plan_id, adjust: { kind: 'percent'\|'fixed', value } }` |
+| `min_nights` · `max_nights`             | `integer`          | דורס את `units.min_nights` כשקיים                                                               |
+| `advance_days_min` · `advance_days_max` | `integer`          | חלון ההזמנה מראש. הבסיס של early bird ו-last minute                                             |
+| `cancellation_policy`                   | `jsonb`            | מבנה מדרגות. נצרב ל-`bookings` — ראה §3.7                                                       |
+| `floor_agorot` · `ceiling_agorot`       | `integer`          | הגבולות הדטרמיניסטיים של §6 חוק 22                                                              |
+| `priority`                              | `integer`          | קובע בחירה כשכמה תוכניות כשירות                                                                 |
+| `is_active`                             | `boolean`          |                                                                                                 |
+| `effective_from` · `effective_to`       | `date`             | חצי־פתוח, כמו כל טווח במוצר                                                                     |
 
 אינדקסים: `(organization_id, property_id, is_active)` לשליפת התוכניות הכשירות;
 `unique (organization_id, code)` — `code` הוא מזהה, ומזהה כפול הוא באג.
@@ -87,18 +87,18 @@
 
 השורה שקובעת כמה עולה לילה בודד. **טווחית**, ולכן נפרדת מ-`rate_calendar`.
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `rate_plan_id` | `uuid` | |
-| `scope_kind` | `rate_scope` | `unit` · `unit_group` · `property` |
-| `scope_id` | `uuid` | |
-| `specificity` | `smallint` | **מחושב ונשמר**, לא מוקלד. ראה §7.2 |
-| `date_from` · `date_to` | `date` | חצי־פתוח. העונה |
-| `weekdays` | `smallint[]` | 0=ראשון … 6=שבת. ריק = כל הימים |
-| `nightly_agorot` | `integer` | התעריף. `>= 0` |
-| `min_nights` | `integer` | מינימום לילות שהחוק הזה כופה |
-| `priority` | `integer` | שובר שוויון בתוך אותה רמת ספציפיות |
-| `label` | `text` | עברית — "עונת קיץ", "אמצע שבוע". מגיע ל-`resolution` של ה-snapshot |
+| עמודה                   | טיפוס        | הערה                                                               |
+| ----------------------- | ------------ | ------------------------------------------------------------------ |
+| `rate_plan_id`          | `uuid`       |                                                                    |
+| `scope_kind`            | `rate_scope` | `unit` · `unit_group` · `property`                                 |
+| `scope_id`              | `uuid`       |                                                                    |
+| `specificity`           | `smallint`   | **מחושב ונשמר**, לא מוקלד. ראה §7.2                                |
+| `date_from` · `date_to` | `date`       | חצי־פתוח. העונה                                                    |
+| `weekdays`              | `smallint[]` | 0=ראשון … 6=שבת. ריק = כל הימים                                    |
+| `nightly_agorot`        | `integer`    | התעריף. `>= 0`                                                     |
+| `min_nights`            | `integer`    | מינימום לילות שהחוק הזה כופה                                       |
+| `priority`              | `integer`    | שובר שוויון בתוך אותה רמת ספציפיות                                 |
+| `label`                 | `text`       | עברית — "עונת קיץ", "אמצע שבוע". מגיע ל-`resolution` של ה-snapshot |
 
 אינדקס: `(rate_plan_id, scope_kind, scope_id, date_from, date_to)` — דפוס
 השאילתה היחיד הוא "כל החוקים שנוגעים בטווח הזה", ולכן GiST על `daterange(date_from, date_to, '[)')`
@@ -106,14 +106,14 @@
 
 ### 3.3 `rate_calendar` — התעריף הידני ליום בודד
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `unit_id` · `rate_plan_id` | `uuid` | |
-| `date` | `date` | לילה בודד |
-| `nightly_agorot` | `integer` | |
-| `source` | `rate_calendar_source` | `manual` · `ai_approved` · `channel_sync` |
-| `suggestion_id` | `uuid` | מפנה ל-`rate_suggestions` כאשר `source = 'ai_approved'`. **המסלול היחיד שבו המלצה הופכת למחיר** |
-| `approved_by` | `uuid` | מי אישר. `not null` כאשר `source = 'ai_approved'` |
+| עמודה                      | טיפוס                  | הערה                                                                                            |
+| -------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
+| `unit_id` · `rate_plan_id` | `uuid`                 |                                                                                                 |
+| `date`                     | `date`                 | לילה בודד                                                                                       |
+| `nightly_agorot`           | `integer`              |                                                                                                 |
+| `source`                   | `rate_calendar_source` | `manual` · `ai_approved` · `channel_sync`                                                       |
+| `suggestion_id`            | `uuid`                 | מפנה ל-`rate_suggestions` כאשר `source = 'ai_approved'`. **המסלול היחיד שבו המלצה הופכת למחיר** |
+| `approved_by`              | `uuid`                 | מי אישר. `not null` כאשר `source = 'ai_approved'`                                               |
 
 `unique (unit_id, rate_plan_id, date)`. טבלה נפרדת מ-`rate_rules` כי דפוס
 הגישה שונה לגמרי — נקודתי לפי יום, נכתב בכמויות על ידי מסך היומן ועל ידי
@@ -122,15 +122,15 @@
 
 ### 3.4 `rate_modifiers` — תוספות ליליות
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `kind` | `rate_modifier_kind` | `weekend` · `holiday` · `occupancy` · `guest_count` · `event_type` |
-| `scope_kind` · `scope_id` | | כמו `rate_rules` |
-| `rate_plan_id` | `uuid` | nullable = חל על כל התוכניות |
-| `trigger` | `jsonb` | `weekend`: `{ weekdays: [5,6] }`. `holiday`: `{ special_day_kinds: ['yom_tov','chol_hamoed'] }`. `occupancy`: `{ from_percent, to_percent }`. `guest_count`: `{ from, to }`. `event_type`: `{ any_of: EventType[] }` |
-| `adjust_kind` | `text` | `percent` \| `fixed` |
-| `adjust_value` | `integer` | נקודות אחוז ×100 (bps) עבור `percent`; אגורות עבור `fixed`. מספר שלם תמיד |
-| `priority` | `integer` | |
+| עמודה                     | טיפוס                | הערה                                                                                                                                                                                                                 |
+| ------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                    | `rate_modifier_kind` | `weekend` · `holiday` · `occupancy` · `guest_count` · `event_type`                                                                                                                                                   |
+| `scope_kind` · `scope_id` |                      | כמו `rate_rules`                                                                                                                                                                                                     |
+| `rate_plan_id`            | `uuid`               | nullable = חל על כל התוכניות                                                                                                                                                                                         |
+| `trigger`                 | `jsonb`              | `weekend`: `{ weekdays: [5,6] }`. `holiday`: `{ special_day_kinds: ['yom_tov','chol_hamoed'] }`. `occupancy`: `{ from_percent, to_percent }`. `guest_count`: `{ from, to }`. `event_type`: `{ any_of: EventType[] }` |
+| `adjust_kind`             | `text`               | `percent` \| `fixed`                                                                                                                                                                                                 |
+| `adjust_value`            | `integer`            | נקודות אחוז ×100 (bps) עבור `percent`; אגורות עבור `fixed`. מספר שלם תמיד                                                                                                                                            |
+| `priority`                | `integer`            |                                                                                                                                                                                                                      |
 
 🔒 `adjust_value` באחוזים נשמר ב-**bps** ולא כ-`numeric`. אותו נימוק בדיוק כמו
 `properties.tax_rate_bps`: אחוז שנשמר כ-`0.15` float מייצר בסוף חשבונית שלא
@@ -138,20 +138,20 @@
 
 ### 3.5 `promotions` ו-`coupons`
 
-| `promotions` | טיפוס | הערה |
-| --- | --- | --- |
-| `code` | `text` | מזהה מכונה. `unique (organization_id, code)` |
-| `kind` | `promotion_kind` | `early_bird` · `last_minute` · `midweek` · `long_stay` · `repeat_guest` · `direct_booking` · `agent_campaign` |
-| `conditions` | `jsonb` | ראה §7.6 — שפת התנאים, סגורה בכוונה |
-| `discount_kind` | `text` | `percent` \| `fixed` \| `free_nights` |
-| `discount_value` | `integer` | bps · אגורות · מספר לילות |
-| `applies_to` | `text` | `stay_total` \| `accommodation_only`. אף פעם לא על מע״מ ואף פעם לא על פיקדון |
-| `stackable` | `boolean` | |
-| `exclusive_group` | `text` | שני מבצעים באותה קבוצה לא ידורו יחד |
-| `priority` | `integer` | |
-| `max_redemptions` · `max_per_guest` | `integer` | `null` = ללא הגבלה |
-| `budget_agorot` | `integer` | תקרת הנחה מצטברת. `null` = ללא |
-| `effective_from` · `effective_to` | `timestamptz` | **instant ולא date** — מבצע מסתיים בחצות של אזור הזמן של הנכס, ו"חצות" הוא רגע |
+| `promotions`                        | טיפוס            | הערה                                                                                                          |
+| ----------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `code`                              | `text`           | מזהה מכונה. `unique (organization_id, code)`                                                                  |
+| `kind`                              | `promotion_kind` | `early_bird` · `last_minute` · `midweek` · `long_stay` · `repeat_guest` · `direct_booking` · `agent_campaign` |
+| `conditions`                        | `jsonb`          | ראה §7.6 — שפת התנאים, סגורה בכוונה                                                                           |
+| `discount_kind`                     | `text`           | `percent` \| `fixed` \| `free_nights`                                                                         |
+| `discount_value`                    | `integer`        | bps · אגורות · מספר לילות                                                                                     |
+| `applies_to`                        | `text`           | `stay_total` \| `accommodation_only`. אף פעם לא על מע״מ ואף פעם לא על פיקדון                                  |
+| `stackable`                         | `boolean`        |                                                                                                               |
+| `exclusive_group`                   | `text`           | שני מבצעים באותה קבוצה לא ידורו יחד                                                                           |
+| `priority`                          | `integer`        |                                                                                                               |
+| `max_redemptions` · `max_per_guest` | `integer`        | `null` = ללא הגבלה                                                                                            |
+| `budget_agorot`                     | `integer`        | תקרת הנחה מצטברת. `null` = ללא                                                                                |
+| `effective_from` · `effective_to`   | `timestamptz`    | **instant ולא date** — מבצע מסתיים בחצות של אזור הזמן של הנכס, ו"חצות" הוא רגע                                |
 
 `coupons` זהה במבנה, ובנוסף: `promotion_id` (הקופון הוא מופע של מבצע),
 `issued_to_guest_id`, `single_use`, `expires_at`.
@@ -163,16 +163,16 @@
 
 ### 3.6 `rate_suggestions` ו-`dynamic_pricing_policies`
 
-| `rate_suggestions` | הערה |
-| --- | --- |
-| `unit_id` · `rate_plan_id` · `date` | הלילה שההמלצה נוגעת בו |
-| `deterministic_agorot` | מה המנוע הדטרמיניסטי אמר. **נשמר**, כדי שאפשר יהיה למדוד את ההמלצה |
-| `suggested_agorot` | מה ה-AI הציע |
-| `confidence_bps` | |
-| `rationale` | עברית, מוצג למאשר. המלצה בלי הסבר לא ניתנת לאישור |
-| `inputs_hash` | טביעת אצבע של הקלטים. שתי המלצות מאותם קלטים חייבות להיות אותה שורה |
-| `status` | `pending` · `approved` · `rejected` · `expired` · `auto_applied` |
-| `decided_by` · `decided_at` · `decision_reason` | |
+| `rate_suggestions`                              | הערה                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------------- |
+| `unit_id` · `rate_plan_id` · `date`             | הלילה שההמלצה נוגעת בו                                              |
+| `deterministic_agorot`                          | מה המנוע הדטרמיניסטי אמר. **נשמר**, כדי שאפשר יהיה למדוד את ההמלצה  |
+| `suggested_agorot`                              | מה ה-AI הציע                                                        |
+| `confidence_bps`                                |                                                                     |
+| `rationale`                                     | עברית, מוצג למאשר. המלצה בלי הסבר לא ניתנת לאישור                   |
+| `inputs_hash`                                   | טביעת אצבע של הקלטים. שתי המלצות מאותם קלטים חייבות להיות אותה שורה |
+| `status`                                        | `pending` · `approved` · `rejected` · `expired` · `auto_applied`    |
+| `decided_by` · `decided_at` · `decision_reason` |                                                                     |
 
 `dynamic_pricing_policies`: `auto_apply` (boolean), `max_delta_bps` (כמה מותר
 לזוז מהמחיר הדטרמיניסטי), `max_daily_changes`, `floor_agorot`, `ceiling_agorot`,
@@ -183,21 +183,21 @@
 
 זה הסעיף שקשה מכול לתקן בדיעבד.
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` | `uuid` | |
-| `booking_id` | `uuid` | `(booking_id, organization_id, property_id)` → `bookings`, כמו כל טבלת בת ב-0009 |
-| `sequence` | `integer` | 1, 2, 3 … כל תמחור מחדש הוא שורה חדשה. **אף פעם לא UPDATE** |
-| `hash` | `text` | תוכן־hash של `inputs` + `resolution`. תצורות זהות חולקות אותו; שינוי מתגלה |
-| `captured_at` | `timestamptz` | |
-| `effective_on` | `date` | התאריך שלפיו נפתרה התיארוך־בתוקף. ברירת מחדל: יום יצירת ההזמנה |
-| `engine_version` | `text` | גרסת מנוע התמחור. שינוי בקוד המנוע לא מסביר מחיר ישן בלי זה |
-| `rate_plan_id` · `rate_plan_version` | | |
-| `inputs` | `jsonb` | ה-`StayPricingRequest` המלא כפי שנמסר ל-`priceStay` |
-| `resolution` | `jsonb` | לכל לילה: איזה חוק ניצח, באיזו רמת ספציפיות, מה היה הבסיס, איזו תוספת חלה ולמה |
-| `tax_rate_bps` · `tourist_vat_exempt` | | נצרב גם ב-`bookings` (קיים ב-0009) וגם כאן |
-| `cancellation_policy` | `jsonb` | **המדיניות כפי שהייתה**, לא הפניה ל-`rate_plans` |
-| `superseded_by` | `uuid` | ה-snapshot שהחליף אותו. `null` = הפעיל |
+| עמודה                                 | טיפוס         | הערה                                                                             |
+| ------------------------------------- | ------------- | -------------------------------------------------------------------------------- |
+| `id`                                  | `uuid`        |                                                                                  |
+| `booking_id`                          | `uuid`        | `(booking_id, organization_id, property_id)` → `bookings`, כמו כל טבלת בת ב-0009 |
+| `sequence`                            | `integer`     | 1, 2, 3 … כל תמחור מחדש הוא שורה חדשה. **אף פעם לא UPDATE**                      |
+| `hash`                                | `text`        | תוכן־hash של `inputs` + `resolution`. תצורות זהות חולקות אותו; שינוי מתגלה       |
+| `captured_at`                         | `timestamptz` |                                                                                  |
+| `effective_on`                        | `date`        | התאריך שלפיו נפתרה התיארוך־בתוקף. ברירת מחדל: יום יצירת ההזמנה                   |
+| `engine_version`                      | `text`        | גרסת מנוע התמחור. שינוי בקוד המנוע לא מסביר מחיר ישן בלי זה                      |
+| `rate_plan_id` · `rate_plan_version`  |               |                                                                                  |
+| `inputs`                              | `jsonb`       | ה-`StayPricingRequest` המלא כפי שנמסר ל-`priceStay`                              |
+| `resolution`                          | `jsonb`       | לכל לילה: איזה חוק ניצח, באיזו רמת ספציפיות, מה היה הבסיס, איזו תוספת חלה ולמה   |
+| `tax_rate_bps` · `tourist_vat_exempt` |               | נצרב גם ב-`bookings` (קיים ב-0009) וגם כאן                                       |
+| `cancellation_policy`                 | `jsonb`       | **המדיניות כפי שהייתה**, לא הפניה ל-`rate_plans`                                 |
+| `superseded_by`                       | `uuid`        | ה-snapshot שהחליף אותו. `null` = הפעיל                                           |
 
 Append-only, על אותם תנאים כמו `booking_status_history` ב-0009: ההרשאות
 נשללות ו-trigger ברמת statement מסרב ל-UPDATE ול-DELETE. אינדקס
@@ -214,11 +214,11 @@ Append-only, על אותם תנאים כמו `booking_status_history` ב-0009: �
 המחיר לצד כללי העמלה, חלוקת הבעלים והוצאות. שני ה-snapshot אינם כפילות
 אלא **שני שלבים של אותו קו**:
 
-| | `booking_price_snapshots` (כאן) | `FinanceSnapshot` (`finance/`) |
-| --- | --- | --- |
-| מתי | בעת התמחור | בעת שההזמנה הופכת ממשית כספית |
-| מה קופא | **למה** יצא המחיר: החוק שניצח לכל לילה, התוספות, הצביטה | **מה** נגזר מהמחיר: עמלה, חלק בעלים, כללי הוצאה |
-| מקור השורות | מייצר אותן דרך `priceStay` | **מעתיק** אותן, ולא מחשב |
+|             | `booking_price_snapshots` (כאן)                         | `FinanceSnapshot` (`finance/`)                  |
+| ----------- | ------------------------------------------------------- | ----------------------------------------------- |
+| מתי         | בעת התמחור                                              | בעת שההזמנה הופכת ממשית כספית                   |
+| מה קופא     | **למה** יצא המחיר: החוק שניצח לכל לילה, התוספות, הצביטה | **מה** נגזר מהמחיר: עמלה, חלק בעלים, כללי הוצאה |
+| מקור השורות | מייצר אותן דרך `priceStay`                              | **מעתיק** אותן, ולא מחשב                        |
 
 `FinanceSnapshot.lines` הוא עותק ולא מצביע, מהנימוק המפורש שבקובץ ההוא:
 מצביע ל-`(id, version)` שורד רק כל עוד אף אחד לא מחק ולא מיספר מחדש, ושניהם
@@ -236,11 +236,11 @@ Append-only, על אותם תנאים כמו `booking_status_history` ב-0009: �
 
 ### 4.1 snapshot של מחיר
 
-| ממצב | למצב | מי רשאי | תנאים | תופעות לוואי | Audit |
-| --- | --- | --- | --- | --- | --- |
-| — | `active` (sequence 1) | `booking.create` | ההזמנה נוצרת | כתיבת `booking_price_lines`; טריגר מעדכן `bookings.total_agorot` | "רוני יצרה הזמנה B3F91A2C · ₪6,400 · 3 לילות" |
-| `active` | `superseded` | `booking.amend_price` או `booking.amend_dates` או `booking.amend_extras` או `booking.amend_guest_count` | ההזמנה אינה ב-`TERMINAL_STATUSES`; לא קיימת חשבונית פתוחה על סכום שונה (§16 שורה 8) | snapshot חדש עם `sequence+1`; שורות מחיר חדשות; אירוע `booking.repriced` | "דנה שינתה את סכום ההזמנה מ-₪5,200 ל-₪4,700 · סיבה: פיצוי על תקלה במזגן" |
-| `active` | `frozen` | — (אוטומטי) | ההזמנה נכנסה ל-`completed` · `cancelled` · `no_show` | side effect `close_financials` של המכונה הקיימת | "ההזמנה נסגרה. המחיר קפוא" |
+| ממצב     | למצב                  | מי רשאי                                                                                                 | תנאים                                                                               | תופעות לוואי                                                             | Audit                                                                    |
+| -------- | --------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| —        | `active` (sequence 1) | `booking.create`                                                                                        | ההזמנה נוצרת                                                                        | כתיבת `booking_price_lines`; טריגר מעדכן `bookings.total_agorot`         | "רוני יצרה הזמנה B3F91A2C · ₪6,400 · 3 לילות"                            |
+| `active` | `superseded`          | `booking.amend_price` או `booking.amend_dates` או `booking.amend_extras` או `booking.amend_guest_count` | ההזמנה אינה ב-`TERMINAL_STATUSES`; לא קיימת חשבונית פתוחה על סכום שונה (§16 שורה 8) | snapshot חדש עם `sequence+1`; שורות מחיר חדשות; אירוע `booking.repriced` | "דנה שינתה את סכום ההזמנה מ-₪5,200 ל-₪4,700 · סיבה: פיצוי על תקלה במזגן" |
+| `active` | `frozen`              | — (אוטומטי)                                                                                             | ההזמנה נכנסה ל-`completed` · `cancelled` · `no_show`                                | side effect `close_financials` של המכונה הקיימת                          | "ההזמנה נסגרה. המחיר קפוא"                                               |
 
 מעבר לא חוקי נכשל ב-`BusinessRuleError` עם הודעה בעברית שמנסחת את העובדה
 ולא את החוק — "לא ניתן לשנות מחיר של הזמנה שהושלמה. לתיקון כספי יש להנפיק
@@ -472,16 +472,16 @@ resolvePricing(context) → StayPricingRequest → priceStay() → StayQuote
 
 `specificity` מחושב בעת הכתיבה, לא מוקלד:
 
-| מקור | `specificity` |
-| --- | --- |
-| `rate_calendar` (יום בודד, יחידה בודדת) | 100 |
-| `rate_rules` · `scope_kind='unit'` + `weekdays` לא ריק | 80 |
-| `rate_rules` · `scope_kind='unit'` | 70 |
-| `rate_rules` · `scope_kind='unit_group'` + `weekdays` | 60 |
-| `rate_rules` · `scope_kind='unit_group'` | 50 |
-| `rate_rules` · `scope_kind='property'` + `weekdays` | 40 |
-| `rate_rules` · `scope_kind='property'` | 30 |
-| `units.base_price_agorot` | 0 |
+| מקור                                                   | `specificity` |
+| ------------------------------------------------------ | ------------- |
+| `rate_calendar` (יום בודד, יחידה בודדת)                | 100           |
+| `rate_rules` · `scope_kind='unit'` + `weekdays` לא ריק | 80            |
+| `rate_rules` · `scope_kind='unit'`                     | 70            |
+| `rate_rules` · `scope_kind='unit_group'` + `weekdays`  | 60            |
+| `rate_rules` · `scope_kind='unit_group'`               | 50            |
+| `rate_rules` · `scope_kind='property'` + `weekdays`    | 40            |
+| `rate_rules` · `scope_kind='property'`                 | 30            |
+| `units.base_price_agorot`                              | 0             |
 
 ```
 base(n) = nightly_agorot של השורה המנצחת, כאשר המנצחת נבחרת לפי:
@@ -553,14 +553,14 @@ nightly(n) = roundAgorot(clamped(n))
 סגורה בכוונה. מה שארבעת הצורות לא מבטאות הוא מבצע שני, לא שפה גדולה יותר —
 אותו נימוק בדיוק כמו `QuantityExpression` ב-`preparation/types.ts`.
 
-| צורה | דוגמה |
-| --- | --- |
-| `{ kind:'compare', basis, comparator, value }` | `nights >= 5` (long stay) |
-| `{ kind:'advance', comparator, days }` | `advance_days >= 90` (early bird) |
-| `{ kind:'weekday_set', all_of }` | כל הלילות באמצע השבוע (midweek) |
-| `{ kind:'source', any_of: BookingSource[] }` | `direct_website` (direct booking) |
-| `{ kind:'guest_history', min_completed_bookings }` | אורח חוזר |
-| `{ kind:'all'\|'any'\|'not' }` | הרכבה |
+| צורה                                               | דוגמה                             |
+| -------------------------------------------------- | --------------------------------- |
+| `{ kind:'compare', basis, comparator, value }`     | `nights >= 5` (long stay)         |
+| `{ kind:'advance', comparator, days }`             | `advance_days >= 90` (early bird) |
+| `{ kind:'weekday_set', all_of }`                   | כל הלילות באמצע השבוע (midweek)   |
+| `{ kind:'source', any_of: BookingSource[] }`       | `direct_website` (direct booking) |
+| `{ kind:'guest_history', min_completed_bookings }` | אורח חוזר                         |
+| `{ kind:'all'\|'any'\|'not' }`                     | הרכבה                             |
 
 `basis` הוא `FactBasis` מ-`src/lib/preparation/types.ts` — הרשימה משותפת
 בכוונה, כדי ש"לכל אורח" יאמר אותו דבר לכלל המגבת ולכלל ההנחה.
@@ -570,26 +570,26 @@ nightly(n) = roundAgorot(clamped(n))
 זה הסעיף שכל השאר משרת. **עונה + תוספת סוף שבוע + מבצע + תעריף סוכן, כולם
 יחד, נותנים מספר אחד.**
 
-| # | שלב | מה נקבע | היכן |
-| --- | --- | --- | --- |
-| 0 | **הקפאת קלטים** | נכס, יחידה, טווח, אורחים, סוג אירוע, ערוץ, סוכן, קופון, תוספות, `effective_on` | `resolvePricing` |
-| 1 | **בחירת תוכנית תעריפים** | בדיוק אחת. כשירות → `priority` יורד → `code` עולה | §7.8 |
-| 2 | **בסיס לכל לילה** | חוק אחד ללילה, סולם §7.2 | לולאה על `eachNight` |
-| 3 | **תוספת לוח־שנה** | מקסימום מבין סוף שבוע וחג | §7.3 |
-| 4 | **תוספת ביקוש · אירוע · תפוסת אורחים** | מדרגות דטרמיניסטיות | §7.4 |
-| 5 | **המלצת AI** | רק אם אושרה מראש ל-`rate_calendar` — כלומר היא כבר נבלעה בשלב 2 | §6 חוק 24 |
-| 6 | **צביטה לרצפה/תקרה** | דטרמיניסטי, אחרון | §7.5 |
-| 7 | **עיגול לילי** | `roundAgorot`, פעם אחת | §7.5 |
-| 8 | **מינימום לילות** | מסרב, לא מתמחר | §6 חוק 5 |
-| 9 | **מסירה ל-`priceStay`** | `nightlyOverrides` מוכן | `StayPricingRequest` |
-| 10 | **לינה · אורח נוסף · ניקיון · תוספות** | שורות חיוביות | `priceStay` 1–3 |
-| 11 | **מבצעים** | סדר §7.9, כולם מול אותו סכום־לפני־הנחה | `priceStay` 4 |
-| 12 | **קופון** | אחד לכל היותר, אחרי המבצעים | `priceStay` 4 |
-| 13 | **הנחת סוכן / הנחה שאושרה ידנית** | `manualDiscountLine` | `priceStay` 4 |
-| 14 | **מע״מ** | על הסכום אחרי ההנחות | `priceStay` 5 |
-| 15 | **פיקדון** | אחרון, מחוץ לבסיס המס | `priceStay` 6 |
-| 16 | **עמלת סוכן** | בנפרד, לא בסכום האורח | `agentCommissionLine` |
-| 17 | **צריבה** | `booking_price_snapshots` + `booking_price_lines` | §3.7 |
+| #   | שלב                                    | מה נקבע                                                                        | היכן                  |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------ | --------------------- |
+| 0   | **הקפאת קלטים**                        | נכס, יחידה, טווח, אורחים, סוג אירוע, ערוץ, סוכן, קופון, תוספות, `effective_on` | `resolvePricing`      |
+| 1   | **בחירת תוכנית תעריפים**               | בדיוק אחת. כשירות → `priority` יורד → `code` עולה                              | §7.8                  |
+| 2   | **בסיס לכל לילה**                      | חוק אחד ללילה, סולם §7.2                                                       | לולאה על `eachNight`  |
+| 3   | **תוספת לוח־שנה**                      | מקסימום מבין סוף שבוע וחג                                                      | §7.3                  |
+| 4   | **תוספת ביקוש · אירוע · תפוסת אורחים** | מדרגות דטרמיניסטיות                                                            | §7.4                  |
+| 5   | **המלצת AI**                           | רק אם אושרה מראש ל-`rate_calendar` — כלומר היא כבר נבלעה בשלב 2                | §6 חוק 24             |
+| 6   | **צביטה לרצפה/תקרה**                   | דטרמיניסטי, אחרון                                                              | §7.5                  |
+| 7   | **עיגול לילי**                         | `roundAgorot`, פעם אחת                                                         | §7.5                  |
+| 8   | **מינימום לילות**                      | מסרב, לא מתמחר                                                                 | §6 חוק 5              |
+| 9   | **מסירה ל-`priceStay`**                | `nightlyOverrides` מוכן                                                        | `StayPricingRequest`  |
+| 10  | **לינה · אורח נוסף · ניקיון · תוספות** | שורות חיוביות                                                                  | `priceStay` 1–3       |
+| 11  | **מבצעים**                             | סדר §7.9, כולם מול אותו סכום־לפני־הנחה                                         | `priceStay` 4         |
+| 12  | **קופון**                              | אחד לכל היותר, אחרי המבצעים                                                    | `priceStay` 4         |
+| 13  | **הנחת סוכן / הנחה שאושרה ידנית**      | `manualDiscountLine`                                                           | `priceStay` 4         |
+| 14  | **מע״מ**                               | על הסכום אחרי ההנחות                                                           | `priceStay` 5         |
+| 15  | **פיקדון**                             | אחרון, מחוץ לבסיס המס                                                          | `priceStay` 6         |
+| 16  | **עמלת סוכן**                          | בנפרד, לא בסכום האורח                                                          | `agentCommissionLine` |
+| 17  | **צריבה**                              | `booking_price_snapshots` + `booking_price_lines`                              | §3.7                  |
 
 **המפתח לתרחיש שבשאלה:** תעריף סוכן **אינו הנחה**. הוא תוכנית תעריפים —
 שלב 1 — ולכן הוא משנה איזו טבלת חוקים שלב 2 בכלל קרא. הוא לא מתחרה במבצע
@@ -643,13 +643,13 @@ for c in candidates:
 
 ### 7.10 מקרי מכנה אפס — הרשימה המלאה
 
-| ביטוי | מכנה אפס | מה קורה |
-| --- | --- | --- |
-| תפוסה לתוספת ביקוש | אין לילות זמינים | `null` → אין תוספת (חוק 13). לא 0% |
-| מחיר ממוצע ללילה בתצוגה | `nights = 0` | טווח לא חוקי — `ValidationError` לפני החישוב (חוק 2) |
-| הנחה באחוזים | — | `discountable = 0` → `applied = 0`, השורה מושמטת |
-| חלוקת הנחה ללילות בדוח | 0 לילות | `allocateEvenly` מחזירה `[]` |
-| נתח מבצע מסך ההנחות | סך ההנחות 0 | `allocateShares` מחזירה `null`. מוצג כסכומים, לא כאחוזים |
+| ביטוי                   | מכנה אפס         | מה קורה                                                  |
+| ----------------------- | ---------------- | -------------------------------------------------------- |
+| תפוסה לתוספת ביקוש      | אין לילות זמינים | `null` → אין תוספת (חוק 13). לא 0%                       |
+| מחיר ממוצע ללילה בתצוגה | `nights = 0`     | טווח לא חוקי — `ValidationError` לפני החישוב (חוק 2)     |
+| הנחה באחוזים            | —                | `discountable = 0` → `applied = 0`, השורה מושמטת         |
+| חלוקת הנחה ללילות בדוח  | 0 לילות          | `allocateEvenly` מחזירה `[]`                             |
+| נתח מבצע מסך ההנחות     | סך ההנחות 0      | `allocateShares` מחזירה `null`. מוצג כסכומים, לא כאחוזים |
 
 ### 7.11 דוגמה מספרית מלאה
 
@@ -658,33 +658,33 @@ for c in candidates:
 מע״מ 18%, פיקדון `₪1,000`. תוכנית `direct`, רצפה `₪900`, תקרה `₪2,200`.
 מבצע `direct_booking` 5%, לא בלעדי, `priority 10`.
 
-| לילה | יום | לוח עברי | בסיס (§7.2) | תוספת לוח (§7.3) | ביקוש | raw | צביטה | `nightly` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 02/10 | שישי | כ״א תשרי · חוה״מ סוכות | 140,000 (עונת סוכות, `unit`, spec 70) | max(15% שישי = 21,000 ; 25% חג = 35,000) = **35,000** | 84% → +5% = 7,000 | 182,000 | — | **182,000** |
-| 03/10 | שבת | כ״ב תשרי · שמח״ת | 140,000 | max(15% = 21,000 ; 25% = 35,000) = **35,000** | 84% → 7,000 | 182,000 | — | **182,000** |
-| 04/10 | ראשון | כ״ג תשרי | 95,000 (עונת סוכות, אמצע שבוע, spec 80) | 0 | 61% → 0 | 95,000 | — | **95,000** |
+| לילה  | יום   | לוח עברי               | בסיס (§7.2)                             | תוספת לוח (§7.3)                                      | ביקוש             | raw     | צביטה | `nightly`   |
+| ----- | ----- | ---------------------- | --------------------------------------- | ----------------------------------------------------- | ----------------- | ------- | ----- | ----------- |
+| 02/10 | שישי  | כ״א תשרי · חוה״מ סוכות | 140,000 (עונת סוכות, `unit`, spec 70)   | max(15% שישי = 21,000 ; 25% חג = 35,000) = **35,000** | 84% → +5% = 7,000 | 182,000 | —     | **182,000** |
+| 03/10 | שבת   | כ״ב תשרי · שמח״ת       | 140,000                                 | max(15% = 21,000 ; 25% = 35,000) = **35,000**         | 84% → 7,000       | 182,000 | —     | **182,000** |
+| 04/10 | ראשון | כ״ג תשרי               | 95,000 (עונת סוכות, אמצע שבוע, spec 80) | 0                                                     | 61% → 0           | 95,000  | —     | **95,000**  |
 
 שים לב לשורה הראשונה: שישי **וגם** חול המועד. חוק 9 לוקח מקסימום — ₪350
 ולא ₪560. האורח חווה לילה יקר אחד.
 
 `priceStay` מכאן:
 
-| # | שורה | `kind` | אגורות |
-| --- | --- | --- | --- |
-| 1 | לינה 02/10 | `accommodation` | 182,000 |
-| 2 | לינה 03/10 | `accommodation` | 182,000 |
-| 3 | לינה 04/10 | `accommodation` | 95,000 |
-| 4 | אורח נוסף · 2 × 3 לילות | `extra_guest` | 72,000 |
-| 5 | דמי ניקיון | `cleaning_fee` | 25,000 |
-| | **סכום לפני הנחה** (`discountable`) | | **556,000** |
-| 6 | הזמנה ישירה 5% | `promotion` | −27,800 |
-| | **בסיס המס** | | **528,200** |
-| 7 | מע״מ 18% | `tax` | 95,076 |
-| 8 | פיקדון ביטחון | `deposit` | 100,000 |
-| | **`totalAgorot`** | | **723,276** → `₪7,232.76` |
-| | `stayTotalAgorot` | | 623,276 → `₪6,232.76` |
-| | `depositAgorot` | | 100,000 |
-| | `taxAgorot` | | 95,076 |
+| #   | שורה                                | `kind`          | אגורות                    |
+| --- | ----------------------------------- | --------------- | ------------------------- |
+| 1   | לינה 02/10                          | `accommodation` | 182,000                   |
+| 2   | לינה 03/10                          | `accommodation` | 182,000                   |
+| 3   | לינה 04/10                          | `accommodation` | 95,000                    |
+| 4   | אורח נוסף · 2 × 3 לילות             | `extra_guest`   | 72,000                    |
+| 5   | דמי ניקיון                          | `cleaning_fee`  | 25,000                    |
+|     | **סכום לפני הנחה** (`discountable`) |                 | **556,000**               |
+| 6   | הזמנה ישירה 5%                      | `promotion`     | −27,800                   |
+|     | **בסיס המס**                        |                 | **528,200**               |
+| 7   | מע״מ 18%                            | `tax`           | 95,076                    |
+| 8   | פיקדון ביטחון                       | `deposit`       | 100,000                   |
+|     | **`totalAgorot`**                   |                 | **723,276** → `₪7,232.76` |
+|     | `stayTotalAgorot`                   |                 | 623,276 → `₪6,232.76`     |
+|     | `depositAgorot`                     |                 | 100,000                   |
+|     | `taxAgorot`                         |                 | 95,076                    |
 
 בדיקת העיגול: `528,200 × 18 / 100 = 95,076.0` — שלם, לא נדרש עיגול.
 ההנחה: `556,000 × 500 / 10000 = 27,800.0` — שלם. שני המקרים נבחרו כדי
@@ -697,21 +697,21 @@ for c in candidates:
 
 ## 8. ולידציות
 
-| שדה | חובה | טווח | פורמט | הודעה בעברית |
-| --- | --- | --- | --- | --- |
-| `checkIn` · `checkOut` | כן | `checkOut > checkIn` | `YYYY-MM-DD` | "תאריך העזיבה חייב להיות מאוחר מתאריך ההגעה." |
-| `guests` | כן | `1 … units.max_guests` | שלם | "חייב להיות לפחות אורח אחד בהזמנה." / "היחידה מתאימה עד N אורחים." |
-| `nightly_agorot` | כן | `0 … 10,000,000` | שלם | "מחיר ללילה חייב להיות מספר שלם של אגורות, ולא שלילי." |
-| `floor_agorot` · `ceiling_agorot` | לא | `floor <= ceiling` | שלם | "מחיר הרצפה לא יכול להיות גבוה ממחיר התקרה." |
-| `adjust_value` (percent) | כן | `−10000 … 100000` | שלם bps | "אחוז התוספת חייב להיות בין ‎-100%‎ ל-‎1,000%‎." |
-| `discount_value` (percent) | כן | `1 … 10000` | שלם bps | "אחוז ההנחה חייב להיות בין 0.01%‎ ל-100%‎." |
-| `promotions.code` · `rate_plans.code` | כן | 2–40 | `^[a-z0-9][a-z0-9_-]*$` | "הקוד יכול להכיל אותיות אנגליות קטנות, ספרות, מקף וקו תחתון." |
-| `max_redemptions` · `budget_agorot` | לא | `>= 1` / `>= 0` | שלם | "מספר המימושים חייב להיות לפחות 1." |
-| `effective_from` · `effective_to` | `from` כן | `to > from` | `YYYY-MM-DD` | "תאריך הסיום חייב להיות אחרי תאריך ההתחלה." |
-| `weekdays` | לא | ‎0–6, ללא כפילויות | `smallint[]` | "בחר ימים תקינים בשבוע." |
-| `min_nights` | לא | `1 … 365` | שלם | "מינימום הלילות חייב להיות לפחות 1." |
-| `coupon.code` | כן | 4–24 | `^[A-Z0-9-]+$` | "קוד קופון מכיל אותיות גדולות, ספרות ומקפים בלבד." |
-| נימוק (`reason`) בחריגת מחיר | כן | 3–500 | טקסט | "הפעולה הזו דורשת נימוק. הסבר בקצרה מדוע היא מבוצעת." |
+| שדה                                   | חובה      | טווח                   | פורמט                   | הודעה בעברית                                                       |
+| ------------------------------------- | --------- | ---------------------- | ----------------------- | ------------------------------------------------------------------ |
+| `checkIn` · `checkOut`                | כן        | `checkOut > checkIn`   | `YYYY-MM-DD`            | "תאריך העזיבה חייב להיות מאוחר מתאריך ההגעה."                      |
+| `guests`                              | כן        | `1 … units.max_guests` | שלם                     | "חייב להיות לפחות אורח אחד בהזמנה." / "היחידה מתאימה עד N אורחים." |
+| `nightly_agorot`                      | כן        | `0 … 10,000,000`       | שלם                     | "מחיר ללילה חייב להיות מספר שלם של אגורות, ולא שלילי."             |
+| `floor_agorot` · `ceiling_agorot`     | לא        | `floor <= ceiling`     | שלם                     | "מחיר הרצפה לא יכול להיות גבוה ממחיר התקרה."                       |
+| `adjust_value` (percent)              | כן        | `−10000 … 100000`      | שלם bps                 | "אחוז התוספת חייב להיות בין ‎-100%‎ ל-‎1,000%‎."                   |
+| `discount_value` (percent)            | כן        | `1 … 10000`            | שלם bps                 | "אחוז ההנחה חייב להיות בין 0.01%‎ ל-100%‎."                        |
+| `promotions.code` · `rate_plans.code` | כן        | 2–40                   | `^[a-z0-9][a-z0-9_-]*$` | "הקוד יכול להכיל אותיות אנגליות קטנות, ספרות, מקף וקו תחתון."      |
+| `max_redemptions` · `budget_agorot`   | לא        | `>= 1` / `>= 0`        | שלם                     | "מספר המימושים חייב להיות לפחות 1."                                |
+| `effective_from` · `effective_to`     | `from` כן | `to > from`            | `YYYY-MM-DD`            | "תאריך הסיום חייב להיות אחרי תאריך ההתחלה."                        |
+| `weekdays`                            | לא        | ‎0–6, ללא כפילויות     | `smallint[]`            | "בחר ימים תקינים בשבוע."                                           |
+| `min_nights`                          | לא        | `1 … 365`              | שלם                     | "מינימום הלילות חייב להיות לפחות 1."                               |
+| `coupon.code`                         | כן        | 4–24                   | `^[A-Z0-9-]+$`          | "קוד קופון מכיל אותיות גדולות, ספרות ומקפים בלבד."                 |
+| נימוק (`reason`) בחריגת מחיר          | כן        | 3–500                  | טקסט                    | "הפעולה הזו דורשת נימוק. הסבר בקצרה מדוע היא מבוצעת."              |
 
 כל השדות מדווחים **יחד** ולא אחד־אחד — `ValidationError` נושאת את כל
 ה-`FieldIssue`. הסכימות נבנות מ-`src/lib/service/schema.ts`;
@@ -721,15 +721,15 @@ for c in candidates:
 
 ## 9. אוטומציות והתראות
 
-| טריגר | תנאי | פעולה | מי מקבל | ערוץ | כישלון משלוח |
-| --- | --- | --- | --- | --- | --- |
-| `pricing.suggestions_ready` (יומי, 06:00 מקומי) | יש `pending` | התראה עם מספר ההמלצות והפער המצטבר | מחזיקי `pricing.manage`, לפי הטווח שלהם | דוא״ל + התראה במוצר | אין ניסיון חוזר. ההמלצות ממתינות במסך; התראה שאבדה אינה מחיר שאבד |
-| מחיר לילה נצבט לרצפה 3 פעמים ב-7 ימים | — | "המחירון מייצר מחירים מתחת לרצפה — כדאי לבדוק" | `revenue_manager` | במוצר | — |
-| מבצע חצה 80% מ-`budget_agorot` | — | אזהרה | יוצר המבצע + `revenue_manager` | דוא״ל | ניסיון חוזר פעם אחת |
-| מבצע מיצה `max_redemptions` | — | המבצע מושבת אוטומטית + התראה | כנ״ל | דוא״ל | ההשבתה **אינה** תלויה בהתראה. היא באילוץ, §10 |
-| שינוי `properties.tax_rate_bps` | — | "שינוי מע״מ ישפיע על הזמנות חדשות בלבד. N הזמנות קיימות שומרות על 17%." | מבצע השינוי | חסימת דיאלוג | — |
-| הזמנה נוצרה עם מחיר מתחת לרצפה | חריגה עם `booking.override_price` | דיווח יומי מרוכז | `general_manager` | דוא״ל | — |
-| תעריף לא הוגדר ל-30 הימים הקרובים | יחידה פעילה | "יחידה X נמכרת במחיר הבסיס בלבד" | `revenue_manager` | במוצר | — |
+| טריגר                                           | תנאי                              | פעולה                                                                   | מי מקבל                                 | ערוץ                | כישלון משלוח                                                      |
+| ----------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------- | --------------------------------------- | ------------------- | ----------------------------------------------------------------- |
+| `pricing.suggestions_ready` (יומי, 06:00 מקומי) | יש `pending`                      | התראה עם מספר ההמלצות והפער המצטבר                                      | מחזיקי `pricing.manage`, לפי הטווח שלהם | דוא״ל + התראה במוצר | אין ניסיון חוזר. ההמלצות ממתינות במסך; התראה שאבדה אינה מחיר שאבד |
+| מחיר לילה נצבט לרצפה 3 פעמים ב-7 ימים           | —                                 | "המחירון מייצר מחירים מתחת לרצפה — כדאי לבדוק"                          | `revenue_manager`                       | במוצר               | —                                                                 |
+| מבצע חצה 80% מ-`budget_agorot`                  | —                                 | אזהרה                                                                   | יוצר המבצע + `revenue_manager`          | דוא״ל               | ניסיון חוזר פעם אחת                                               |
+| מבצע מיצה `max_redemptions`                     | —                                 | המבצע מושבת אוטומטית + התראה                                            | כנ״ל                                    | דוא״ל               | ההשבתה **אינה** תלויה בהתראה. היא באילוץ, §10                     |
+| שינוי `properties.tax_rate_bps`                 | —                                 | "שינוי מע״מ ישפיע על הזמנות חדשות בלבד. N הזמנות קיימות שומרות על 17%." | מבצע השינוי                             | חסימת דיאלוג        | —                                                                 |
+| הזמנה נוצרה עם מחיר מתחת לרצפה                  | חריגה עם `booking.override_price` | דיווח יומי מרוכז                                                        | `general_manager`                       | דוא״ל               | —                                                                 |
+| תעריף לא הוגדר ל-30 הימים הקרובים               | יחידה פעילה                       | "יחידה X נמכרת במחיר הבסיס בלבד"                                        | `revenue_manager`                       | במוצר               | —                                                                 |
 
 התראה נכשלת אף פעם לא מגלגלת לאחור פעולה עסקית — זה החוק ב-`operation.ts`
 שלב 10, והכישלון מדווח דרך `onEventError`.
@@ -765,14 +765,14 @@ for c in candidates:
 הטווח הוא `(organization_id, operation, key)` — מ-`src/lib/service/idempotency.ts`
 ומ-`idempotency_keys_scope_key` ב-0006. אף פעם לא המפתח לבדו.
 
-| פעולה | מקור המפתח | למה |
-| --- | --- | --- |
-| `booking.create` (עם תמחור) | הלקוח מייצר UUID v4 **בעת הצגת הטופס**, ומשתמש בו בכל ניסיון חוזר של אותו טופס | מפתח שנוצר מחדש בכל ניסיון אינו מפתח |
-| `pricing.approve_suggestion` (יחיד) | `suggestion:{suggestion_id}` | אישור הוא מעשה חד־פעמי לכל המלצה. נגזר בשרת |
-| `pricing.approve_suggestions` (אצווה) | הלקוח מייצר UUID אחד לאצווה | אצווה חלקית שרצה פעמיים היא חצי מחירון כפול |
-| `pricing.bulk_edit` | `bulk:{unit_id}:{plan_id}:{from}:{to}:{payload_hash}` | נגזר. אותה עריכה בדיוק פעמיים היא לחיצה כפולה |
-| `promotion.redeem` | `redeem:{booking_id}:{promotion_id}` | מבצע נפדה פעם אחת להזמנה, בהגדרה |
-| `booking.reprice` | הלקוח מייצר UUID לכל פתיחת דיאלוג התמחור מחדש | תמחור מחדש **הוא** פעולה חוזרת לגיטימית; המפתח מגן על הלחיצה, לא על הכוונה |
+| פעולה                                 | מקור המפתח                                                                     | למה                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `booking.create` (עם תמחור)           | הלקוח מייצר UUID v4 **בעת הצגת הטופס**, ומשתמש בו בכל ניסיון חוזר של אותו טופס | מפתח שנוצר מחדש בכל ניסיון אינו מפתח                                       |
+| `pricing.approve_suggestion` (יחיד)   | `suggestion:{suggestion_id}`                                                   | אישור הוא מעשה חד־פעמי לכל המלצה. נגזר בשרת                                |
+| `pricing.approve_suggestions` (אצווה) | הלקוח מייצר UUID אחד לאצווה                                                    | אצווה חלקית שרצה פעמיים היא חצי מחירון כפול                                |
+| `pricing.bulk_edit`                   | `bulk:{unit_id}:{plan_id}:{from}:{to}:{payload_hash}`                          | נגזר. אותה עריכה בדיוק פעמיים היא לחיצה כפולה                              |
+| `promotion.redeem`                    | `redeem:{booking_id}:{promotion_id}`                                           | מבצע נפדה פעם אחת להזמנה, בהגדרה                                           |
+| `booking.reprice`                     | הלקוח מייצר UUID לכל פתיחת דיאלוג התמחור מחדש                                  | תמחור מחדש **הוא** פעולה חוזרת לגיטימית; המפתח מגן על הלחיצה, לא על הכוונה |
 
 מחזור החיים מ-0006: הזמנה מוחזקת שעה (`expires_at`); שורה שהושלמה נשמרת
 24 שעות ואז ניתנת לתביעה מחדש. שחרור בכישלון הוא `abandon()` שמוחק את
@@ -786,12 +786,12 @@ for c in candidates:
 
 ## 11. אינטגרציות
 
-| ספק | מה נקרא | מה נכתב | תקלה | איזון אחריה |
-| --- | --- | --- | --- | --- |
-| ערוצי הפצה (Airbnb · Booking.com · VRBO) | — | `nightly` ו-`min_nights` לכל לילה | דחיפה שנכשלה נשמרת בתור עם `attempt`, `last_error`, `next_attempt_at` | סנכרון מלא לילי משווה את מה שבערוץ למה שב-`rate_calendar` ומדווח סטיות. **ESTIA היא מקור האמת**; סטייה נפתרת לטובתה |
-| ערוצי הפצה — קליטה | מחיר שההזמנה נסגרה בו | `booking_price_lines` כפי שהגיעו | מחיר שאינו תואם את המחירון | ⚠️ **המחיר של הערוץ גובר.** הזמנה מ-OTA היא עסקה שכבר נסגרה; תיקונה למחירון שלנו הוא המצאת חוב. הסטייה נרשמת ב-`resolution` כ-`channel_price_mismatch` ומדווחת |
-| `src/lib/hebrew-calendar/` | ימים מיוחדים ושבת | — | — | מודול מקומי, ללא רשת. נתמך לכל שנה עברית (§המודול) |
-| ספק תמחור דינמי חיצוני | ❓ | — | — | ❓ |
+| ספק                                      | מה נקרא               | מה נכתב                           | תקלה                                                                  | איזון אחריה                                                                                                                                                    |
+| ---------------------------------------- | --------------------- | --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ערוצי הפצה (Airbnb · Booking.com · VRBO) | —                     | `nightly` ו-`min_nights` לכל לילה | דחיפה שנכשלה נשמרת בתור עם `attempt`, `last_error`, `next_attempt_at` | סנכרון מלא לילי משווה את מה שבערוץ למה שב-`rate_calendar` ומדווח סטיות. **ESTIA היא מקור האמת**; סטייה נפתרת לטובתה                                            |
+| ערוצי הפצה — קליטה                       | מחיר שההזמנה נסגרה בו | `booking_price_lines` כפי שהגיעו  | מחיר שאינו תואם את המחירון                                            | ⚠️ **המחיר של הערוץ גובר.** הזמנה מ-OTA היא עסקה שכבר נסגרה; תיקונה למחירון שלנו הוא המצאת חוב. הסטייה נרשמת ב-`resolution` כ-`channel_price_mismatch` ומדווחת |
+| `src/lib/hebrew-calendar/`               | ימים מיוחדים ושבת     | —                                 | —                                                                     | מודול מקומי, ללא רשת. נתמך לכל שנה עברית (§המודול)                                                                                                             |
+| ספק תמחור דינמי חיצוני                   | ❓                    | —                                 | —                                                                     | ❓                                                                                                                                                             |
 
 ❓ **האם ESTIA משתמשת בספק תמחור דינמי חיצוני** (PriceLabs, Wheelhouse, Beyond)
 או במנוע פנימי — החלטה מסחרית: יש לה עלות לכל יחידה לחודש, והיא משנה את
@@ -848,13 +848,13 @@ for c in candidates:
 **מה רגיש כאן** — שלושת התעריפים. `rate.net` הוא **המחיר שהעסק באמת מוכן
 לקבל**, ומסירתו לגורם הלא נכון מוסרת את המשא ומתן עצמו.
 
-| שדה | ההרשאה | מי מחזיק בפועל |
-| --- | --- | --- |
-| `rate.public` | `rate.view_public` | כמעט כולם, כולל `property_owner` וסוכן מדרגה `public` |
-| `rate.agent` | `rate.view_agent` | סוכנים מדרגה `agent` ומעלה, `revenue_manager` |
-| `rate.net` | `rate.view_net` | הנהלה ו-`revenue_manager` בלבד. **לא** `property_owner` |
-| `booking.price` | `booking.view_price` | מי שרואה כמה שולם בפועל. שונה מ-`rate.*`, שהוא מחירון |
-| `booking.profitability` | `booking.view_profitability` | ראה [`21-finance.md`](21-finance.md) §13 |
+| שדה                     | ההרשאה                       | מי מחזיק בפועל                                          |
+| ----------------------- | ---------------------------- | ------------------------------------------------------- |
+| `rate.public`           | `rate.view_public`           | כמעט כולם, כולל `property_owner` וסוכן מדרגה `public`   |
+| `rate.agent`            | `rate.view_agent`            | סוכנים מדרגה `agent` ומעלה, `revenue_manager`           |
+| `rate.net`              | `rate.view_net`              | הנהלה ו-`revenue_manager` בלבד. **לא** `property_owner` |
+| `booking.price`         | `booking.view_price`         | מי שרואה כמה שולם בפועל. שונה מ-`rate.*`, שהוא מחירון   |
+| `booking.profitability` | `booking.view_profitability` | ראה [`21-finance.md`](21-finance.md) §13                |
 
 **הסתרה ברמת השדה, לא ברמת המסך.** התעריף שאין למשתמש הרשאה עליו **אינו
 נשלח בתגובה**. הוא לא מוסתר ב-CSS ולא מסונן בקליינט. הסתרת כפתור אינה אבטחה.
@@ -882,21 +882,21 @@ for c in candidates:
 
 כל ניסוח בעברית, בשם המבצע, עם המספרים המלאים.
 
-| פעולה | `action` | הניסוח |
-| --- | --- | --- |
-| שינוי מחיר לילה | `pricing.manage` | "שי שינה את מחיר הלילה 14/04/2026 ביחידה 'סוויטת הגפן' מ-₪1,200 ל-₪1,450" |
-| עריכה קבוצתית | `pricing.manage` | "רוני עדכנה 23 לילות ביחידה 'סוויטת הגפן' (01/07–23/07) ל-₪1,600 ללילה" |
-| חוק תעריף חדש | `pricing.manage` | "דנה יצרה חוק תעריף 'עונת סוכות' · 25/09–15/10 · ₪1,400 ללילה · יחידה 'סוויטת הגפן'" |
-| שינוי רצפה | `pricing.manage` | "שי הוריד את מחיר הרצפה בתוכנית 'ישיר' מ-₪900 ל-₪750 · סיבה: תחרות מול צימר סמוך" |
-| מבצע נוצר | `pricing.manage` | "דנה יצרה מבצע 'הזמנה ישירה' · 5% · ללא הגבלת מימושים · תקציב ₪20,000" |
-| מבצע הושבת | `pricing.manage` | "המערכת השביתה את המבצע 'הזמנה ישירה' — מוצו 200 המימושים" |
-| מימוש מבצע | `booking.create` | "מבצע 'הזמנה ישירה' הופעל בהזמנה B3F91A2C · הנחה ₪278" |
-| המלצה נוצרה | `pricing.manage` | "ESTIA הציעה ₪1,610 ללילה 03/10/2026 (דטרמיניסטי ₪1,400, ביטחון 78%): 'ביקוש גבוה מהרגיל לשמחת תורה'" · `actor.type='ai_agent'` |
-| המלצה אושרה | `pricing.manage` | "דנה אישרה את ההמלצה ל-03/10/2026 · ₪1,610" |
-| המלצה יושמה אוטומטית | `pricing.manage` | "ESTIA עדכנה את מחיר הלילה 03/10/2026 מ-₪1,400 ל-₪1,610 לפי מדיניות התמחור האוטומטי שהפעיל שי" · `on_behalf_of_user_id = שי` |
-| חריגה מתחת לרצפה | `booking.override_price` | "רוני אישרה מחיר ₪850 ללילה, מתחת לרצפה ₪900 · סיבה: אורח חוזר שהמליץ על שלושה" |
-| תמחור מחדש | `booking.amend_price` | "דנה שינתה את סכום ההזמנה B3F91A2C מ-₪5,200 ל-₪4,700 · סיבה: פיצוי על תקלה במזגן" |
-| שינוי מע״מ | `property.update` | "שי שינה את שיעור המע״מ בנכס 'דה אוליביה' מ-17% ל-18%. 41 הזמנות קיימות שומרות על השיעור הקודם" |
+| פעולה                | `action`                 | הניסוח                                                                                                                          |
+| -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| שינוי מחיר לילה      | `pricing.manage`         | "שי שינה את מחיר הלילה 14/04/2026 ביחידה 'סוויטת הגפן' מ-₪1,200 ל-₪1,450"                                                       |
+| עריכה קבוצתית        | `pricing.manage`         | "רוני עדכנה 23 לילות ביחידה 'סוויטת הגפן' (01/07–23/07) ל-₪1,600 ללילה"                                                         |
+| חוק תעריף חדש        | `pricing.manage`         | "דנה יצרה חוק תעריף 'עונת סוכות' · 25/09–15/10 · ₪1,400 ללילה · יחידה 'סוויטת הגפן'"                                            |
+| שינוי רצפה           | `pricing.manage`         | "שי הוריד את מחיר הרצפה בתוכנית 'ישיר' מ-₪900 ל-₪750 · סיבה: תחרות מול צימר סמוך"                                               |
+| מבצע נוצר            | `pricing.manage`         | "דנה יצרה מבצע 'הזמנה ישירה' · 5% · ללא הגבלת מימושים · תקציב ₪20,000"                                                          |
+| מבצע הושבת           | `pricing.manage`         | "המערכת השביתה את המבצע 'הזמנה ישירה' — מוצו 200 המימושים"                                                                      |
+| מימוש מבצע           | `booking.create`         | "מבצע 'הזמנה ישירה' הופעל בהזמנה B3F91A2C · הנחה ₪278"                                                                          |
+| המלצה נוצרה          | `pricing.manage`         | "ESTIA הציעה ₪1,610 ללילה 03/10/2026 (דטרמיניסטי ₪1,400, ביטחון 78%): 'ביקוש גבוה מהרגיל לשמחת תורה'" · `actor.type='ai_agent'` |
+| המלצה אושרה          | `pricing.manage`         | "דנה אישרה את ההמלצה ל-03/10/2026 · ₪1,610"                                                                                     |
+| המלצה יושמה אוטומטית | `pricing.manage`         | "ESTIA עדכנה את מחיר הלילה 03/10/2026 מ-₪1,400 ל-₪1,610 לפי מדיניות התמחור האוטומטי שהפעיל שי" · `on_behalf_of_user_id = שי`    |
+| חריגה מתחת לרצפה     | `booking.override_price` | "רוני אישרה מחיר ₪850 ללילה, מתחת לרצפה ₪900 · סיבה: אורח חוזר שהמליץ על שלושה"                                                 |
+| תמחור מחדש           | `booking.amend_price`    | "דנה שינתה את סכום ההזמנה B3F91A2C מ-₪5,200 ל-₪4,700 · סיבה: פיצוי על תקלה במזגן"                                               |
+| שינוי מע״מ           | `property.update`        | "שי שינה את שיעור המע״מ בנכס 'דה אוליביה' מ-17% ל-18%. 41 הזמנות קיימות שומרות על השיעור הקודם"                                 |
 
 `before`/`after` מצומצמים ל-`diffFields`. `NEVER_LOGGED` חל; אין כאן שדה
 סודי, אבל הכלל אינו מותנה בכך.
@@ -916,12 +916,12 @@ for c in candidates:
 שעדיין אינו קיים. הנוסחאות של תפוסה, ADR ו-RevPAR שייכות לשם. **המודול הזה
 לא מגדיר אותן**, ולא יגדיר. מה שהוא **צריך** מ-`facts.ts`:
 
-| מה נדרש | לשם מה |
-| --- | --- |
-| `occupancyPercent(propertyId, date)` | תוספת הביקוש, §7.4 |
-| `adr(scope, range)` | השוואת המלצה למציאות |
-| `revpar(scope, range)` | מדידת השפעת המחירון |
-| `paceByLeadTime(scope, range)` | `early_bird` / `last_minute` |
+| מה נדרש                              | לשם מה                       |
+| ------------------------------------ | ---------------------------- |
+| `occupancyPercent(propertyId, date)` | תוספת הביקוש, §7.4           |
+| `adr(scope, range)`                  | השוואת המלצה למציאות         |
+| `revpar(scope, range)`               | מדידת השפעת המחירון          |
+| `paceByLeadTime(scope, range)`       | `early_bird` / `last_minute` |
 
 דוחות שהמודול מזין: המחירון מול המכירות בפועל · ניצול מבצעים
 (`discount_redemptions` מקובץ) · דיוק ההמלצות (`suggested` מול
@@ -931,47 +931,47 @@ for c in candidates:
 
 ## 16. מטריצת מקרי קצה
 
-| # | המקרה | מה קורה היום | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| 1 | המחירון משתנה אחרי שנוצרה הזמנה | אין מנגנון — אין `booking_price_snapshots` | 🔒 ההזמנה לא זזה. אין נתיב שמחשב מחיר קיים | יצירת הזמנה → שינוי `rate_rules` → `bookings.total_agorot` ו-`booking_price_lines` זהים ביט־בביט |
-| 2 | מע״מ עולה מ-17% ל-18% ב-1 בינואר | `properties.tax_rate_bps` יחיד, ללא תיארוך | הזמנות קיימות שומרות על `bookings.tax_rate_bps` הצרוב. חדשות מקבלות את החדש | שתי הזמנות משני צדי התאריך; שתי שורות `tax` שונות; שתיהן מסתכמות |
-| 3 | שבת שהיא גם חול המועד | — | תוספת אחת, המקסימום (חוק 9). לא סכום | 02/10/2026: `calendar_add = 35,000` ולא 56,000 |
-| 4 | שני חוקי תעריף חופפים באותה ספציפיות ועדיפות | לא ניתן לייצוג | אילוץ exclusion דוחה את השני בשמירה | ניסיון INSERT מחזיר 23P01; ההודעה בעברית נוקבת בשני החוקים |
-| 5 | קופון חד־פעמי בשני חלונות בו־זמנית | — | אחד עובר, שני מקבל "הקופון כבר מומש". **אילוץ**, לא בדיקה | שתי בקשות מקבילות; בדיוק שורה אחת ב-`discount_redemptions` |
-| 6 | ה-AI מציע מחיר מעל התקרה | — | ההצעה נשמרת כפי שהיא; היישום נצבט לתקרה; שני המספרים נשמרים | `suggested=300000`, `ceiling=220000` → `rate_calendar = 220000`, `resolution.clamped = true` |
-| 7 | `auto_apply` מופעל ולילה נמכר באותו רגע | — | היישום נדחה (חוק 25). ההמלצה נשארת `pending` | מרוץ: אישור אוטומטי מול `booking.create` על אותו לילה |
-| 8 | הנחה גדולה מהסכום | `priceStay` צובט ל-`remaining` | סכום 0, לא שלילי. השורה מוצגת בערכה הצבוט | הנחה 150% על ₪1,000 → שורת הנחה ‎−100,000, סכום 0 |
-| 9 | תפוסה של נכס שכל יחידותיו מושבתות | — | `null` → אין תוספת ביקוש. **לא** המדרגה הזולה | `availableUnitNights = 0` → `demand_add = 0`, ו-`resolution` מציין `occupancy: null` |
-| 10 | מינימום לילות משתנה אחרי שנוצרה הזמנה קצרה יותר | — | ההזמנה תקפה. המינימום נאכף ביצירה ובשינוי תאריכים, לא רטרואקטיבית | שינוי `min_nights` ל-3; הזמנה קיימת של לילה אחת נשארת; שינוי תאריכיה נכשל |
-| 11 | ערוץ החזיר הזמנה במחיר שאינו במחירון | — | ⚠️ **מחיר הערוץ גובר.** נרשם כ-`channel_price_mismatch` ומדווח | קליטת הזמנה עם ₪900 מול מחירון ₪1,200: השורות ₪900; דוח סטיות מציג אחת |
-| 12 | סוכן מבקש הנחה מעל התקרה שלו | — | **סירוב** עם שמה של התקרה. לא צביטה שקטה (חוק 33) | סוכן עם תקרה 10% מבקש 15% → `BusinessRuleError` שנוקב ב-10% |
-| 13 | תוכנית תעריפים נגזרת יוצרת מעגל | — | נדחה **בשמירה**, לא בציטוט | A→B→A נדחה עם "גזירת התעריפים יוצרת מעגל" |
-| 14 | טווח שהות של אפס לילות | `ValidationError` מ-`priceStay` | כנ״ל. לא ₪0 | `checkIn = checkOut` → 422 על `checkOut` |
-| 15 | תמחור לילה בשנה עברית רחוקה (2035) | עובד — הטבלה נבנית לפי שנה, memoised | כנ״ל. הפגם הישן של הלגסי (חלון ±4 שנים) לא חזר | `isPeakNight('2035-04-24')` מזהה פסח |
-| 16 | אין תוכנית תעריפים כשירה | — | `BusinessRuleError`, **לא** נפילה למחיר הבסיס | ערוץ `airbnb` בלי תוכנית ל-OTA → `pricing.no_rate_plan` |
-| 17 | מבצע פג תוקף בין הציטוט להזמנה | — | ההזמנה מתומחרת מחדש בעת היצירה, לפי `effective_on` של **היצירה**. האורח רואה את השינוי לפני האישור | ציטוט ב-23:59, יצירה ב-00:01 באזור הזמן של הנכס → הנחה נעלמת, מוצגת התראה |
-| 18 | שני מבצעים באותה `exclusive_group` | — | הראשון לפי §7.9 נבחר; השני מדולג בשקט ואינו מוצג לאורח | שניהם כשירים → שורת הנחה אחת |
-| 19 | `units.base_price_agorot = 0` ואין חוק | ההזמנה תמוחר ב-0 | ניתן לייצוג, אך המסך מזהיר בהגדרות היחידה, ו-`resolution` מסמן `fallback_zero` | יחידה חדשה בלי מחירון: אזהרה מוצגת; ציטוט נכשל ב-`quote.send` עד שנקבע מחיר |
-| 20 | לחיצה כפולה על "אשר את כל ההמלצות" | — | מפתח Idempotency אחד לאצווה; השני מקבל `replayed` עם אותה תוצאה | שתי בקשות עם אותו מפתח → שורה אחת ב-`rate_calendar` לכל לילה |
-| 21 | תמחור מחדש של הזמנה שהושלמה | — | נדחה. התיקון הוא חשבונית זיכוי | `status='completed'` → `BusinessRuleError` שמפנה ל-§21-finance |
-| 22 | `effective_to` של חוק באמצע שהות | — | כל לילה נפתר בנפרד. שהות יכולה לחצות שני חוקים, וזה נכון | 3 לילות, החוק נסגר אחרי הראשון → שני מחירים שונים, שניהם ב-`resolution` |
+| #   | המקרה                                           | מה קורה היום                               | מה **צריך** לקרות                                                                                  | איך בודקים                                                                                       |
+| --- | ----------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1   | המחירון משתנה אחרי שנוצרה הזמנה                 | אין מנגנון — אין `booking_price_snapshots` | 🔒 ההזמנה לא זזה. אין נתיב שמחשב מחיר קיים                                                         | יצירת הזמנה → שינוי `rate_rules` → `bookings.total_agorot` ו-`booking_price_lines` זהים ביט־בביט |
+| 2   | מע״מ עולה מ-17% ל-18% ב-1 בינואר                | `properties.tax_rate_bps` יחיד, ללא תיארוך | הזמנות קיימות שומרות על `bookings.tax_rate_bps` הצרוב. חדשות מקבלות את החדש                        | שתי הזמנות משני צדי התאריך; שתי שורות `tax` שונות; שתיהן מסתכמות                                 |
+| 3   | שבת שהיא גם חול המועד                           | —                                          | תוספת אחת, המקסימום (חוק 9). לא סכום                                                               | 02/10/2026: `calendar_add = 35,000` ולא 56,000                                                   |
+| 4   | שני חוקי תעריף חופפים באותה ספציפיות ועדיפות    | לא ניתן לייצוג                             | אילוץ exclusion דוחה את השני בשמירה                                                                | ניסיון INSERT מחזיר 23P01; ההודעה בעברית נוקבת בשני החוקים                                       |
+| 5   | קופון חד־פעמי בשני חלונות בו־זמנית              | —                                          | אחד עובר, שני מקבל "הקופון כבר מומש". **אילוץ**, לא בדיקה                                          | שתי בקשות מקבילות; בדיוק שורה אחת ב-`discount_redemptions`                                       |
+| 6   | ה-AI מציע מחיר מעל התקרה                        | —                                          | ההצעה נשמרת כפי שהיא; היישום נצבט לתקרה; שני המספרים נשמרים                                        | `suggested=300000`, `ceiling=220000` → `rate_calendar = 220000`, `resolution.clamped = true`     |
+| 7   | `auto_apply` מופעל ולילה נמכר באותו רגע         | —                                          | היישום נדחה (חוק 25). ההמלצה נשארת `pending`                                                       | מרוץ: אישור אוטומטי מול `booking.create` על אותו לילה                                            |
+| 8   | הנחה גדולה מהסכום                               | `priceStay` צובט ל-`remaining`             | סכום 0, לא שלילי. השורה מוצגת בערכה הצבוט                                                          | הנחה 150% על ₪1,000 → שורת הנחה ‎−100,000, סכום 0                                                |
+| 9   | תפוסה של נכס שכל יחידותיו מושבתות               | —                                          | `null` → אין תוספת ביקוש. **לא** המדרגה הזולה                                                      | `availableUnitNights = 0` → `demand_add = 0`, ו-`resolution` מציין `occupancy: null`             |
+| 10  | מינימום לילות משתנה אחרי שנוצרה הזמנה קצרה יותר | —                                          | ההזמנה תקפה. המינימום נאכף ביצירה ובשינוי תאריכים, לא רטרואקטיבית                                  | שינוי `min_nights` ל-3; הזמנה קיימת של לילה אחת נשארת; שינוי תאריכיה נכשל                        |
+| 11  | ערוץ החזיר הזמנה במחיר שאינו במחירון            | —                                          | ⚠️ **מחיר הערוץ גובר.** נרשם כ-`channel_price_mismatch` ומדווח                                     | קליטת הזמנה עם ₪900 מול מחירון ₪1,200: השורות ₪900; דוח סטיות מציג אחת                           |
+| 12  | סוכן מבקש הנחה מעל התקרה שלו                    | —                                          | **סירוב** עם שמה של התקרה. לא צביטה שקטה (חוק 33)                                                  | סוכן עם תקרה 10% מבקש 15% → `BusinessRuleError` שנוקב ב-10%                                      |
+| 13  | תוכנית תעריפים נגזרת יוצרת מעגל                 | —                                          | נדחה **בשמירה**, לא בציטוט                                                                         | A→B→A נדחה עם "גזירת התעריפים יוצרת מעגל"                                                        |
+| 14  | טווח שהות של אפס לילות                          | `ValidationError` מ-`priceStay`            | כנ״ל. לא ₪0                                                                                        | `checkIn = checkOut` → 422 על `checkOut`                                                         |
+| 15  | תמחור לילה בשנה עברית רחוקה (2035)              | עובד — הטבלה נבנית לפי שנה, memoised       | כנ״ל. הפגם הישן של הלגסי (חלון ±4 שנים) לא חזר                                                     | `isPeakNight('2035-04-24')` מזהה פסח                                                             |
+| 16  | אין תוכנית תעריפים כשירה                        | —                                          | `BusinessRuleError`, **לא** נפילה למחיר הבסיס                                                      | ערוץ `airbnb` בלי תוכנית ל-OTA → `pricing.no_rate_plan`                                          |
+| 17  | מבצע פג תוקף בין הציטוט להזמנה                  | —                                          | ההזמנה מתומחרת מחדש בעת היצירה, לפי `effective_on` של **היצירה**. האורח רואה את השינוי לפני האישור | ציטוט ב-23:59, יצירה ב-00:01 באזור הזמן של הנכס → הנחה נעלמת, מוצגת התראה                        |
+| 18  | שני מבצעים באותה `exclusive_group`              | —                                          | הראשון לפי §7.9 נבחר; השני מדולג בשקט ואינו מוצג לאורח                                             | שניהם כשירים → שורת הנחה אחת                                                                     |
+| 19  | `units.base_price_agorot = 0` ואין חוק          | ההזמנה תמוחר ב-0                           | ניתן לייצוג, אך המסך מזהיר בהגדרות היחידה, ו-`resolution` מסמן `fallback_zero`                     | יחידה חדשה בלי מחירון: אזהרה מוצגת; ציטוט נכשל ב-`quote.send` עד שנקבע מחיר                      |
+| 20  | לחיצה כפולה על "אשר את כל ההמלצות"              | —                                          | מפתח Idempotency אחד לאצווה; השני מקבל `replayed` עם אותה תוצאה                                    | שתי בקשות עם אותו מפתח → שורה אחת ב-`rate_calendar` לכל לילה                                     |
+| 21  | תמחור מחדש של הזמנה שהושלמה                     | —                                          | נדחה. התיקון הוא חשבונית זיכוי                                                                     | `status='completed'` → `BusinessRuleError` שמפנה ל-§21-finance                                   |
+| 22  | `effective_to` של חוק באמצע שהות                | —                                          | כל לילה נפתר בנפרד. שהות יכולה לחצות שני חוקים, וזה נכון                                           | 3 לילות, החוק נסגר אחרי הראשון → שני מחירים שונים, שניהם ב-`resolution`                          |
 
 ---
 
 ## 17. מניעת טעות אנוש
 
-| הטעות | המנגנון |
-| --- | --- |
+| הטעות                                                     | המנגנון                                                                                                                                 |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | מחיר באגורות מוקלד כשקלים (₪1,450 → 1450 אגורות = ₪14.50) | השדה **תמיד** מקבל שקלים ומציג ₪ צמוד; ההמרה בקצה. בנוסף: מחיר שקטן פי 50 מהמחיר הקודם באותה יחידה פותח דיאלוג אישור שנוקב בשני הסכומים |
-| חוק תעריף על היחידה הלא נכונה | תצוגה מקדימה חובה לפני שמירה (§5.2), עם שם היחידה ושלושה תאריכי דוגמה |
-| עונה שנשמרה על השנה הלא נכונה | התאריכים מוצגים גם בלוח העברי. "כ״א תשרי תשפ״ז" תופס טעות ש-"2026-10-02" לא |
-| עריכה קבוצתית על טווח רחב מדי | הדיאלוג נוקב במספר הלילות ובסכום ההפרש המצטבר לפני האישור: "23 לילות · הפרש ₪4,600" |
-| מבצע בלי תאריך סיום | `effective_to` אינו חובה, אך שמירה בלי תאריך מציגה אזהרה מפורשת: "מבצע ללא תאריך סיום ימשיך לרוץ" |
-| הנחה שהוזנה כ-50 במקום 5 | ולידציה (§8) מגבילה ל-100%, **ובנוסף**: הנחה מעל 30% דורשת אישור נוסף בדיאלוג |
-| אישור המלצות באצווה בלי לקרוא | האצווה מציגה את הפער המצטבר בשקלים ואת מספר הלילות שנצבטו, ומגבילה ל-60 לילות בפעולה |
-| שינוי רצפה בטעות | פעולה רגישה: נימוק חובה + אימות מחדש (§13, המלצה) |
-| הנחה שהופעלה פעמיים על אותה הזמנה | `unique (booking_id, promotion_id)` על `discount_redemptions` |
-| מחיר שנקבע והזמנה שנוצרה בהפרש של שניות ממחיר ישן | הציטוט נושא את ה-`hash` של ה-snapshot; יצירת הזמנה עם hash שאינו הנוכחי מציגה את ההפרש ומבקשת אישור |
+| חוק תעריף על היחידה הלא נכונה                             | תצוגה מקדימה חובה לפני שמירה (§5.2), עם שם היחידה ושלושה תאריכי דוגמה                                                                   |
+| עונה שנשמרה על השנה הלא נכונה                             | התאריכים מוצגים גם בלוח העברי. "כ״א תשרי תשפ״ז" תופס טעות ש-"2026-10-02" לא                                                             |
+| עריכה קבוצתית על טווח רחב מדי                             | הדיאלוג נוקב במספר הלילות ובסכום ההפרש המצטבר לפני האישור: "23 לילות · הפרש ₪4,600"                                                     |
+| מבצע בלי תאריך סיום                                       | `effective_to` אינו חובה, אך שמירה בלי תאריך מציגה אזהרה מפורשת: "מבצע ללא תאריך סיום ימשיך לרוץ"                                       |
+| הנחה שהוזנה כ-50 במקום 5                                  | ולידציה (§8) מגבילה ל-100%, **ובנוסף**: הנחה מעל 30% דורשת אישור נוסף בדיאלוג                                                           |
+| אישור המלצות באצווה בלי לקרוא                             | האצווה מציגה את הפער המצטבר בשקלים ואת מספר הלילות שנצבטו, ומגבילה ל-60 לילות בפעולה                                                    |
+| שינוי רצפה בטעות                                          | פעולה רגישה: נימוק חובה + אימות מחדש (§13, המלצה)                                                                                       |
+| הנחה שהופעלה פעמיים על אותה הזמנה                         | `unique (booking_id, promotion_id)` על `discount_redemptions`                                                                           |
+| מחיר שנקבע והזמנה שנוצרה בהפרש של שניות ממחיר ישן         | הציטוט נושא את ה-`hash` של ה-snapshot; יצירת הזמנה עם hash שאינו הנוכחי מציגה את ההפרש ומבקשת אישור                                     |
 
 ---
 
@@ -979,19 +979,19 @@ for c in candidates:
 
 **המודול תלוי ב-**
 
-| במה | במה בדיוק | מצב |
-| --- | --- | --- |
-| `src/lib/booking/pricing.ts` | `priceStay` · `sumLines` · `roundAgorot` · `manualDiscountLine` · `agentCommissionLine` · `taxIncludedIn` | קיים |
-| `src/lib/booking/types.ts` | `PriceLine` · `PRICE_LINE_KINDS` · `Agorot` · `DateRange` · `nightsBetween` | קיים |
-| `src/lib/booking/dates.ts` | `eachNight` · `localDate` · `formatDayMonth` | קיים |
-| `src/lib/hebrew-calendar/` | `isPeakNight` · `summarizeStay` · `isShabbat` · `formatHebrewDate` | קיים |
-| `src/lib/metrics/rounding.ts` | `safeDivide` · `percentOf` · `allocateEvenly` · `allocateShares` | קיים |
-| `src/lib/metrics/facts.ts` | תפוסה · ADR · RevPAR | ⚠️ **חסר** |
-| `src/lib/service/operation.ts` | הצינור, Idempotency, Audit | קיים |
-| `src/lib/authz/` | `can` · `PERMISSIONS` · `PRICE_LEVELS` | קיים |
-| `src/lib/preparation/types.ts` | `EventType` · `FactBasis` | קיים |
-| מודול הסוכנים | `agent_agreements` · תקרת הנחה | ⚠️ אינו בקוד. `agency_id` ב-0009 מסומן "foreign key deferred" |
-| הגדרות נכס | `properties.tax_rate_bps` · `tourist_vat_exempt` · `min_nights` | קיים ב-0008 |
+| במה                            | במה בדיוק                                                                                                 | מצב                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `src/lib/booking/pricing.ts`   | `priceStay` · `sumLines` · `roundAgorot` · `manualDiscountLine` · `agentCommissionLine` · `taxIncludedIn` | קיים                                                          |
+| `src/lib/booking/types.ts`     | `PriceLine` · `PRICE_LINE_KINDS` · `Agorot` · `DateRange` · `nightsBetween`                               | קיים                                                          |
+| `src/lib/booking/dates.ts`     | `eachNight` · `localDate` · `formatDayMonth`                                                              | קיים                                                          |
+| `src/lib/hebrew-calendar/`     | `isPeakNight` · `summarizeStay` · `isShabbat` · `formatHebrewDate`                                        | קיים                                                          |
+| `src/lib/metrics/rounding.ts`  | `safeDivide` · `percentOf` · `allocateEvenly` · `allocateShares`                                          | קיים                                                          |
+| `src/lib/metrics/facts.ts`     | תפוסה · ADR · RevPAR                                                                                      | ⚠️ **חסר**                                                    |
+| `src/lib/service/operation.ts` | הצינור, Idempotency, Audit                                                                                | קיים                                                          |
+| `src/lib/authz/`               | `can` · `PERMISSIONS` · `PRICE_LEVELS`                                                                    | קיים                                                          |
+| `src/lib/preparation/types.ts` | `EventType` · `FactBasis`                                                                                 | קיים                                                          |
+| מודול הסוכנים                  | `agent_agreements` · תקרת הנחה                                                                            | ⚠️ אינו בקוד. `agency_id` ב-0009 מסומן "foreign key deferred" |
+| הגדרות נכס                     | `properties.tax_rate_bps` · `tourist_vat_exempt` · `min_nights`                                           | קיים ב-0008                                                   |
 
 **תלויים במודול —** [`21-finance.md`](21-finance.md) (ההכנסה כולה), מנוע
 הזמינות (מינימום לילות), האתר (מחיר לאורח), הערוצים, מודול הסוכנים

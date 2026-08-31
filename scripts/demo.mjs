@@ -24,6 +24,11 @@ import { createRequire } from 'node:module'
 
 const PORT = '3200'
 
+// A separate build directory, so this can run beside an ordinary `next dev`
+// out of the same checkout. Without it Next refuses to start a second server,
+// and the demo's whole point is to be opened next to the real one.
+process.env.NEXT_DIST_DIR = '.next-demo'
+
 // Set before Next is started, because `NEXT_PUBLIC_` variables are substituted
 // into the bundle at compile time rather than read at runtime. `@next/env` does
 // not overwrite a variable that is already set, so a `.env.local` cannot

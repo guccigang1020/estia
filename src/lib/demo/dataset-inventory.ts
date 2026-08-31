@@ -221,6 +221,18 @@ export type DemoUnit = {
   depositAgorot: number
   status: string
   description: string
+  /**
+   * How long ago the unit was added, in days. Defaults to the day the
+   * inventory was set up.
+   *
+   * It exists for the one unit that is still a draft: a unit created four
+   * hundred days ago and never made sellable reads as neglect, and a unit
+   * added last week reads as work in progress. The occupancy metric also
+   * counts nights from `units.created_at`, so a draft that claims to have
+   * existed all year would drag the denominator down for a room that was never
+   * on the market.
+   */
+  createdDaysAgo?: number
 }
 
 export const UNITS: readonly DemoUnit[] = [
@@ -350,6 +362,49 @@ export const UNITS: readonly DemoUnit[] = [
     status: 'active',
     description: 'סטודיו נפרד בקצה הגן, מושכר גם כשהווילה תפוסה.',
   },
+  /**
+   * The one unit that cannot be sold, and the reason it is here.
+   *
+   * Six active units made every screen agree with every other screen, which
+   * made one of the sharpest rules in the product invisible: `loadRules` in
+   * `persistence/booking.ts` returns `null` for any unit whose status is not
+   * `active`, and `checkAvailability` turns that into a refusal — so a draft
+   * unit has a name, a price and a capacity, and the engine will not sell it a
+   * single night. On the calendar it simply shows as blocked all year, which
+   * from the outside looks like a defect rather than like a decision.
+   *
+   * A demo where that state does not exist cannot show the difference between
+   * inventory and sellable inventory, and the units screen would have had
+   * nothing to distinguish. So there is one, in ראש פינה, added recently and
+   * plainly mid-preparation. It is deliberately *not* wired into a booking,
+   * an occupancy row or a task: an unsellable unit that somebody has sold
+   * would be a dataset contradicting itself.
+   */
+  {
+    id: unitIds(7),
+    propertyId: PROPERTY_IDS.rimonim,
+    unitGroupId: UNIT_GROUP_IDS.cabins,
+    code: 'RIM-05',
+    name: 'בקתת הרימון הקטנה',
+    unitType: 'cabin',
+    maxGuests: 2,
+    standardGuests: 2,
+    bedrooms: 1,
+    beds: 1,
+    bathrooms: '1.0',
+    sizeSqm: '31.00',
+    minNights: 1,
+    baseAgorot: 86_000,
+    extraGuestAgorot: 0,
+    cleaningAgorot: 14_000,
+    depositAgorot: 30_000,
+    // The whole reason this row exists. Not a typo, and not a unit somebody
+    // forgot to activate — it is the state the product has to be able to show.
+    status: 'draft',
+    createdDaysAgo: 9,
+    description:
+      'בקתה שנייה בשולי המטע, בהכנה. טרם נפתחה למכירה: היומן מציג אותה כחסומה, ומנוע ההזמנות מסרב לה.',
+  },
 ]
 
 /** A unit by code. Throws on a typo, because a silent `undefined` is worse. */
@@ -394,7 +449,7 @@ export const UNIT_ROWS: DemoRow[] = UNITS.map((entry, index) => ({
   cover_image_url: null,
   sort_order: index + 1,
   metadata: {},
-  ...stamped(OWNER_ID, -400),
+  ...stamped(OWNER_ID, -(entry.createdDaysAgo ?? 400)),
 }))
 
 /* ---------------------------------------------------------- amenities ---- */

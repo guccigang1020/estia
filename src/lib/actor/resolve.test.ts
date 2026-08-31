@@ -18,7 +18,12 @@ import {
   resolveActorOrThrow,
   scopeFromRow,
 } from './resolve'
-import type { ActorSource, MembershipRow, RoleAssignment } from './source'
+import type {
+  ActorSource,
+  MembershipRow,
+  RoleAssignment,
+  ScopeNarrowing,
+} from './source'
 import { AuthorizationError, NotFoundError } from '../errors'
 
 const ORG = 'org-a'
@@ -417,5 +422,197 @@ describe('resolveActorOrThrow', () => {
         ORG,
       ),
     ).rejects.toBeInstanceOf(AuthorizationError)
+  })
+})
+
+// ── Per-family narrowing ──────────────────────────────────────────────────
+
+/**
+ * The membership scope row is the authority; a narrowing is a request.
+ *
+ * These are the regression tests for the defect where an agent's configured
+ * inventory reach never reached them. The fix was not to project the stored
+ * reach onto `Actor.scopeOverrides` — `scopeFor` replaces rather than
+ * intersects, so that would have taken every agent from a membership scope
+ * granting nothing to whatever a settings screen named. The fix was to give
+ * the membership a real scope row and clamp the request against it, and what
+ * follows is that clamp, exercised through `resolveActor` rather than against
+ * `clampScope` directly.
+ */
+describe('a source that asks for per-family reach', () => {
+  /** A source with a scope row and a narrowing, resolved the way a request does. */
+  function agentSource(
+    granted: Parameters<typeof scopeFromRow>[0],
+    families: ScopeNarrowing['families'],
+    scope: ScopeNarrowing['scope'] = { kind: 'own_records' },
+  ): ActorSource {
+    const inner = sourceFor({
+      roles: [{ code: 'sales_agent', kind: 'system' }],
+      scope: granted ?? undefined,
+    })
+    return {
+      loadMembership: (u, o) => inner.loadMembership(u, o),
+      loadRoles: (m) => inner.loadRoles(m),
+      loadScope: (m) => inner.loadScope(m),
+      loadPlan: (o) => inner.loadPlan(o),
+      async loadScopeNarrowing() {
+        return { scope, families }
+      },
+    }
+  }
+
+  const unitIn = {
+    organizationId: ORG,
+    propertyId: 'prop-1',
+    unitId: 'unit-1',
+    family: 'inventory' as const,
+  }
+  const unitOut = { ...unitIn, propertyId: 'prop-9', unitId: 'unit-9' }
+
+  it('grants the inventory reach the membership scope row holds', async () => {
+    // The defect, closed. Before the row existed this was `false`, because a
+    // property carries no assignee and `own_records` therefore reaches none.
+    const resolution = await resolveActor(
+      agentSource(
+        { kind: 'properties', propertyIds: ['prop-1'] },
+        {
+          inventory: { kind: 'properties', propertyIds: ['prop-1'] },
+        },
+      ),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    expect(can(resolution.actor, 'availability.view', unitIn)).toBe(true)
+    expect(can(resolution.actor, 'availability.view', unitOut)).toBe(false)
+  })
+
+  it('refuses a request wider than the grant, and would fail if it widened', async () => {
+    // The settings screen asking for the whole portfolio on a membership
+    // granted one property. If the clamp were removed this assertion flips:
+    // `all_organization` reaches every unit in the organization.
+    const resolution = await resolveActor(
+      agentSource(
+        { kind: 'properties', propertyIds: ['prop-1'] },
+        {
+          inventory: { kind: 'all_organization' },
+        },
+      ),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    expect(resolution.actor.scopeOverrides?.inventory).toEqual({
+      kind: 'properties',
+      propertyIds: ['prop-1'],
+    })
+    expect(can(resolution.actor, 'availability.view', unitOut)).toBe(false)
+  })
+
+  it('honours a narrowing the terms make inside a wider grant', async () => {
+    // An owner narrowing an agent on the settings screen, taking effect on the
+    // request already in flight behind the click.
+    const resolution = await resolveActor(
+      agentSource(
+        { kind: 'all_organization' },
+        {
+          inventory: { kind: 'properties', propertyIds: ['prop-1'] },
+        },
+      ),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    expect(can(resolution.actor, 'availability.view', unitIn)).toBe(true)
+    expect(can(resolution.actor, 'availability.view', unitOut)).toBe(false)
+  })
+
+  it('gives a membership with no scope row no inventory reach at all', async () => {
+    // Every agent written before `attachExistingUser` wrote the row. They keep
+    // the answer they had, which is the direction that makes this fix safe to
+    // ship against live data.
+    const resolution = await resolveActor(
+      agentSource(null, {
+        inventory: { kind: 'properties', propertyIds: ['prop-1'] },
+      }),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    expect(resolution.actor.scope).toEqual({ kind: 'own_records' })
+    expect(can(resolution.actor, 'availability.view', unitIn)).toBe(false)
+  })
+
+  it('leaves every family the narrowing does not name on the default', async () => {
+    // `own_records` for bookings, leads and commissions — which is what the
+    // agent had before any of this, and is why the change is a widening of
+    // inventory alone. A colleague's booking inside the granted property must
+    // stay invisible.
+    const resolution = await resolveActor(
+      agentSource(
+        { kind: 'properties', propertyIds: ['prop-1'] },
+        {
+          inventory: { kind: 'properties', propertyIds: ['prop-1'] },
+        },
+      ),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    const rivalsBooking = {
+      organizationId: ORG,
+      propertyId: 'prop-1',
+      createdByUserId: 'user-2',
+      family: 'booking' as const,
+    }
+    expect(can(resolution.actor, 'booking.view', rivalsBooking)).toBe(false)
+    expect(
+      can(resolution.actor, 'booking.view', {
+        ...rivalsBooking,
+        createdByUserId: USER,
+      }),
+    ).toBe(true)
+  })
+
+  it('cannot widen the default scope either', async () => {
+    // A source asking for `all_organization` as its default gets the grant
+    // back. The narrowing channel is a narrowing channel in both halves.
+    const resolution = await resolveActor(
+      agentSource(
+        { kind: 'properties', propertyIds: ['prop-1'] },
+        {},
+        { kind: 'all_organization' },
+      ),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    expect(resolution.actor.scope).toEqual({
+      kind: 'properties',
+      propertyIds: ['prop-1'],
+    })
+  })
+
+  it('resolves a source without the method exactly as it always did', async () => {
+    // The port method is optional so that no existing implementation had to
+    // change. A membership with no narrowing keeps one scope and no overrides.
+    const resolution = await resolveActor(
+      sourceFor({
+        roles: [{ code: 'reception', kind: 'system' }],
+        scope: { kind: 'all_organization' },
+      }),
+      USER,
+      ORG,
+    )
+    if (!resolution.ok) throw new Error(resolution.reason)
+
+    expect(resolution.actor.scope).toEqual({ kind: 'all_organization' })
+    expect(resolution.actor.scopeOverrides).toBeUndefined()
   })
 })

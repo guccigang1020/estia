@@ -114,7 +114,8 @@ export class SupabaseMetricSource implements MetricSource {
       .select('id, property_id, created_at, deleted_at')
       .eq('organization_id', scope.organizationId)
 
-    query = applyScope(query, scope)
+    // `id`, not `unit_id`: this is the units table, so the unit is the row.
+    query = applyScope(query, scope, 'id')
 
     const { data, error } = await query
     if (error) throw error
@@ -284,14 +285,27 @@ const LEAD_TIME_DAYS = 365
  * business reading, and the second one means a mistake here is a bug rather
  * than a leak. `null` on either field means "not narrowed", which for a
  * property-scoped membership is still bounded by `organization_id` above.
+ *
+ * `unitColumn` exists because a unit is called `unit_id` everywhere it is
+ * referred to and `id` on the one table where it *is* the row. This function is
+ * shared by `units`, `holds` and `bookings`, and defaulting to `unit_id` for
+ * all three filtered `units` on a column it does not have: against Postgres a
+ * unit-scoped membership got an error, and against the in-memory demo client a
+ * silent zero available nights — an occupancy figure computed from no
+ * inventory. No demo persona holds a unit scope, which is exactly why nothing
+ * caught it.
  */
-function applyScope<T extends ScopedQuery>(query: T, scope: ResolvedScope): T {
+function applyScope<T extends ScopedQuery>(
+  query: T,
+  scope: ResolvedScope,
+  unitColumn: 'unit_id' | 'id' = 'unit_id',
+): T {
   let narrowed = query
   if (scope.propertyIds !== null) {
     narrowed = narrowed.in('property_id', [...scope.propertyIds]) as T
   }
   if (scope.unitIds !== null) {
-    narrowed = narrowed.in('unit_id', [...scope.unitIds]) as T
+    narrowed = narrowed.in(unitColumn, [...scope.unitIds]) as T
   }
   return narrowed
 }

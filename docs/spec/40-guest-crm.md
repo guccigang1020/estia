@@ -35,23 +35,23 @@
 הרשאות מהקטלוג ב-[`src/lib/authz/permissions.ts`](../../src/lib/authz/permissions.ts).
 תפקידים מ-[`src/lib/authz/roles.ts`](../../src/lib/authz/roles.ts).
 
-| תפקיד | מה הוא עושה כאן | הרשאות | Scope | מה הוא **לא** רואה |
-| --- | --- | --- | --- | --- |
-| `organization_owner` · `administrator` | הכול, כולל מיזוג ומחיקה של אורחים וייצוא | `guest.*` · `lead.*` · `quote.*` · `message.*` · `guest.view_name` · `guest.view_phone` · `guest.view_email` · `guest.view_document_id` | `all_organization` | — |
-| `general_manager` | מנהל את הצוות בתיבה, מאשר הצעות חריגות, רואה 360° מלא | `guest.view/create/update` · `lead.*` · `quote.*` · `message.*` · שדות זהות מלאים | `all_organization` | `guest.delete` · `guest.export` אלא אם הוענקו במפורש |
-| `property_manager` | עובד עם אורחי הנכסים שלו בלבד | כמו לעיל | `properties[...]` | אורחים שכל השהיות שלהם בנכסים אחרים · לידים שלא שויכו לנכס שלו |
-| `reservation_manager` | הליבה: לידים, הצעות, המרה להזמנה | `lead.*` · `quote.*` · `guest.view/create/update` · `message.view/send` · `guest.view_name/phone/email` | `all_organization` או `properties[...]` | `guest.view_document_id` · רווחיות · `rate.view_net` |
-| `reception` | עונה בתיבה, פותח לידים, לא מתמחר | `lead.view/create/update` · `quote.view` · `message.view/send` · `guest.view_name/phone` | `properties[...]` | `guest.view_email` (ברירת מחדל) · `guest.view_document_id` · `quote.create` · `quote.send` |
-| `revenue_manager` | מתמחר הצעות, מנתח המרה | `quote.*` · `lead.view` · `rate.view_public/agent/net` | `all_organization` | `guest.view_phone` · `guest.view_email` · `message.send` |
-| `finance_manager` · `accountant` | מגיע לאורח כדי לגבות או להוציא חשבונית | `guest.view` · `guest.view_name` · `finance.*` | `all_organization` | `message.send` · `lead.*` · `quote.create` · `guest.view_document_id` |
-| `marketing_editor` | פילוח לקמפיין, תגיות, ביקורות | `guest.view` · `review.view/manage` | `all_organization` | `guest.view_phone` · `guest.view_email` · `guest.export` · `message.send` |
-| `operations_manager` · `housekeeping_supervisor` | רואה שם ובקשות אורח כדי לתפעל | `guest.view` · `guest.view_name` · `task.*` | `properties[...]` | טלפון · מייל · מסמך מזהה · מחיר · פרופיל 360° |
-| `cleaner` · `maintenance` | לא נכנס למודול הזה בכלל | — | `own_records` | הכול. אין להם `guest.view` |
-| `sales_agent` · `senior_agent` | ליד והצעה ללקוח **שלו** | `lead.view/create/update` · `quote.view/create/update/send` · `guest.view` + סולם `GUEST_DATA_LEVELS` | `own_records` | לידים של אחרים · לקוחות של העסק שלא הוא הביא · `guest.view_email` (הסולם עוצר לפי ההסכם) · `rate.view_net` · הערות פנימיות |
-| `referral_agent` | מפנה בלבד | `lead.create` | `own_records` | הכול חוץ מהליד שהוא יצר |
-| `property_owner` | רואה מי מתארח אצלו | `guest.view` · `guest.view_name` | `properties[...]` | טלפון · מייל · מסמך מזהה · שהיות באחרים · תיבת ההודעות |
-| `platform_support` (ESTIA) | תמיכה בתוך ארגון שנכנס אליו | לפי `isPlatformStaff` | עוקף Scope בתוך הארגון בלבד | לא עוקף `organization_id` · כל כניסה נרשמת |
-| **Guest** | **אינו משתמש.** אין לו חשבון, אין Membership, אין תפקיד | — | קישור יכולת להזמנה אחת | ראה [`41`](41-guest-portal.md) §13 |
+| תפקיד                                            | מה הוא עושה כאן                                         | הרשאות                                                                                                                                  | Scope                                   | מה הוא **לא** רואה                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `organization_owner` · `administrator`           | הכול, כולל מיזוג ומחיקה של אורחים וייצוא                | `guest.*` · `lead.*` · `quote.*` · `message.*` · `guest.view_name` · `guest.view_phone` · `guest.view_email` · `guest.view_document_id` | `all_organization`                      | —                                                                                                                          |
+| `general_manager`                                | מנהל את הצוות בתיבה, מאשר הצעות חריגות, רואה 360° מלא   | `guest.view/create/update` · `lead.*` · `quote.*` · `message.*` · שדות זהות מלאים                                                       | `all_organization`                      | `guest.delete` · `guest.export` אלא אם הוענקו במפורש                                                                       |
+| `property_manager`                               | עובד עם אורחי הנכסים שלו בלבד                           | כמו לעיל                                                                                                                                | `properties[...]`                       | אורחים שכל השהיות שלהם בנכסים אחרים · לידים שלא שויכו לנכס שלו                                                             |
+| `reservation_manager`                            | הליבה: לידים, הצעות, המרה להזמנה                        | `lead.*` · `quote.*` · `guest.view/create/update` · `message.view/send` · `guest.view_name/phone/email`                                 | `all_organization` או `properties[...]` | `guest.view_document_id` · רווחיות · `rate.view_net`                                                                       |
+| `reception`                                      | עונה בתיבה, פותח לידים, לא מתמחר                        | `lead.view/create/update` · `quote.view` · `message.view/send` · `guest.view_name/phone`                                                | `properties[...]`                       | `guest.view_email` (ברירת מחדל) · `guest.view_document_id` · `quote.create` · `quote.send`                                 |
+| `revenue_manager`                                | מתמחר הצעות, מנתח המרה                                  | `quote.*` · `lead.view` · `rate.view_public/agent/net`                                                                                  | `all_organization`                      | `guest.view_phone` · `guest.view_email` · `message.send`                                                                   |
+| `finance_manager` · `accountant`                 | מגיע לאורח כדי לגבות או להוציא חשבונית                  | `guest.view` · `guest.view_name` · `finance.*`                                                                                          | `all_organization`                      | `message.send` · `lead.*` · `quote.create` · `guest.view_document_id`                                                      |
+| `marketing_editor`                               | פילוח לקמפיין, תגיות, ביקורות                           | `guest.view` · `review.view/manage`                                                                                                     | `all_organization`                      | `guest.view_phone` · `guest.view_email` · `guest.export` · `message.send`                                                  |
+| `operations_manager` · `housekeeping_supervisor` | רואה שם ובקשות אורח כדי לתפעל                           | `guest.view` · `guest.view_name` · `task.*`                                                                                             | `properties[...]`                       | טלפון · מייל · מסמך מזהה · מחיר · פרופיל 360°                                                                              |
+| `cleaner` · `maintenance`                        | לא נכנס למודול הזה בכלל                                 | —                                                                                                                                       | `own_records`                           | הכול. אין להם `guest.view`                                                                                                 |
+| `sales_agent` · `senior_agent`                   | ליד והצעה ללקוח **שלו**                                 | `lead.view/create/update` · `quote.view/create/update/send` · `guest.view` + סולם `GUEST_DATA_LEVELS`                                   | `own_records`                           | לידים של אחרים · לקוחות של העסק שלא הוא הביא · `guest.view_email` (הסולם עוצר לפי ההסכם) · `rate.view_net` · הערות פנימיות |
+| `referral_agent`                                 | מפנה בלבד                                               | `lead.create`                                                                                                                           | `own_records`                           | הכול חוץ מהליד שהוא יצר                                                                                                    |
+| `property_owner`                                 | רואה מי מתארח אצלו                                      | `guest.view` · `guest.view_name`                                                                                                        | `properties[...]`                       | טלפון · מייל · מסמך מזהה · שהיות באחרים · תיבת ההודעות                                                                     |
+| `platform_support` (ESTIA)                       | תמיכה בתוך ארגון שנכנס אליו                             | לפי `isPlatformStaff`                                                                                                                   | עוקף Scope בתוך הארגון בלבד             | לא עוקף `organization_id` · כל כניסה נרשמת                                                                                 |
+| **Guest**                                        | **אינו משתמש.** אין לו חשבון, אין Membership, אין תפקיד | —                                                                                                                                       | קישור יכולת להזמנה אחת                  | ראה [`41`](41-guest-portal.md) §13                                                                                         |
 
 ⚠️ **`guest.merge` לא קיים בקטלוג.** ראה §6 ח40-19: עד שיתווסף, מיזוג
 דורש `guest.update` **וגם** `guest.delete` יחד, ומטופל כפעולה רגישה.
@@ -79,28 +79,28 @@
 מוגדר ב-[`0009_booking_core.sql`](../../supabase/migrations/0009_booking_core.sql).
 **לא מומצא כאן מחדש.** מה שקיים ומשמעותי למודול:
 
-| עמודה | הערה |
-| --- | --- |
-| `phone` · `phone_e164` | `phone_e164` היא **עמודה מחושבת** (`generated always as normalize_phone_il(phone) stored`). מפתח הדדופליקציה. אף נתיב כתיבה לא יכול לדלג עליה |
-| `email` (`citext`) | מאונדקס, **לא ייחודי** בכוונה — זוג שמזמין משני תאריכים מאותה כתובת הוא המקרה הרגיל |
-| `id_document_type/number/country` | מאחורי `guest.view_document_id` בלבד |
-| `tags text[]` | GIN. אוצר מילים עובד, לא טקסונומיה |
-| `marketing_consent` · `marketing_consent_at` | ברירת מחדל `false` |
-| `is_blocked` · `blocked_reason` | אילוץ: אין נימוק בלי חסימה |
-| `guests_organization_phone_idx` | `unique (organization_id, phone_e164) where phone_e164 is not null and deleted_at is null` — **חוק הדדופליקציה כאילוץ, לא כמוסכמה** |
+| עמודה                                        | הערה                                                                                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `phone` · `phone_e164`                       | `phone_e164` היא **עמודה מחושבת** (`generated always as normalize_phone_il(phone) stored`). מפתח הדדופליקציה. אף נתיב כתיבה לא יכול לדלג עליה |
+| `email` (`citext`)                           | מאונדקס, **לא ייחודי** בכוונה — זוג שמזמין משני תאריכים מאותה כתובת הוא המקרה הרגיל                                                           |
+| `id_document_type/number/country`            | מאחורי `guest.view_document_id` בלבד                                                                                                          |
+| `tags text[]`                                | GIN. אוצר מילים עובד, לא טקסונומיה                                                                                                            |
+| `marketing_consent` · `marketing_consent_at` | ברירת מחדל `false`                                                                                                                            |
+| `is_blocked` · `blocked_reason`              | אילוץ: אין נימוק בלי חסימה                                                                                                                    |
+| `guests_organization_phone_idx`              | `unique (organization_id, phone_e164) where phone_e164 is not null and deleted_at is null` — **חוק הדדופליקציה כאילוץ, לא כמוסכמה**           |
 
 **עמודות שהמודול הזה דורש להוסיף ל-`guests`:**
 
-| עמודה | טיפוס | למה |
-| --- | --- | --- |
-| `merged_into_guest_id` | `uuid references guests(id)` | אורח שמוזג נשאר בשורה שלו, מסומן ומצביע על השורד. ID ישן שממשיך להופיע בקישור חיצוני חייב להוביל לאדם הנכון |
-| `preferred_channel` | `text` (`whatsapp`/`email`/`sms`/`phone`) | לאן שולחים. בלי זה כל אוטומציה מנחשת |
-| `preferences` | `jsonb` | העדפות מובנות: `bed_setup` · `dietary` · `accessibility` · `arrival_time` · `allergies` · `free_text`. `jsonb` ולא טבלה כי זה לא נשאל בשאילתה מצטברת |
-| `first_stay_at` · `last_stay_at` · `stay_count` | `date` · `date` · `integer` | מתוחזקים בטריגר מ-`bookings`. נדרשים לפילוח וחיפוש; חישוב חי על כל תצוגה הוא סריקה מיותרת |
-| `lifetime_revenue_agorot` | `integer` | כנ"ל. **מתוחזק בטריגר, לעולם לא נכתב ע"י Caller** — אותו כלל כמו `bookings.total_agorot` |
-| `erasure_state` | `text` (`active`/`restricted`/`erased`) | ראה §13.6 |
-| `erasure_requested_at` · `erased_at` · `retention_until` | `timestamptz` | תיעוד בקשת מחיקה מול חובת שמירה |
-| `source_first_touch` | `text` | איך האדם הזה הגיע לעסק בפעם הראשונה. לא זהה ל-`bookings.source` של שהות מסוימת |
+| עמודה                                                    | טיפוס                                     | למה                                                                                                                                                  |
+| -------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `merged_into_guest_id`                                   | `uuid references guests(id)`              | אורח שמוזג נשאר בשורה שלו, מסומן ומצביע על השורד. ID ישן שממשיך להופיע בקישור חיצוני חייב להוביל לאדם הנכון                                          |
+| `preferred_channel`                                      | `text` (`whatsapp`/`email`/`sms`/`phone`) | לאן שולחים. בלי זה כל אוטומציה מנחשת                                                                                                                 |
+| `preferences`                                            | `jsonb`                                   | העדפות מובנות: `bed_setup` · `dietary` · `accessibility` · `arrival_time` · `allergies` · `free_text`. `jsonb` ולא טבלה כי זה לא נשאל בשאילתה מצטברת |
+| `first_stay_at` · `last_stay_at` · `stay_count`          | `date` · `date` · `integer`               | מתוחזקים בטריגר מ-`bookings`. נדרשים לפילוח וחיפוש; חישוב חי על כל תצוגה הוא סריקה מיותרת                                                            |
+| `lifetime_revenue_agorot`                                | `integer`                                 | כנ"ל. **מתוחזק בטריגר, לעולם לא נכתב ע"י Caller** — אותו כלל כמו `bookings.total_agorot`                                                             |
+| `erasure_state`                                          | `text` (`active`/`restricted`/`erased`)   | ראה §13.6                                                                                                                                            |
+| `erasure_requested_at` · `erased_at` · `retention_until` | `timestamptz`                             | תיעוד בקשת מחיקה מול חובת שמירה                                                                                                                      |
+| `source_first_touch`                                     | `text`                                    | איך האדם הזה הגיע לעסק בפעם הראשונה. לא זהה ל-`bookings.source` של שהות מסוימת                                                                       |
 
 אינדקסים נוספים: `guests (organization_id, last_stay_at desc)` לרשימת
 "אורחים אחרונים"; `guests (organization_id, merged_into_guest_id) where
@@ -109,46 +109,46 @@ merged_into_guest_id is not null` לניתוב ID ישן;
 
 ### 3.2 `guest_merges`
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` | `uuid pk` | |
-| `organization_id` | `uuid not null` | |
-| `survivor_guest_id` · `merged_guest_id` | `uuid not null` | |
-| `field_resolutions` | `jsonb not null` | לכל שדה: מאיפה נלקח הערך ומה היה הערך שנדרס |
-| `moved` | `jsonb not null` | **רשימת מזהי שורות שהוזזו**, לפי טבלה: `bookings[]` · `conversations[]` · `leads[]` · `quotes[]` · `guest_requests[]` · `reviews[]` |
-| `reason` | `text not null` | חובה. "למה מיזגת" נשאל חודשיים אחרי |
-| `performed_by` | `uuid not null` | |
-| `performed_at` | `timestamptz not null` | |
-| `undone_at` · `undone_by` · `undo_reason` | | |
-| `undo_deadline` | `timestamptz not null` | `performed_at + 30 days` |
+| עמודה                                     | טיפוס                  | הערה                                                                                                                                |
+| ----------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                      | `uuid pk`              |                                                                                                                                     |
+| `organization_id`                         | `uuid not null`        |                                                                                                                                     |
+| `survivor_guest_id` · `merged_guest_id`   | `uuid not null`        |                                                                                                                                     |
+| `field_resolutions`                       | `jsonb not null`       | לכל שדה: מאיפה נלקח הערך ומה היה הערך שנדרס                                                                                         |
+| `moved`                                   | `jsonb not null`       | **רשימת מזהי שורות שהוזזו**, לפי טבלה: `bookings[]` · `conversations[]` · `leads[]` · `quotes[]` · `guest_requests[]` · `reviews[]` |
+| `reason`                                  | `text not null`        | חובה. "למה מיזגת" נשאל חודשיים אחרי                                                                                                 |
+| `performed_by`                            | `uuid not null`        |                                                                                                                                     |
+| `performed_at`                            | `timestamptz not null` |                                                                                                                                     |
+| `undone_at` · `undone_by` · `undo_reason` |                        |                                                                                                                                     |
+| `undo_deadline`                           | `timestamptz not null` | `performed_at + 30 days`                                                                                                            |
 
 🔒 `moved` ו-`field_resolutions` הם **תנאי הביטול**. מיזוג בלי תמונת מצב
 מלאה הוא מיזוג בלתי הפיך, ואת זה אי אפשר לתקן בדיעבד.
 
 ### 3.3 `leads`
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` · `organization_id` | | |
-| `property_id` | `uuid null` | פנייה יכולה לא לנקוב בנכס |
-| `guest_id` | `uuid null` | מתמלא ברגע שזוהתה התאמה. ראה ח40-08 |
-| `status` | `lead_status` | enum ב-DB. ראה §4 |
-| `source` | `lead_source` | `website` · `phone` · `whatsapp` · `agent` · `ota_enquiry` · `social` · `walk_in` · `referral` |
-| `source_detail` | `text` | "instagram_story_apr26", "booking.com enquiry #…" |
-| `raw_name` · `raw_phone` · `raw_email` | `text` | **כפי שהוקלד.** לא מנורמל, לא מתוקן. מקור האמת של מה שהאדם באמת כתב |
-| `phone_e164` | `text generated` | `normalize_phone_il(raw_phone)`. מפתח ההצמדה לאורח |
-| `requested_check_in` · `requested_check_out` | `date null` | |
-| `party_adults` · `party_children` · `party_infants` | `integer` | |
-| `budget_agorot` | `integer null` | |
-| `message` | `text` | מה הוא כתב |
-| `assigned_to_user_id` · `assigned_team_id` | `uuid null` | |
-| `first_response_at` | `timestamptz null` | נכתב פעם אחת בלבד (ח40-12) |
-| `next_action_at` | `timestamptz null` | מזין את רשימת "לטפל היום" |
-| `status_changed_at` | `timestamptz` | |
-| `lost_reason` | `lead_lost_reason null` | `price` · `dates_unavailable` · `no_response` · `booked_elsewhere` · `not_serious` · `duplicate` · `other` |
-| `lost_note` | `text null` | חובה כאשר `lost_reason = 'other'` |
-| `booking_id` | `uuid null` | נקבע ב-`booked` |
-| `agent_user_id` · `agency_id` · `campaign_id` · `referral_id` | | ייחוס, באותו אוצר מילים של `BookingAttribution` |
+| עמודה                                                         | טיפוס                   | הערה                                                                                                       |
+| ------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `id` · `organization_id`                                      |                         |                                                                                                            |
+| `property_id`                                                 | `uuid null`             | פנייה יכולה לא לנקוב בנכס                                                                                  |
+| `guest_id`                                                    | `uuid null`             | מתמלא ברגע שזוהתה התאמה. ראה ח40-08                                                                        |
+| `status`                                                      | `lead_status`           | enum ב-DB. ראה §4                                                                                          |
+| `source`                                                      | `lead_source`           | `website` · `phone` · `whatsapp` · `agent` · `ota_enquiry` · `social` · `walk_in` · `referral`             |
+| `source_detail`                                               | `text`                  | "instagram_story_apr26", "booking.com enquiry #…"                                                          |
+| `raw_name` · `raw_phone` · `raw_email`                        | `text`                  | **כפי שהוקלד.** לא מנורמל, לא מתוקן. מקור האמת של מה שהאדם באמת כתב                                        |
+| `phone_e164`                                                  | `text generated`        | `normalize_phone_il(raw_phone)`. מפתח ההצמדה לאורח                                                         |
+| `requested_check_in` · `requested_check_out`                  | `date null`             |                                                                                                            |
+| `party_adults` · `party_children` · `party_infants`           | `integer`               |                                                                                                            |
+| `budget_agorot`                                               | `integer null`          |                                                                                                            |
+| `message`                                                     | `text`                  | מה הוא כתב                                                                                                 |
+| `assigned_to_user_id` · `assigned_team_id`                    | `uuid null`             |                                                                                                            |
+| `first_response_at`                                           | `timestamptz null`      | נכתב פעם אחת בלבד (ח40-12)                                                                                 |
+| `next_action_at`                                              | `timestamptz null`      | מזין את רשימת "לטפל היום"                                                                                  |
+| `status_changed_at`                                           | `timestamptz`           |                                                                                                            |
+| `lost_reason`                                                 | `lead_lost_reason null` | `price` · `dates_unavailable` · `no_response` · `booked_elsewhere` · `not_serious` · `duplicate` · `other` |
+| `lost_note`                                                   | `text null`             | חובה כאשר `lost_reason = 'other'`                                                                          |
+| `booking_id`                                                  | `uuid null`             | נקבע ב-`booked`                                                                                            |
+| `agent_user_id` · `agency_id` · `campaign_id` · `referral_id` |                         | ייחוס, באותו אוצר מילים של `BookingAttribution`                                                            |
 
 אילוץ: `lost_reason is not null` כאשר `status = 'lost'`; `booking_id is
 not null` כאשר `status = 'booked'`.
@@ -160,26 +160,26 @@ not null` כאשר `status = 'booked'`.
 
 ### 3.4 `quotes` ו-`quote_lines`
 
-| `quotes` | טיפוס | הערה |
-| --- | --- | --- |
-| `id` · `organization_id` · `property_id` · `unit_id` | | |
-| `lead_id` · `booking_id` · `guest_id` | `uuid null` | הצעה יכולה לתלות בליד, בהזמנה בסטטוס `quote`, או בשניהם |
-| `version_number` | `integer not null default 1` | |
-| `supersedes_quote_id` | `uuid null` | |
-| `status` | `quote_status` | `draft` · `sent` · `viewed` · `accepted` · `declined` · `expired` · `superseded` |
-| `check_in` · `check_out` | `date` | חצי־פתוח `[check_in, check_out)`, כמו `DateRange` |
-| `adults` · `children` · `infants` | `integer` | |
-| `currency` | `text default 'ILS'` | |
-| `total_agorot` | `integer not null` | סכום `quote_lines`. **מתוחזק בטריגר**, כמו `bookings.total_agorot` |
-| `lines_snapshot` | `jsonb` | הקפאה של השורות ברגע השליחה. ראה ח40-24 |
-| `valid_until` | `timestamptz not null` | |
-| `hold_id` | `uuid null references holds(id)` | הצעה יכולה להחזיק תאריכים |
-| `agent_user_id` · `agency_id` | `uuid null` | |
-| `note_to_recipient` | `text` | מה שהאורח יראה |
-| `internal_note` | `text` | מאחורי `booking.note.internal` |
-| `sent_at` · `first_viewed_at` · `last_viewed_at` · `view_count` | | |
-| `accepted_at` · `declined_at` · `decline_reason` | | |
-| `document_sha256` | `text null` | חתימת התוכן ששודר. נדרש כדי לענות "מה בדיוק שלחנו" |
+| `quotes`                                                        | טיפוס                            | הערה                                                                             |
+| --------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `id` · `organization_id` · `property_id` · `unit_id`            |                                  |                                                                                  |
+| `lead_id` · `booking_id` · `guest_id`                           | `uuid null`                      | הצעה יכולה לתלות בליד, בהזמנה בסטטוס `quote`, או בשניהם                          |
+| `version_number`                                                | `integer not null default 1`     |                                                                                  |
+| `supersedes_quote_id`                                           | `uuid null`                      |                                                                                  |
+| `status`                                                        | `quote_status`                   | `draft` · `sent` · `viewed` · `accepted` · `declined` · `expired` · `superseded` |
+| `check_in` · `check_out`                                        | `date`                           | חצי־פתוח `[check_in, check_out)`, כמו `DateRange`                                |
+| `adults` · `children` · `infants`                               | `integer`                        |                                                                                  |
+| `currency`                                                      | `text default 'ILS'`             |                                                                                  |
+| `total_agorot`                                                  | `integer not null`               | סכום `quote_lines`. **מתוחזק בטריגר**, כמו `bookings.total_agorot`               |
+| `lines_snapshot`                                                | `jsonb`                          | הקפאה של השורות ברגע השליחה. ראה ח40-24                                          |
+| `valid_until`                                                   | `timestamptz not null`           |                                                                                  |
+| `hold_id`                                                       | `uuid null references holds(id)` | הצעה יכולה להחזיק תאריכים                                                        |
+| `agent_user_id` · `agency_id`                                   | `uuid null`                      |                                                                                  |
+| `note_to_recipient`                                             | `text`                           | מה שהאורח יראה                                                                   |
+| `internal_note`                                                 | `text`                           | מאחורי `booking.note.internal`                                                   |
+| `sent_at` · `first_viewed_at` · `last_viewed_at` · `view_count` |                                  |                                                                                  |
+| `accepted_at` · `declined_at` · `decline_reason`                |                                  |                                                                                  |
+| `document_sha256`                                               | `text null`                      | חתימת התוכן ששודר. נדרש כדי לענות "מה בדיוק שלחנו"                               |
 
 `quote_lines` — אותו אוצר מילים של `PriceLine` ב-`src/lib/booking/types.ts`:
 `kind` (`PRICE_LINE_KINDS`) · `label` · `amount_agorot` (שלילי בהנחה) ·
@@ -191,23 +191,23 @@ not null` כאשר `status = 'booked'`.
 
 ### 3.5 `conversations`
 
-| עמודה | טיפוס | הערה |
-| --- | --- | --- |
-| `id` · `organization_id` · `property_id` | | `property_id` null כשאין עדיין נכס |
-| `guest_id` · `booking_id` · `lead_id` | `uuid null` | שיחה יכולה להתחיל לפני שיודעים מי זה |
-| `channel` | `message_channel` | `whatsapp` · `email` · `website` · `ota` · `guest_portal` · `sms` · `phone_note` |
-| `channel_account_id` | `uuid` | דרך איזה חשבון שלנו — מספר WhatsApp, תיבת מייל, חשבון Airbnb |
-| `external_thread_id` | `text null` | מזהה השרשור אצל הספק |
-| `subject` | `text null` | למייל |
-| `state` | `conversation_state` | `unassigned` · `assigned` · `resolved` · `snoozed` |
-| `assignee_user_id` · `assignee_team_id` | `uuid null` | |
-| `snoozed_until` | `timestamptz null` | |
-| `last_message_at` · `last_inbound_at` · `last_outbound_at` | | |
-| `first_response_at` | `timestamptz null` | |
-| `sla_due_at` | `timestamptz null` | |
-| `priority` | `text` (`low`/`normal`/`high`) | |
-| `unread` | `boolean` | ברמת השיחה, לא לכל משתמש. ראה ח40-31 |
-| `version` | `integer` | נעילה אופטימית על שיוך ומצב |
+| עמודה                                                      | טיפוס                          | הערה                                                                             |
+| ---------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------- |
+| `id` · `organization_id` · `property_id`                   |                                | `property_id` null כשאין עדיין נכס                                               |
+| `guest_id` · `booking_id` · `lead_id`                      | `uuid null`                    | שיחה יכולה להתחיל לפני שיודעים מי זה                                             |
+| `channel`                                                  | `message_channel`              | `whatsapp` · `email` · `website` · `ota` · `guest_portal` · `sms` · `phone_note` |
+| `channel_account_id`                                       | `uuid`                         | דרך איזה חשבון שלנו — מספר WhatsApp, תיבת מייל, חשבון Airbnb                     |
+| `external_thread_id`                                       | `text null`                    | מזהה השרשור אצל הספק                                                             |
+| `subject`                                                  | `text null`                    | למייל                                                                            |
+| `state`                                                    | `conversation_state`           | `unassigned` · `assigned` · `resolved` · `snoozed`                               |
+| `assignee_user_id` · `assignee_team_id`                    | `uuid null`                    |                                                                                  |
+| `snoozed_until`                                            | `timestamptz null`             |                                                                                  |
+| `last_message_at` · `last_inbound_at` · `last_outbound_at` |                                |                                                                                  |
+| `first_response_at`                                        | `timestamptz null`             |                                                                                  |
+| `sla_due_at`                                               | `timestamptz null`             |                                                                                  |
+| `priority`                                                 | `text` (`low`/`normal`/`high`) |                                                                                  |
+| `unread`                                                   | `boolean`                      | ברמת השיחה, לא לכל משתמש. ראה ח40-31                                             |
+| `version`                                                  | `integer`                      | נעילה אופטימית על שיוך ומצב                                                      |
 
 ייחודיות: `unique (organization_id, channel, channel_account_id,
 external_thread_id) where external_thread_id is not null` — Webhook שמגיע
@@ -221,22 +221,22 @@ external_thread_id) where external_thread_id is not null` — Webhook שמגיע
 
 ### 3.6 `messages`
 
-| עמודה | הערה |
-| --- | --- |
-| `conversation_id` · `organization_id` | |
-| `direction` | `inbound` · `outbound` |
-| `sender_kind` | `guest` · `user` · `system` · `ai_agent` — **תואם ל-`ActorType` ב-`src/lib/audit/events.ts`** |
-| `sender_user_id` | null לנכנס ולאוטומטי |
-| `body` · `body_format` | `text` · `html` · `template` |
-| `attachments` | `jsonb`: נתיב באחסון פרטי, שם, גודל, mime. **הקובץ עצמו לא בשורה** |
-| `template_id` · `template_variables` | מה נשלח ובאילו ערכים — ראה §9 |
-| `rendered_at` | הרינדור מוקפא. תבנית שתשתנה מחר לא תשנה מה שנשלח |
-| `external_message_id` | מזהה אצל הספק |
-| `delivery_status` | `queued` · `sent` · `delivered` · `read` · `failed` |
-| `failure_reason` · `failure_code` | |
-| `sent_at` · `delivered_at` · `read_at` | |
-| `ai_suggested` · `ai_edited` | 🔒 החלטה 24 ב-DECISION_LEDGER: "מי כתב את זה" חייבת תשובה |
-| `idempotency_key` | ייחודי לכל ארגון. ראה §10 |
+| עמודה                                  | הערה                                                                                          |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `conversation_id` · `organization_id`  |                                                                                               |
+| `direction`                            | `inbound` · `outbound`                                                                        |
+| `sender_kind`                          | `guest` · `user` · `system` · `ai_agent` — **תואם ל-`ActorType` ב-`src/lib/audit/events.ts`** |
+| `sender_user_id`                       | null לנכנס ולאוטומטי                                                                          |
+| `body` · `body_format`                 | `text` · `html` · `template`                                                                  |
+| `attachments`                          | `jsonb`: נתיב באחסון פרטי, שם, גודל, mime. **הקובץ עצמו לא בשורה**                            |
+| `template_id` · `template_variables`   | מה נשלח ובאילו ערכים — ראה §9                                                                 |
+| `rendered_at`                          | הרינדור מוקפא. תבנית שתשתנה מחר לא תשנה מה שנשלח                                              |
+| `external_message_id`                  | מזהה אצל הספק                                                                                 |
+| `delivery_status`                      | `queued` · `sent` · `delivered` · `read` · `failed`                                           |
+| `failure_reason` · `failure_code`      |                                                                                               |
+| `sent_at` · `delivered_at` · `read_at` |                                                                                               |
+| `ai_suggested` · `ai_edited`           | 🔒 החלטה 24 ב-DECISION_LEDGER: "מי כתב את זה" חייבת תשובה                                     |
+| `idempotency_key`                      | ייחודי לכל ארגון. ראה §10                                                                     |
 
 `messages` היא **append-only** לתוכן: `update` מותר רק על
 `delivery_status` · `delivered_at` · `read_at` · `external_message_id`,
@@ -251,15 +251,15 @@ external_thread_id) where external_thread_id is not null` — Webhook שמגיע
 
 ### 3.8 `message_templates`
 
-| עמודה | הערה |
-| --- | --- |
-| `id` · `organization_id` · `property_id` (null = כל הנכסים) | |
-| `key` | `booking_confirmed` · `payment_balance` · `contract_sign` · `review_request` · `invite_back` · `pay_bit` · `pay_paybox` · `pay_bank` · `pre_arrival` · `checkout_reminder` |
-| `channel` | `whatsapp` · `email` · `sms` |
-| `language` | `he` · `en` · `ar` · `ru` · `fr` |
-| `subject` | למייל |
-| `body` | טקסט עם `{{משתנה}}` — **תווי שורה אמיתיים, לא `\n` מוקלד** (ראה ח40-36) |
-| `is_active` · `version_number` · `supersedes_template_id` | |
+| עמודה                                                       | הערה                                                                                                                                                                       |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` · `organization_id` · `property_id` (null = כל הנכסים) |                                                                                                                                                                            |
+| `key`                                                       | `booking_confirmed` · `payment_balance` · `contract_sign` · `review_request` · `invite_back` · `pay_bit` · `pay_paybox` · `pay_bank` · `pre_arrival` · `checkout_reminder` |
+| `channel`                                                   | `whatsapp` · `email` · `sms`                                                                                                                                               |
+| `language`                                                  | `he` · `en` · `ar` · `ru` · `fr`                                                                                                                                           |
+| `subject`                                                   | למייל                                                                                                                                                                      |
+| `body`                                                      | טקסט עם `{{משתנה}}` — **תווי שורה אמיתיים, לא `\n` מוקלד** (ראה ח40-36)                                                                                                    |
+| `is_active` · `version_number` · `supersedes_template_id`   |                                                                                                                                                                            |
 
 ---
 
@@ -270,17 +270,17 @@ external_thread_id) where external_thread_id is not null` — Webhook שמגיע
 הרשימה הקנונית: `new` · `contacted` · `interested` · `quote_sent` ·
 `negotiation` · `booked` · `lost`.
 
-| מ- | ל- | מי | תנאים | תופעות לוואי | Audit |
-| --- | --- | --- | --- | --- | --- |
-| — | `new` | `lead.create` · או המערכת (טופס אתר, Webhook) | חובה `raw_phone` **או** `raw_email` | הצמדה ל-`guest` (ח40-08); `sla_due_at`; `lead.created` | "ליד חדש מ{{מקור}} · {{שם}}" |
-| `new` | `contacted` | `lead.update` | קיימת הודעה יוצאת בשיחה המשויכת, או סימון ידני עם נימוק | `first_response_at` נכתב אם ריק | "רוני יצרה קשר עם ליד — דנה לוי" |
-| `contacted` | `interested` | `lead.update` | — | `next_action_at` חובה | `lead.status_changed` |
-| `new` · `contacted` · `interested` | `quote_sent` | **לא ידני.** נגזר משליחת הצעה | קיימת `quotes` בסטטוס `sent` המקושרת לליד | — | "נשלחה הצעה #{{מספר}} — ₪{{סכום}}" |
-| `quote_sent` | `negotiation` | `lead.update` | — | — | |
-| `quote_sent` · `negotiation` · `interested` | `booked` | `booking.create` | נוצרה הזמנה מקושרת בסטטוס שאינו `inquiry` | `booking_id` נקבע; שחרור `hold` שלא הומר; `lead.status_changed` | "הליד הומר להזמנה {{reference}}" |
-| כל מצב שאינו `booked` | `lost` | `lead.update` | `lost_reason` חובה | `hold` משוחרר; הצעות פתוחות → `declined`; שיחה → `resolved` | "הליד נסגר — לא זמין בתאריכים" |
-| `lost` | `contacted` | `lead.update` | נימוק חובה | `lost_reason` מתאפס | "רוני פתחה מחדש ליד שנסגר" |
-| `booked` | ✗ | — | **סופי.** ביטול ההזמנה לא מחזיר את הליד | | |
+| מ-                                          | ל-            | מי                                            | תנאים                                                   | תופעות לוואי                                                    | Audit                              |
+| ------------------------------------------- | ------------- | --------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------- |
+| —                                           | `new`         | `lead.create` · או המערכת (טופס אתר, Webhook) | חובה `raw_phone` **או** `raw_email`                     | הצמדה ל-`guest` (ח40-08); `sla_due_at`; `lead.created`          | "ליד חדש מ{{מקור}} · {{שם}}"       |
+| `new`                                       | `contacted`   | `lead.update`                                 | קיימת הודעה יוצאת בשיחה המשויכת, או סימון ידני עם נימוק | `first_response_at` נכתב אם ריק                                 | "רוני יצרה קשר עם ליד — דנה לוי"   |
+| `contacted`                                 | `interested`  | `lead.update`                                 | —                                                       | `next_action_at` חובה                                           | `lead.status_changed`              |
+| `new` · `contacted` · `interested`          | `quote_sent`  | **לא ידני.** נגזר משליחת הצעה                 | קיימת `quotes` בסטטוס `sent` המקושרת לליד               | —                                                               | "נשלחה הצעה #{{מספר}} — ₪{{סכום}}" |
+| `quote_sent`                                | `negotiation` | `lead.update`                                 | —                                                       | —                                                               |                                    |
+| `quote_sent` · `negotiation` · `interested` | `booked`      | `booking.create`                              | נוצרה הזמנה מקושרת בסטטוס שאינו `inquiry`               | `booking_id` נקבע; שחרור `hold` שלא הומר; `lead.status_changed` | "הליד הומר להזמנה {{reference}}"   |
+| כל מצב שאינו `booked`                       | `lost`        | `lead.update`                                 | `lost_reason` חובה                                      | `hold` משוחרר; הצעות פתוחות → `declined`; שיחה → `resolved`     | "הליד נסגר — לא זמין בתאריכים"     |
+| `lost`                                      | `contacted`   | `lead.update`                                 | נימוק חובה                                              | `lost_reason` מתאפס                                             | "רוני פתחה מחדש ליד שנסגר"         |
+| `booked`                                    | ✗             | —                                             | **סופי.** ביטול ההזמנה לא מחזיר את הליד                 |                                                                 |                                    |
 
 מעבר שאינו ברשימה נכשל עם `BusinessRuleError` והודעה בעברית:
 "אי אפשר להעביר ליד מ־{{מ}} ל־{{ל}}."
@@ -289,29 +289,29 @@ external_thread_id) where external_thread_id is not null` — Webhook שמגיע
 
 `draft` · `sent` · `viewed` · `accepted` · `declined` · `expired` · `superseded`
 
-| מ- | ל- | מי | תנאים | תופעות לוואי | Audit |
-| --- | --- | --- | --- | --- | --- |
-| — | `draft` | `quote.create` | — | — | |
-| `draft` | `sent` | `quote.send` | הצעה מלאה (§8); `valid_until` בעתיד; היחידה זמינה **או** קיים `hold` תקף | 🔒 הקפאת `lines_snapshot` + `document_sha256`; הנפקת `guest_access_links` חד־נמענית; `quote.sent` | "שי שלח הצעה ל־דנה לוי · 23–26.4 · ₪6,400 · בתוקף עד 30.3" |
-| `sent` | `viewed` | הנמען | פתיחה ראשונה של הקישור | `first_viewed_at`; `quote.viewed`; התראה לשולח | "ההצעה נצפתה" |
-| `sent` · `viewed` | `accepted` | הנמען, או `quote.update` בשם האורח | טרם פג; היחידה עדיין זמינה | יצירת/עדכון הזמנה; המרת `hold`; `quote.accepted` | "דנה לוי אישרה את ההצעה" |
-| `sent` · `viewed` | `declined` | הנמען או צוות | — | שחרור `hold` | |
-| `sent` · `viewed` | `expired` | **המערכת** | `now() > valid_until` | שחרור `hold`; `quote.expired`; התראה לשולח | "ההצעה פגה" |
-| `sent` · `viewed` | `superseded` | `quote.update` | נוצרה גרסה חדשה | ביטול הקישור הישן; הקישור הישן מציג "ההצעה עודכנה" | "שי החליף את ההצעה בגרסה 2 · ₪6,100" |
-| `accepted` | ✗ | — | 🔒 סופי. שינוי אחרי אישור = הצעה חדשה | | |
+| מ-                | ל-           | מי                                 | תנאים                                                                    | תופעות לוואי                                                                                      | Audit                                                      |
+| ----------------- | ------------ | ---------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| —                 | `draft`      | `quote.create`                     | —                                                                        | —                                                                                                 |                                                            |
+| `draft`           | `sent`       | `quote.send`                       | הצעה מלאה (§8); `valid_until` בעתיד; היחידה זמינה **או** קיים `hold` תקף | 🔒 הקפאת `lines_snapshot` + `document_sha256`; הנפקת `guest_access_links` חד־נמענית; `quote.sent` | "שי שלח הצעה ל־דנה לוי · 23–26.4 · ₪6,400 · בתוקף עד 30.3" |
+| `sent`            | `viewed`     | הנמען                              | פתיחה ראשונה של הקישור                                                   | `first_viewed_at`; `quote.viewed`; התראה לשולח                                                    | "ההצעה נצפתה"                                              |
+| `sent` · `viewed` | `accepted`   | הנמען, או `quote.update` בשם האורח | טרם פג; היחידה עדיין זמינה                                               | יצירת/עדכון הזמנה; המרת `hold`; `quote.accepted`                                                  | "דנה לוי אישרה את ההצעה"                                   |
+| `sent` · `viewed` | `declined`   | הנמען או צוות                      | —                                                                        | שחרור `hold`                                                                                      |                                                            |
+| `sent` · `viewed` | `expired`    | **המערכת**                         | `now() > valid_until`                                                    | שחרור `hold`; `quote.expired`; התראה לשולח                                                        | "ההצעה פגה"                                                |
+| `sent` · `viewed` | `superseded` | `quote.update`                     | נוצרה גרסה חדשה                                                          | ביטול הקישור הישן; הקישור הישן מציג "ההצעה עודכנה"                                                | "שי החליף את ההצעה בגרסה 2 · ₪6,100"                       |
+| `accepted`        | ✗            | —                                  | 🔒 סופי. שינוי אחרי אישור = הצעה חדשה                                    |                                                                                                   |                                                            |
 
 ### 4.3 `conversation_state`
 
 `unassigned` · `assigned` · `resolved` · `snoozed`
 
-| מ- | ל- | מי | תנאים | תופעות לוואי | Audit |
-| --- | --- | --- | --- | --- | --- |
-| — | `unassigned` | הודעה נכנסת | — | `sla_due_at`; ניתוב לפי כללים | |
-| `unassigned` | `assigned` | `message.assign`, או **אוטומטית בשליחה** (ח40-29) | יעד הוא חבר פעיל בארגון עם `message.view` בטווח | | "השיחה שויכה לדנה" |
-| `assigned` | `assigned` (אחר) | `message.assign` | | הטיוטה של הקודם נשמרת ולא נמחקת | "השיחה הועברה מדנה לרוני" |
-| `assigned` · `unassigned` | `resolved` | `message.view` + בעלות, או `message.assign` | — | `sla_due_at` מתאפס | "רוני סימנה את השיחה כטופלה" |
-| `assigned` | `snoozed` | בעל השיחה | `snoozed_until` בעתיד וחובה | חוזרת ל-`assigned` בזמן | "השיחה נדחתה למחר 09:00" |
-| `resolved` · `snoozed` | `assigned` | הודעה נכנסת חדשה | 🔒 **אוטומטי.** שיחה שנסגרה ואורח כתב שוב חוזרת לתיבה | התראה לבעלים הקודם | "האורח חזר — השיחה נפתחה מחדש" |
+| מ-                        | ל-               | מי                                                | תנאים                                                 | תופעות לוואי                    | Audit                          |
+| ------------------------- | ---------------- | ------------------------------------------------- | ----------------------------------------------------- | ------------------------------- | ------------------------------ |
+| —                         | `unassigned`     | הודעה נכנסת                                       | —                                                     | `sla_due_at`; ניתוב לפי כללים   |                                |
+| `unassigned`              | `assigned`       | `message.assign`, או **אוטומטית בשליחה** (ח40-29) | יעד הוא חבר פעיל בארגון עם `message.view` בטווח       |                                 | "השיחה שויכה לדנה"             |
+| `assigned`                | `assigned` (אחר) | `message.assign`                                  |                                                       | הטיוטה של הקודם נשמרת ולא נמחקת | "השיחה הועברה מדנה לרוני"      |
+| `assigned` · `unassigned` | `resolved`       | `message.view` + בעלות, או `message.assign`       | —                                                     | `sla_due_at` מתאפס              | "רוני סימנה את השיחה כטופלה"   |
+| `assigned`                | `snoozed`        | בעל השיחה                                         | `snoozed_until` בעתיד וחובה                           | חוזרת ל-`assigned` בזמן         | "השיחה נדחתה למחר 09:00"       |
+| `resolved` · `snoozed`    | `assigned`       | הודעה נכנסת חדשה                                  | 🔒 **אוטומטי.** שיחה שנסגרה ואורח כתב שוב חוזרת לתיבה | התראה לבעלים הקודם              | "האורח חזר — השיחה נפתחה מחדש" |
 
 ---
 
@@ -501,7 +501,7 @@ null`), לא בקוד.
 שהמערכת החיה עשתה בחוזה, ואת זה לא מעתיקים.
 
 **ח40-25** — `valid_until` חובה. ברירת מחדל **7 ימים** מהשליחה, לכל
-היותר 90 יום. *נימוק:* הצעה בלי תפוגה נועלת מחיר ומלאי בלי סוף, ו-7 ימים
+היותר 90 יום. _נימוק:_ הצעה בלי תפוגה נועלת מחיר ומלאי בלי סוף, ו-7 ימים
 הוא חלון החלטה סביר לשהות פנאי. ❓ ברירת המחדל לכל ארגון היא החלטת בעל
 המוצר.
 
@@ -527,11 +527,11 @@ null`), לא בקוד.
 בנעילה.** פתיחת עורך התשובה יוצרת `conversation_drafts` עם דופק כל 30
 שניות ותפוגה אחרי 90. עובד שני רואה "דנה כותבת תשובה כרגע (החל מ-14:32)"
 וכפתור השליחה מוחלף ב"שלח בכל זאת" שדורש אישור מפורש ונרשם ב-Audit.
-*למה לא נעילה קשיחה:* טאב שנסגר משאיר נעילה תקועה, ואורח שמחכה לתשובה
+_למה לא נעילה קשיחה:_ טאב שנסגר משאיר נעילה תקועה, ואורח שמחכה לתשובה
 לא יכול להיחסם בגלל תקלה טכנית בצד שלנו. **זמינות גוברת על נוחות; שקיפות
 מונעת את הכפילות.**
 
-**ח40-31** — `unread` הוא ברמת השיחה, לא לכל משתמש. *נימוק:* בעסק אירוח
+**ח40-31** — `unread` הוא ברמת השיחה, לא לכל משתמש. _נימוק:_ בעסק אירוח
 "מישהו ענה" הוא מה שחשוב; מונה אישי לכל אחד מייצר תיבה שאף פעם לא ריקה
 לאף אחד. בעסק גדול זו החלטה שראוי לבחון מחדש — ⚠️ מסומן כהחלטה מודעת עם
 עלות ידועה.
@@ -549,7 +549,7 @@ null`), לא בקוד.
 ### תבניות
 
 **ח40-35** — 🔒 שמות המשתנים בתבניות נשארים **בעברית** (`{{שם}}`,
-`{{יתרה}}`). *נימוק:* מי שעורך את התבניות הוא בעל העסק, לא מפתח, ו-
+`{{יתרה}}`). _נימוק:_ מי שעורך את התבניות הוא בעל העסק, לא מפתח, ו-
 `{{guest_name}}` הוא טקסט שהוא לא יכול לקרוא. מתחת לפני השטח כל שם עברי
 ממופה למפתח קנוני באנגלית (§9.2) כדי שהרינדור יהיה נבדק ותבנית תוכל
 להיות מתורגמת.
@@ -578,17 +578,17 @@ null`), לא בקוד.
 score = 0.60·phone + 0.20·email + 0.12·name + 0.08·document
 ```
 
-| רכיב | ערך |
-| --- | --- |
-| `phone` | 1 אם `phone_e164` זהה; 0.5 אם 7 הספרות האחרונות זהות והקידומת שונה; אחרת 0 |
-| `email` | 1 אם זהה (`citext`); 0.4 אם החלק לפני ה-`@` זהה והדומיין שונה; אחרת 0 |
-| `name` | Jaro-Winkler על `full_name` מנורמל (רווחים כפולים, גרשיים, ניקוד, `ו'` מול `ואו`), 0–1 |
-| `document` | 1 אם `id_document_number` זהה **וגם** `id_document_country` זהה; אחרת 0 |
+| רכיב       | ערך                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------- |
+| `phone`    | 1 אם `phone_e164` זהה; 0.5 אם 7 הספרות האחרונות זהות והקידומת שונה; אחרת 0             |
+| `email`    | 1 אם זהה (`citext`); 0.4 אם החלק לפני ה-`@` זהה והדומיין שונה; אחרת 0                  |
+| `name`     | Jaro-Winkler על `full_name` מנורמל (רווחים כפולים, גרשיים, ניקוד, `ו'` מול `ואו`), 0–1 |
+| `document` | 1 אם `id_document_number` זהה **וגם** `id_document_country` זהה; אחרת 0                |
 
 ספים: `≥0.85` → מוצע למיזוג · `0.60–0.85` → "ייתכן שזה אותו אדם" בפרופיל,
 בלי הצעה · `<0.60` → שקט. הציון מעוגל ב-`roundTo(x, 2)`.
 
-*נימוק המשקלות:* הטלפון נושא את רוב המשקל כי הוא גם המפתח הייחודי במסד
+_נימוק המשקלות:_ הטלפון נושא את רוב המשקל כי הוא גם המפתח הייחודי במסד
 וגם הדבר שאדם נותן נכון. שם לבדו לעולם לא חוצה סף — "דוד כהן" אינו זיהוי.
 
 ### 7.2 יתרה בהצעה
@@ -596,6 +596,7 @@ score = 0.60·phone + 0.20·email + 0.12·name + 0.08·document
 ```
 total_agorot = Σ quote_lines.amount_agorot        // הנחות שליליות
 ```
+
 `total_agorot` מתוחזק בטריגר, כמו `bookings.total_agorot`. ערך שסיפק
 Caller **נזרק**.
 
@@ -605,6 +606,7 @@ Caller **נזרק**.
 valid_until = sent_at + interval '7 days'         // ברירת מחדל
 expired      ⟺ now() > valid_until AND status IN ('sent','viewed')
 ```
+
 ההשוואה ב-UTC; התצוגה לאורח באזור `Asia/Jerusalem`. הצעה "בתוקף עד
 30.3" פגה ב-23:59:59 בשעון ישראל של 30.3 — הגבול הזה מחושב מהתאריך
 המקומי ונשמר כ-`timestamptz`, כדי שמעבר שעון קיץ לא יזיז אותו בשעה.
@@ -614,6 +616,7 @@ expired      ⟺ now() > valid_until AND status IN ('sent','viewed')
 ```
 first_response_minutes = (first_response_at − created_at) / 60
 ```
+
 נספר רק על לידים ושיחות עם `first_response_at` לא ריק. חציון ולא ממוצע:
 פנייה אחת שנשכחה לשבוע גוררת ממוצע ומסתירה עשרים תגובות טובות.
 דלי אחוזון 90 מדווח לצדו.
@@ -625,6 +628,7 @@ lead_conversion = percentOf(leads WHERE status='booked', leads created in range)
 quote_acceptance = percentOf(quotes accepted, quotes sent in range)
 quote_view_rate  = percentOf(quotes with first_viewed_at, quotes sent)
 ```
+
 המכנה הוא **לידים שנוצרו בטווח**, לא לידים שנסגרו בו — אחרת חודש שבו
 נסגרו לידים ישנים ייראה כמו חודש מוצלח.
 מכנה אפס → `safeDivide` → `null` → `—`.
@@ -636,6 +640,7 @@ lifetime_revenue_agorot = Σ bookings.total_agorot WHERE status ∈ REALISED_STA
 stay_count              = COUNT(אותן הזמנות)
 average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 ```
+
 🔒 `REALISED_STATUSES` נלקח מ-[`src/lib/metrics/rows.ts`](../../src/lib/metrics/rows.ts)
 ולא מוגדר כאן מחדש. הזמנה שבוטלה אינה הכנסה, ואורח שביטל שלוש פעמים
 אינו VIP.
@@ -644,29 +649,29 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ## 8. ולידציות
 
-| שדה | חובה | טווח / פורמט | הודעה בעברית |
-| --- | --- | --- | --- |
-| `guests.full_name` | ✓ | 2–120, לא רק רווחים | "יש להזין שם אורח." |
-| `guests.phone` | טלפון **או** מייל | חייב להתנרמל לערך לא ריק | "מספר הטלפון אינו תקין. מספר בחו״ל — התחילו ב-+." |
-| `guests.email` | — | `^[^@\s]+@[^@\s]+\.[^@\s]+$` (אילוץ קיים ב-DB) | "כתובת המייל אינה תקינה." |
-| `guests.id_document_number` | — | 5–20, ספרות ואותיות. **אין בדיקת ספרת ביקורת חוסמת** | "מספר המסמך אינו תקין." |
-| `guests.id_document_country` | כשיש מסמך | `^[A-Z]{2}$` | "יש לבחור מדינת הנפקה." |
-| `guests.language` | ✓ | `he`/`en`/`ar`/`ru`/`fr` | "יש לבחור שפה." |
-| `guests.tags` | — | ≤ 20 תגיות, כל אחת ≤ 30 תווים | "אפשר עד 20 תגיות." |
-| `guests.blocked_reason` | כשחסום | ≥ 10 תווים | "יש להסביר למה האורח חסום." |
-| `leads.raw_phone/raw_email` | לפחות אחד | — | "צריך טלפון או מייל כדי לחזור לפונה." |
-| `leads.requested_check_out` | — | `> requested_check_in` | "תאריך היציאה חייב להיות אחרי תאריך הכניסה." |
-| `leads.party_adults` | ✓ | ≥ 1 | "חייב להיות לפחות מבוגר אחד." |
-| `leads.lost_reason` | כש-`lost` | מהרשימה | "יש לבחור סיבת סגירה." |
-| `quotes.check_in/check_out` | ✓ | `check_out > check_in`, `check_in ≥ היום` | "לא ניתן להציע תאריכים שעברו." |
-| `quotes.valid_until` | ✓ | `> now()`, ≤ `now() + 90 יום` | "תוקף ההצעה חייב להיות בעתיד, ולכל היותר 90 יום." |
-| `quote_lines.amount_agorot` | ✓ | מספר שלם; שלילי מותר רק ב-`discount`/`promotion` | "סכום שלילי מותר רק בשורת הנחה." |
-| `quotes.total_agorot` | — | חייב `> 0` בשליחה | "לא ניתן לשלוח הצעה בסכום אפס." |
-| `messages.body` | ✓ (אין קובץ) | 1–4096 ב-WhatsApp/SMS; 100,000 במייל | "אי אפשר לשלוח הודעה ריקה." |
-| `messages.attachments` | — | ≤ 10 קבצים, ≤ 16MB לקובץ, MIME מרשימת היתר | "הקובץ גדול מדי (מקסימום 16MB)." |
-| `message_templates.body` | ✓ | כל `{{משתנה}}` חייב להיות בקטלוג §9.2 | "המשתנה {{X}} אינו קיים. המשתנים הזמינים: …" |
-| `conversations.snoozed_until` | כש-`snoozed` | בעתיד, ≤ 90 יום | "יש לבחור מועד עתידי לדחייה." |
-| `guest_merges.reason` | ✓ | ≥ 10 תווים | "יש להסביר למה מיזגת את הפרופילים." |
+| שדה                           | חובה              | טווח / פורמט                                         | הודעה בעברית                                      |
+| ----------------------------- | ----------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| `guests.full_name`            | ✓                 | 2–120, לא רק רווחים                                  | "יש להזין שם אורח."                               |
+| `guests.phone`                | טלפון **או** מייל | חייב להתנרמל לערך לא ריק                             | "מספר הטלפון אינו תקין. מספר בחו״ל — התחילו ב-+." |
+| `guests.email`                | —                 | `^[^@\s]+@[^@\s]+\.[^@\s]+$` (אילוץ קיים ב-DB)       | "כתובת המייל אינה תקינה."                         |
+| `guests.id_document_number`   | —                 | 5–20, ספרות ואותיות. **אין בדיקת ספרת ביקורת חוסמת** | "מספר המסמך אינו תקין."                           |
+| `guests.id_document_country`  | כשיש מסמך         | `^[A-Z]{2}$`                                         | "יש לבחור מדינת הנפקה."                           |
+| `guests.language`             | ✓                 | `he`/`en`/`ar`/`ru`/`fr`                             | "יש לבחור שפה."                                   |
+| `guests.tags`                 | —                 | ≤ 20 תגיות, כל אחת ≤ 30 תווים                        | "אפשר עד 20 תגיות."                               |
+| `guests.blocked_reason`       | כשחסום            | ≥ 10 תווים                                           | "יש להסביר למה האורח חסום."                       |
+| `leads.raw_phone/raw_email`   | לפחות אחד         | —                                                    | "צריך טלפון או מייל כדי לחזור לפונה."             |
+| `leads.requested_check_out`   | —                 | `> requested_check_in`                               | "תאריך היציאה חייב להיות אחרי תאריך הכניסה."      |
+| `leads.party_adults`          | ✓                 | ≥ 1                                                  | "חייב להיות לפחות מבוגר אחד."                     |
+| `leads.lost_reason`           | כש-`lost`         | מהרשימה                                              | "יש לבחור סיבת סגירה."                            |
+| `quotes.check_in/check_out`   | ✓                 | `check_out > check_in`, `check_in ≥ היום`            | "לא ניתן להציע תאריכים שעברו."                    |
+| `quotes.valid_until`          | ✓                 | `> now()`, ≤ `now() + 90 יום`                        | "תוקף ההצעה חייב להיות בעתיד, ולכל היותר 90 יום." |
+| `quote_lines.amount_agorot`   | ✓                 | מספר שלם; שלילי מותר רק ב-`discount`/`promotion`     | "סכום שלילי מותר רק בשורת הנחה."                  |
+| `quotes.total_agorot`         | —                 | חייב `> 0` בשליחה                                    | "לא ניתן לשלוח הצעה בסכום אפס."                   |
+| `messages.body`               | ✓ (אין קובץ)      | 1–4096 ב-WhatsApp/SMS; 100,000 במייל                 | "אי אפשר לשלוח הודעה ריקה."                       |
+| `messages.attachments`        | —                 | ≤ 10 קבצים, ≤ 16MB לקובץ, MIME מרשימת היתר           | "הקובץ גדול מדי (מקסימום 16MB)."                  |
+| `message_templates.body`      | ✓                 | כל `{{משתנה}}` חייב להיות בקטלוג §9.2                | "המשתנה {{X}} אינו קיים. המשתנים הזמינים: …"      |
+| `conversations.snoozed_until` | כש-`snoozed`      | בעתיד, ≤ 90 יום                                      | "יש לבחור מועד עתידי לדחייה."                     |
+| `guest_merges.reason`         | ✓                 | ≥ 10 תווים                                           | "יש להסביר למה מיזגת את הפרופילים."               |
 
 **החלטה: אין בדיקת ספרת ביקורת חוסמת על ת"ז.** האלגוריתם מוכר וקל
 לממש, אבל אורח זר עם דרכון, קטין בלי ת"ז, וטעות הקלדה בדלפק — כולם מגיעים
@@ -680,50 +685,50 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ### 9.1 טריגר → תנאי → פעולה
 
-| טריגר (Domain Event) | תנאי | פעולה | נמען · ערוץ |
-| --- | --- | --- | --- |
-| `lead.created` | ליד לא משויך | ניתוב לפי נכס/תורנות; אם אין כלל → `unassigned` | צוות מכירות · Notification Center |
-| `lead.created` + 30 דק' | `first_response_at` ריק | הסלמה | מנהל · Push + מייל |
-| `lead.status_changed` → `interested` | `next_action_at` ריק | חסימת המעבר עם בקשה למועד | המשתמש · במסך |
-| `quote.sent` | — | תבנית `quote_sent` עם `{{לינק}}` | אורח · הערוץ המועדף |
-| `quote.viewed` | פעם ראשונה | "דנה פתחה את ההצעה" | השולח · Push |
-| `quote.expired` | — | תבנית "ההצעה פגה — נשמח לעדכן"; פנימית לשולח | אורח + שולח |
-| הצעה 48 שעות לפני `valid_until` | `status ∈ (sent, viewed)` | תזכורת עדינה, **פעם אחת** | אורח |
-| `booking.confirmed` | — | תבנית `booking_confirmed` (§9.3) | אורח · WhatsApp |
-| `guest.merged` | — | רישום ובאנר ביטול | המבצע · במסך |
-| הודעה נכנסת | שיחה `resolved`/`snoozed` | פתיחה מחדש + התראה | הבעלים הקודם · Push |
-| שיחה `unassigned` מעל 15 דק' בשעות פעילות | — | הסלמה | מנהל |
-| `sla_due_at` עבר | לא `resolved` | סימון אדום + הסלמה | מנהל |
-| `message` יוצאת `failed` | — | סימון בשרשור + התראה. **ההודעה לא נעלמת** | השולח |
-| אורח `is_blocked` נכנס לליד חדש | — | סימון בולט "אורח חסום — {{סיבה}}" | המטפל |
-| `checked_out` + 24 שעות | אין ביקורת | תבנית `review_request` | אורח |
+| טריגר (Domain Event)                      | תנאי                      | פעולה                                           | נמען · ערוץ                       |
+| ----------------------------------------- | ------------------------- | ----------------------------------------------- | --------------------------------- |
+| `lead.created`                            | ליד לא משויך              | ניתוב לפי נכס/תורנות; אם אין כלל → `unassigned` | צוות מכירות · Notification Center |
+| `lead.created` + 30 דק'                   | `first_response_at` ריק   | הסלמה                                           | מנהל · Push + מייל                |
+| `lead.status_changed` → `interested`      | `next_action_at` ריק      | חסימת המעבר עם בקשה למועד                       | המשתמש · במסך                     |
+| `quote.sent`                              | —                         | תבנית `quote_sent` עם `{{לינק}}`                | אורח · הערוץ המועדף               |
+| `quote.viewed`                            | פעם ראשונה                | "דנה פתחה את ההצעה"                             | השולח · Push                      |
+| `quote.expired`                           | —                         | תבנית "ההצעה פגה — נשמח לעדכן"; פנימית לשולח    | אורח + שולח                       |
+| הצעה 48 שעות לפני `valid_until`           | `status ∈ (sent, viewed)` | תזכורת עדינה, **פעם אחת**                       | אורח                              |
+| `booking.confirmed`                       | —                         | תבנית `booking_confirmed` (§9.3)                | אורח · WhatsApp                   |
+| `guest.merged`                            | —                         | רישום ובאנר ביטול                               | המבצע · במסך                      |
+| הודעה נכנסת                               | שיחה `resolved`/`snoozed` | פתיחה מחדש + התראה                              | הבעלים הקודם · Push               |
+| שיחה `unassigned` מעל 15 דק' בשעות פעילות | —                         | הסלמה                                           | מנהל                              |
+| `sla_due_at` עבר                          | לא `resolved`             | סימון אדום + הסלמה                              | מנהל                              |
+| `message` יוצאת `failed`                  | —                         | סימון בשרשור + התראה. **ההודעה לא נעלמת**       | השולח                             |
+| אורח `is_blocked` נכנס לליד חדש           | —                         | סימון בולט "אורח חסום — {{סיבה}}"               | המטפל                             |
+| `checked_out` + 24 שעות                   | אין ביקורת                | תבנית `review_request`                          | אורח                              |
 
 ### 9.2 קטלוג המשתנים
 
 🔒 השם העברי הוא הממשק; המפתח האנגלי הוא החוזה.
 
-| בתבנית | מפתח קנוני | מקור | הערה |
-| --- | --- | --- | --- |
-| `{{שם}}` | `guest.first_name` | `guests.first_name` או המילה הראשונה ב-`full_name` | |
-| `{{וילה}}` | `property.name` | `properties.name` | במקור היה שם העסק; במוצר רב־נכסי זה **שם הנכס** |
-| `{{תאריכים}}` | `stay.range_short` | `"23–26.4"`; שהות של יום אחד → תאריך יחיד | |
-| `{{כניסה}}` | `stay.check_in_full` | `"23.4 · 14:00"` | שעה מההזמנה, ואם ריקה — מהיחידה |
-| `{{יציאה}}` | `stay.check_out_full` | `"26.4 · 11:00"` | |
-| `{{אורחים}}` | `stay.guest_count` | `adults + children` | תינוקות לא נספרים |
-| `{{זוגות}}` | `stay.couples` | `bookings.metadata.couples` | ⚠️ שדה של המערכת החיה. **נשמר** (`KEEP`) כי התמחור של וילות אירוח משתמש בו |
-| `{{טלפון}}` | `guest.phone` | | 🔒 **אסור בתבנית שנשלחת לאורח.** מותר בתבנית פנימית בלבד |
-| `{{כתובת}}` | `property.address` | | משוחרר לפי מדיניות ([`41`](41-guest-portal.md) §6) |
-| `{{סהכ}}` | `booking.total` | `total_agorot`, מפורמט `₪6,400` | |
-| `{{יתרה}}` | `booking.balance_due` | `total − paid` | |
-| `{{מקדמה}}` | `booking.advance_paid` | | |
-| `{{פיקדון}}` | `booking.deposit_amount` | **מההזמנה, לא מהגדרת הנכס** | ⚠️ במערכת החיה זה נלקח מהגדרת הוילה, ולכן שינוי הגדרה שינה למפרע מה שנכתב לאורח |
-| `{{וויפי}}` | `property.wifi` | | ⚠️ ראה §13.5 — הוסר מברירת המחדל |
-| `{{ניווט}}` | `property.navigation_url` | Waze/Google | |
-| `{{לינק}}` | `portal.link` | 🔒 **מנפיק קישור חדש בכל רינדור** | ראה [`41`](41-guest-portal.md) §13 |
-| `{{לינקחוותדעת}}` | `portal.review_link` | קישור עם `purpose='review'` | |
-| `{{לינקהצעה}}` | `quote.link` | חדש. `purpose='quote'` | |
-| `{{מספרהזמנה}}` | `booking.reference` | `bookings.reference` | חדש. `B` + 8 תווים — מה שמצטטים בטלפון |
-| `{{שםעסק}}` | `organization.name` | | חדש. הפרדה בין שם העסק לשם הנכס |
+| בתבנית            | מפתח קנוני                | מקור                                               | הערה                                                                            |
+| ----------------- | ------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `{{שם}}`          | `guest.first_name`        | `guests.first_name` או המילה הראשונה ב-`full_name` |                                                                                 |
+| `{{וילה}}`        | `property.name`           | `properties.name`                                  | במקור היה שם העסק; במוצר רב־נכסי זה **שם הנכס**                                 |
+| `{{תאריכים}}`     | `stay.range_short`        | `"23–26.4"`; שהות של יום אחד → תאריך יחיד          |                                                                                 |
+| `{{כניסה}}`       | `stay.check_in_full`      | `"23.4 · 14:00"`                                   | שעה מההזמנה, ואם ריקה — מהיחידה                                                 |
+| `{{יציאה}}`       | `stay.check_out_full`     | `"26.4 · 11:00"`                                   |                                                                                 |
+| `{{אורחים}}`      | `stay.guest_count`        | `adults + children`                                | תינוקות לא נספרים                                                               |
+| `{{זוגות}}`       | `stay.couples`            | `bookings.metadata.couples`                        | ⚠️ שדה של המערכת החיה. **נשמר** (`KEEP`) כי התמחור של וילות אירוח משתמש בו      |
+| `{{טלפון}}`       | `guest.phone`             |                                                    | 🔒 **אסור בתבנית שנשלחת לאורח.** מותר בתבנית פנימית בלבד                        |
+| `{{כתובת}}`       | `property.address`        |                                                    | משוחרר לפי מדיניות ([`41`](41-guest-portal.md) §6)                              |
+| `{{סהכ}}`         | `booking.total`           | `total_agorot`, מפורמט `₪6,400`                    |                                                                                 |
+| `{{יתרה}}`        | `booking.balance_due`     | `total − paid`                                     |                                                                                 |
+| `{{מקדמה}}`       | `booking.advance_paid`    |                                                    |                                                                                 |
+| `{{פיקדון}}`      | `booking.deposit_amount`  | **מההזמנה, לא מהגדרת הנכס**                        | ⚠️ במערכת החיה זה נלקח מהגדרת הוילה, ולכן שינוי הגדרה שינה למפרע מה שנכתב לאורח |
+| `{{וויפי}}`       | `property.wifi`           |                                                    | ⚠️ ראה §13.5 — הוסר מברירת המחדל                                                |
+| `{{ניווט}}`       | `property.navigation_url` | Waze/Google                                        |                                                                                 |
+| `{{לינק}}`        | `portal.link`             | 🔒 **מנפיק קישור חדש בכל רינדור**                  | ראה [`41`](41-guest-portal.md) §13                                              |
+| `{{לינקחוותדעת}}` | `portal.review_link`      | קישור עם `purpose='review'`                        |                                                                                 |
+| `{{לינקהצעה}}`    | `quote.link`              | חדש. `purpose='quote'`                             |                                                                                 |
+| `{{מספרהזמנה}}`   | `booking.reference`       | `bookings.reference`                               | חדש. `B` + 8 תווים — מה שמצטטים בטלפון                                          |
+| `{{שםעסק}}`       | `organization.name`       |                                                    | חדש. הפרדה בין שם העסק לשם הנכס                                                 |
 
 ### 9.3 התבניות שנשמרות מהמערכת החיה
 
@@ -823,31 +828,31 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ### 9.4 כשל במשלוח
 
-| כשל | תגובה |
-| --- | --- |
-| ספק החזיר `4xx` (מספר לא תקין, חסום) | `failed` + `failure_code`. **אין ניסיון חוזר.** האורח מסומן "טלפון לא ניתן להשגה" והשולח מקבל התראה |
-| ספק החזיר `5xx` / timeout | ניסיון חוזר עם השהיה מעריכה: 30ש׳ · 2ד׳ · 10ד׳ · 60ד׳, לכל היותר 4. **תמיד עם אותו `idempotency_key`** |
-| חלון 24 השעות של WhatsApp נסגר | מעבר אוטומטי לתבנית מאושרת; אם אין — הודעה לצוות "צריך לפתוח שיחה מחדש" ולא שליחה שקטה שנכשלת |
-| נכשל אחרי כל הניסיונות | ההודעה נשארת בשרשור עם ⚠️, נוצרת משימת מעקב, והשיחה חוזרת ל-`assigned` |
-| הודעה אוטומטית נכשלה | **התהליך העסקי לא נעצר.** אישור הזמנה תקף גם אם הוואטסאפ לא יצא — `contracts/events.ts`: מנוי שנכשל מדווח ולעולם לא נזרק בחזרה לפעולה העסקית |
+| כשל                                  | תגובה                                                                                                                                        |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| ספק החזיר `4xx` (מספר לא תקין, חסום) | `failed` + `failure_code`. **אין ניסיון חוזר.** האורח מסומן "טלפון לא ניתן להשגה" והשולח מקבל התראה                                          |
+| ספק החזיר `5xx` / timeout            | ניסיון חוזר עם השהיה מעריכה: 30ש׳ · 2ד׳ · 10ד׳ · 60ד׳, לכל היותר 4. **תמיד עם אותו `idempotency_key`**                                       |
+| חלון 24 השעות של WhatsApp נסגר       | מעבר אוטומטי לתבנית מאושרת; אם אין — הודעה לצוות "צריך לפתוח שיחה מחדש" ולא שליחה שקטה שנכשלת                                                |
+| נכשל אחרי כל הניסיונות               | ההודעה נשארת בשרשור עם ⚠️, נוצרת משימת מעקב, והשיחה חוזרת ל-`assigned`                                                                       |
+| הודעה אוטומטית נכשלה                 | **התהליך העסקי לא נעצר.** אישור הזמנה תקף גם אם הוואטסאפ לא יצא — `contracts/events.ts`: מנוי שנכשל מדווח ולעולם לא נזרק בחזרה לפעולה העסקית |
 
 ---
 
 ## 10. מקביליות ו-Idempotency
 
-| תרחיש | מנגנון |
-| --- | --- |
-| שני עובדים עורכים אותו אורח | `guests.version`. השני מקבל: "רוני עדכנה את הפרופיל לפני רגע. רענן כדי לראות את השינוי." + diff |
-| שני מיזוגים על אותם פרופילים | נעילת שתי השורות `for update` בסדר `id` עולה + בדיקת `version` (ח40-16, ח40-17) |
-| מיזוג בזמן יצירת הזמנה | שורת האורח נעולה; היצירה ממתינה ואז נכשלת `retryable` עם השורד (ח40-18) |
-| שני אורחים נוצרים עם אותו טלפון | האינדקס הייחודי החלקי דוחה. השירות תופס `23505` ומחזיר `ConflictError` עם קישור לאורח הקיים — לא "שגיאת מסד" |
-| Webhook של ערוץ מגיע פעמיים | `unique (organization_id, channel, channel_account_id, external_thread_id)` על השיחה + `unique (organization_id, external_message_id)` על ההודעה |
-| לחיצה כפולה על "שלח" | `messages.idempotency_key` ייחודי לארגון. ניסיון שני מחזיר את ההודעה הראשונה. תשתית: `src/lib/service/idempotency.ts` |
-| שני עובדים עונים במקביל | ח40-30 — מחוון + עקיפה מפורשת מתועדת |
-| שליחת הצעה פעמיים | `quote.send` אידמפוטנטי לפי `(quote_id, version_number)`. הניסיון השני מחזיר את השליחה הראשונה **ולא מנפיק קישור שני** |
-| קבלת הצעה בזמן שהתאריכים נתפסו | `SERIALIZABLE` / `select … for update` על `unit_occupancy`; ההזמנה נכשלת ומחזירה חלופה (ח40-28) |
-| שיוך שיחה במקביל | `conversations.version`. השני: "השיחה שויכה לדנה לפני רגע." |
-| ייצוא אורחים פעמיים | `guest.export` הוא `SENSITIVE_ACTION`; הייצוא מקבל מפתח ייחודי, ובקשה חוזרת מחזירה את אותו קובץ |
+| תרחיש                           | מנגנון                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| שני עובדים עורכים אותו אורח     | `guests.version`. השני מקבל: "רוני עדכנה את הפרופיל לפני רגע. רענן כדי לראות את השינוי." + diff                                                  |
+| שני מיזוגים על אותם פרופילים    | נעילת שתי השורות `for update` בסדר `id` עולה + בדיקת `version` (ח40-16, ח40-17)                                                                  |
+| מיזוג בזמן יצירת הזמנה          | שורת האורח נעולה; היצירה ממתינה ואז נכשלת `retryable` עם השורד (ח40-18)                                                                          |
+| שני אורחים נוצרים עם אותו טלפון | האינדקס הייחודי החלקי דוחה. השירות תופס `23505` ומחזיר `ConflictError` עם קישור לאורח הקיים — לא "שגיאת מסד"                                     |
+| Webhook של ערוץ מגיע פעמיים     | `unique (organization_id, channel, channel_account_id, external_thread_id)` על השיחה + `unique (organization_id, external_message_id)` על ההודעה |
+| לחיצה כפולה על "שלח"            | `messages.idempotency_key` ייחודי לארגון. ניסיון שני מחזיר את ההודעה הראשונה. תשתית: `src/lib/service/idempotency.ts`                            |
+| שני עובדים עונים במקביל         | ח40-30 — מחוון + עקיפה מפורשת מתועדת                                                                                                             |
+| שליחת הצעה פעמיים               | `quote.send` אידמפוטנטי לפי `(quote_id, version_number)`. הניסיון השני מחזיר את השליחה הראשונה **ולא מנפיק קישור שני**                           |
+| קבלת הצעה בזמן שהתאריכים נתפסו  | `SERIALIZABLE` / `select … for update` על `unit_occupancy`; ההזמנה נכשלת ומחזירה חלופה (ח40-28)                                                  |
+| שיוך שיחה במקביל                | `conversations.version`. השני: "השיחה שויכה לדנה לפני רגע."                                                                                      |
+| ייצוא אורחים פעמיים             | `guest.export` הוא `SENSITIVE_ACTION`; הייצוא מקבל מפתח ייחודי, ובקשה חוזרת מחזירה את אותו קובץ                                                  |
 
 פעולות שחייבות מפתח ייחודי: שליחת הודעה · שליחת הצעה · קבלת הצעה ·
 מיזוג · ביטול מיזוג · ייצוא · הנפקת קישור.
@@ -856,16 +861,16 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ## 11. אינטגרציות
 
-| ספק | קורא | כותב | תקלה | איזון אחריה |
-| --- | --- | --- | --- | --- |
-| **WhatsApp Business API** ❓ (ספק לא הוכרע — FEATURE_MATRIX "החלטה פתוחה") | Webhook להודעות נכנסות, סטטוסי מסירה | הודעות ותבניות מאושרות | תור עם ניסיון חוזר; חלון 24 שעות | סנכרון סטטוסים ב-Webhook; משיכה תקופתית של הודעות מהשעה האחרונה כדי לגלות Webhook שאבד |
-| **`wa.me` deep link** (רמת הכניסה) | — | פותח וואטסאפ אצל העובד עם טקסט מוכן | אין | ⚠️ אין סטטוס מסירה ואין הודעות נכנסות. זה מה שהמערכת החיה עשתה, וזה מספיק לעסק אחד. ההודעה נרשמת כ-`delivery_status='sent'` **עם דגל `unverified_delivery`** — לא מתחזים לוודאות שאין |
-| **מייל** ❓ (ספק לא הוכרע) | Webhook לנכנס, bounce, תלונת ספאם | יוצא + מעקב פתיחות | תור | bounce → סימון המייל כלא תקין בפרופיל |
-| **SMS** ❓ | סטטוס מסירה | יוצא | — | גיבוי לוואטסאפ שנכשל, אם הארגון הפעיל |
-| **הודעות OTA** (Airbnb · Booking) ❓ זמינות API | הודעות בשרשור ההזמנה | תשובות | הגבלת קצב; חלונות זמן | סנכרון תקופתי; הודעה שלא נשלחה מסומנת ולא נעלמת |
-| **טופס האתר** (Website Studio) | — | יוצר `lead` דרך שכבת השירות, לא ישירות למסד | reCAPTCHA/honeypot; הגבלת קצב לפי IP | ליד שנחסם כספאם נשמר ב-`leads_quarantine` ולא נמחק |
-| **אחסון קבצים** (Supabase Storage, דלי פרטי) | קבצים מצורפים | | קישורים חתומים לזמן קצוב בלבד | |
-| **ספק AI** | ראה §12 | | כשל → אין הצעת תשובה. **לעולם לא שליחה** | |
+| ספק                                                                        | קורא                                 | כותב                                        | תקלה                                     | איזון אחריה                                                                                                                                                                           |
+| -------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **WhatsApp Business API** ❓ (ספק לא הוכרע — FEATURE_MATRIX "החלטה פתוחה") | Webhook להודעות נכנסות, סטטוסי מסירה | הודעות ותבניות מאושרות                      | תור עם ניסיון חוזר; חלון 24 שעות         | סנכרון סטטוסים ב-Webhook; משיכה תקופתית של הודעות מהשעה האחרונה כדי לגלות Webhook שאבד                                                                                                |
+| **`wa.me` deep link** (רמת הכניסה)                                         | —                                    | פותח וואטסאפ אצל העובד עם טקסט מוכן         | אין                                      | ⚠️ אין סטטוס מסירה ואין הודעות נכנסות. זה מה שהמערכת החיה עשתה, וזה מספיק לעסק אחד. ההודעה נרשמת כ-`delivery_status='sent'` **עם דגל `unverified_delivery`** — לא מתחזים לוודאות שאין |
+| **מייל** ❓ (ספק לא הוכרע)                                                 | Webhook לנכנס, bounce, תלונת ספאם    | יוצא + מעקב פתיחות                          | תור                                      | bounce → סימון המייל כלא תקין בפרופיל                                                                                                                                                 |
+| **SMS** ❓                                                                 | סטטוס מסירה                          | יוצא                                        | —                                        | גיבוי לוואטסאפ שנכשל, אם הארגון הפעיל                                                                                                                                                 |
+| **הודעות OTA** (Airbnb · Booking) ❓ זמינות API                            | הודעות בשרשור ההזמנה                 | תשובות                                      | הגבלת קצב; חלונות זמן                    | סנכרון תקופתי; הודעה שלא נשלחה מסומנת ולא נעלמת                                                                                                                                       |
+| **טופס האתר** (Website Studio)                                             | —                                    | יוצר `lead` דרך שכבת השירות, לא ישירות למסד | reCAPTCHA/honeypot; הגבלת קצב לפי IP     | ליד שנחסם כספאם נשמר ב-`leads_quarantine` ולא נמחק                                                                                                                                    |
+| **אחסון קבצים** (Supabase Storage, דלי פרטי)                               | קבצים מצורפים                        |                                             | קישורים חתומים לזמן קצוב בלבד            |                                                                                                                                                                                       |
+| **ספק AI**                                                                 | ראה §12                              |                                             | כשל → אין הצעת תשובה. **לעולם לא שליחה** |                                                                                                                                                                                       |
 
 ---
 
@@ -879,6 +884,7 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 **מה הוא עושה:** מציע טיוטת תשובה בשפת האורח.
 
 **על אילו נתונים — רשימת היתר סגורה:**
+
 1. עובדות ההזמנה הזו: תאריכים, שעות, יחידה, מספר אורחים, סה"כ, ששולם,
    יתרה, סטטוס, סטטוס חוזה, סטטוס פיקדון.
 2. עובדות הנכס **שפורסמו לאורחים**: מתקנים מרשימה מובנית, כללי בית,
@@ -888,9 +894,10 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 5. תבניות ההודעות של הארגון.
 
 **מה אסור לו — מוחלט:**
+
 - להמציא מתקן ("יש ג׳קוזי"), מרחק ("10 דקות מהים"), שעה, מחיר או מדיניות
   שאין לה רשומה. חסר עובדה → הטיוטה כותבת `[חסר: מרחק מהים]` ולא מספר.
-  *נימוק:* חור גלוי הוא פגם שרואים; מספר שגוי הוא פגם שלא רואים.
+  _נימוק:_ חור גלוי הוא פגם שרואים; מספר שגוי הוא פגם שלא רואים.
 - לענות על זמינות. זמינות היא חישוב טרנזקציוני, לא ניחוש טקסטואלי.
 - להבטיח החזר, הנחה, שדרוג או צ׳ק־אאוט מאוחר.
 - לצטט מחיר שלמשתמש שהוא משרת אין הרשאה לראות (`rate.view_net`).
@@ -914,7 +921,7 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ה-AI **לא** מריץ את הדדופליקציה. ציון ההתאמה (§7.1) הוא נוסחה
 דטרמיניסטית ונבדקת. ה-AI רק **מנסח** את ההסבר ("כנראה אותו אדם — אותו
-טלפון, שם דומה"). *נימוק:* החלטה שמערבבת כסף של שני אנשים חייבת להיות
+טלפון, שם דומה"). _נימוק:_ החלטה שמערבבת כסף של שני אנשים חייבת להיות
 ניתנת לשחזור ולבדיקה, ומודל לשוני אינו כזה.
 
 ### 12.4 מה לא נכנס
@@ -928,32 +935,32 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ### 13.1 מה רגיש
 
-| נתון | הגנה |
-| --- | --- |
-| טלפון | `guest.view_phone` |
-| מייל | `guest.view_email` |
-| שם | `guest.view_name` — **כן, גם השם.** מנקה מקבל יחידה ושעה, לא אדם |
-| מספר מסמך מזהה | `guest.view_document_id` + חשיפה חד־פעמית + נימוק + Audit |
-| הערות פנימיות | `booking.note.internal` |
-| מחיר, מקור, פיקדון, רווחיות | `booking.view_*` |
-| מחיר נטו / עמלה | `rate.view_net` — **לעולם לא במסמך יוצא** (ח40-27) |
-| תוכן שיחות | `message.view` + Scope |
-| קבצים מצורפים | דלי פרטי, קישור חתום לזמן קצוב |
+| נתון                        | הגנה                                                             |
+| --------------------------- | ---------------------------------------------------------------- |
+| טלפון                       | `guest.view_phone`                                               |
+| מייל                        | `guest.view_email`                                               |
+| שם                          | `guest.view_name` — **כן, גם השם.** מנקה מקבל יחידה ושעה, לא אדם |
+| מספר מסמך מזהה              | `guest.view_document_id` + חשיפה חד־פעמית + נימוק + Audit        |
+| הערות פנימיות               | `booking.note.internal`                                          |
+| מחיר, מקור, פיקדון, רווחיות | `booking.view_*`                                                 |
+| מחיר נטו / עמלה             | `rate.view_net` — **לעולם לא במסמך יוצא** (ח40-27)               |
+| תוכן שיחות                  | `message.view` + Scope                                           |
+| קבצים מצורפים               | דלי פרטי, קישור חתום לזמן קצוב                                   |
 
 הסתרה נעשית **בשכבת השירות בעת עיצוב התשובה**, לא בהסתרה במסך.
 🔒 **הסתרת כפתור אינה אבטחה.**
 
 ### 13.2 פעולות שדורשות יותר מהרשאה
 
-| פעולה | דרישה נוספת |
-| --- | --- |
-| `guest.export` | ב-`SENSITIVE_ACTIONS` · נימוק · Audit · אירוע `security.bulk_export` · מגבלת קצב |
-| מיזוג | נימוק + הקלדת שם השורד |
-| ביטול מיזוג | נימוק |
-| חשיפת מסמך מזהה | נימוק + Audit לכל חשיפה |
-| שינוי פרטי תשלום בתבנית (`{{ביטמספר}}`, `{{חשבון}}`) | אימות מחדש (MFA) — ARCHITECTURE §7 |
-| מחיקת אורח | נימוק + בדיקת §13.6 |
-| שליחה לנמען שאינו האורח הרשום | נימוק + Audit (§17) |
+| פעולה                                                | דרישה נוספת                                                                      |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `guest.export`                                       | ב-`SENSITIVE_ACTIONS` · נימוק · Audit · אירוע `security.bulk_export` · מגבלת קצב |
+| מיזוג                                                | נימוק + הקלדת שם השורד                                                           |
+| ביטול מיזוג                                          | נימוק                                                                            |
+| חשיפת מסמך מזהה                                      | נימוק + Audit לכל חשיפה                                                          |
+| שינוי פרטי תשלום בתבנית (`{{ביטמספר}}`, `{{חשבון}}`) | אימות מחדש (MFA) — ARCHITECTURE §7                                               |
+| מחיקת אורח                                           | נימוק + בדיקת §13.6                                                              |
+| שליחה לנמען שאינו האורח הרשום                        | נימוק + Audit (§17)                                                              |
 
 ### 13.3 סוכן חיצוני
 
@@ -992,6 +999,7 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
    וחשבוניות היסטוריות ימשיכו להיפתר. `full_name` מוחלף ב-"אורח שנמחק".
 
 ❓ **שאלות למשפטן, לא למפתח:**
+
 - כמה זמן חייבים לשמור חוזה חתום וחשבונית לפי דיני המס בישראל, ומה
   התאריך שממנו סופרים.
 - האם בקשת מחיקה לפי חוק הגנת הפרטיות (התיקון שנכנס לתוקף ב-2025) גוברת
@@ -1018,23 +1026,23 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 הניסוח הוא משפט בעברית, לא שם פעולה. `AuditEventInput.summary`
 נבנה ע"י הקורא, שיודע את המשמעות העסקית.
 
-| פעולה | ניסוח |
-| --- | --- |
-| יצירת אורח | "רוני יצרה אורח חדש — דנה לוי · 050-•••4567" |
-| עדכון טלפון | "שי שינה טלפון של דנה לוי מ-050-•••4567 ל-052-•••1122" |
-| חשיפת מסמך מזהה | "דנה חשפה את מספר תעודת הזהות של משה כהן · סיבה: אימות בצ׳ק־אין" |
-| מיזוג | "שי מיזג את משה כהן (2 שהיות) לתוך משה כהן (5 שהיות) · הועברו 2 הזמנות, 1 שיחה · סיבה: אותו טלפון בשתי הקלדות" |
-| ביטול מיזוג | "רוני ביטלה את המיזוג מ-14.4 · הוחזרו 2 הזמנות" |
-| חסימה | "שי חסם את דן ישראלי · סיבה: נזק לרכוש שלא שולם" |
-| ייצוא | "דנה ייצאה 412 אורחים · סיבה: קמפיין פסח · IP 82.•••" |
-| שליחת הצעה | "שי שלח הצעה #Q-1042 לדנה לוי · 23–26.4 · ₪6,400 · בתוקף עד 30.3" |
-| גרסת הצעה | "שי החליף את הצעה #Q-1042 בגרסה 2 · ₪6,400 → ₪6,100" |
-| סגירת ליד | "רוני סגרה ליד — דנה לוי · סיבה: התאריכים לא היו זמינים" |
-| שיוך שיחה | "השיחה עם דנה לוי הועברה משי לרוני" |
-| עקיפת מחוון נוכחות | "⚠️ שי שלח תשובה בזמן שרוני כתבה באותה שיחה" |
-| שליחה לנמען חורג | "⚠️ דנה שלחה קישור של הזמנה B4A2F1C9 למספר 054-•••9988 שאינו טלפון האורח · סיבה: הבן מטפל בהזמנה" |
-| הודעה מ-AI | "שי שלח תשובה שנוצרה ע"י ESTIA ונערכה על ידו" (`actor_type='ai_agent'`, `onBehalfOfUserId=שי`) |
-| בקשת מחיקה | "משה כהן ביקש מחיקה · נמחקו פרטי קשר · נשמרו 3 חשבוניות ו-1 חוזה עד 2033" |
+| פעולה              | ניסוח                                                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| יצירת אורח         | "רוני יצרה אורח חדש — דנה לוי · 050-•••4567"                                                                   |
+| עדכון טלפון        | "שי שינה טלפון של דנה לוי מ-050-•••4567 ל-052-•••1122"                                                         |
+| חשיפת מסמך מזהה    | "דנה חשפה את מספר תעודת הזהות של משה כהן · סיבה: אימות בצ׳ק־אין"                                               |
+| מיזוג              | "שי מיזג את משה כהן (2 שהיות) לתוך משה כהן (5 שהיות) · הועברו 2 הזמנות, 1 שיחה · סיבה: אותו טלפון בשתי הקלדות" |
+| ביטול מיזוג        | "רוני ביטלה את המיזוג מ-14.4 · הוחזרו 2 הזמנות"                                                                |
+| חסימה              | "שי חסם את דן ישראלי · סיבה: נזק לרכוש שלא שולם"                                                               |
+| ייצוא              | "דנה ייצאה 412 אורחים · סיבה: קמפיין פסח · IP 82.•••"                                                          |
+| שליחת הצעה         | "שי שלח הצעה #Q-1042 לדנה לוי · 23–26.4 · ₪6,400 · בתוקף עד 30.3"                                              |
+| גרסת הצעה          | "שי החליף את הצעה #Q-1042 בגרסה 2 · ₪6,400 → ₪6,100"                                                           |
+| סגירת ליד          | "רוני סגרה ליד — דנה לוי · סיבה: התאריכים לא היו זמינים"                                                       |
+| שיוך שיחה          | "השיחה עם דנה לוי הועברה משי לרוני"                                                                            |
+| עקיפת מחוון נוכחות | "⚠️ שי שלח תשובה בזמן שרוני כתבה באותה שיחה"                                                                   |
+| שליחה לנמען חורג   | "⚠️ דנה שלחה קישור של הזמנה B4A2F1C9 למספר 054-•••9988 שאינו טלפון האורח · סיבה: הבן מטפל בהזמנה"              |
+| הודעה מ-AI         | "שי שלח תשובה שנוצרה ע"י ESTIA ונערכה על ידו" (`actor_type='ai_agent'`, `onBehalfOfUserId=שי`)                 |
+| בקשת מחיקה         | "משה כהן ביקש מחיקה · נמחקו פרטי קשר · נשמרו 3 חשבוניות ו-1 חוזה עד 2033"                                      |
 
 **לא נרשם:** צפייה בפרופיל, פתיחת שיחה, סינון ברשימה. רישום שכולל את
 הכול לא נקרא ע"י איש.
@@ -1052,20 +1060,20 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 מדדים שהמודול הזה **מזין**:
 
-| מדד | נוסחה | לאיזה דוח |
-| --- | --- | --- |
-| לידים שנוצרו | ספירה | משפך מכירות |
-| המרת ליד להזמנה | §7.5 | משפך · ביצועי סוכן |
-| זמן תגובה ראשון (חציון + P90) | §7.4 | תפעול · SLA |
-| הצעות שנשלחו / נצפו / התקבלו | ספירה + §7.5 | משפך |
-| זמן מהצעה לאישור | חציון `accepted_at − sent_at` | משפך |
-| פילוח סיבות סגירה | קיבוץ `lost_reason` | תמחור ומלאי |
-| אורחים חוזרים | `percentOf(guests WHERE stay_count > 1, guests)` | נאמנות |
-| ערך אורח מצטבר | §7.6 | נאמנות · שיווק |
-| נפח שיחות לפי ערוץ | ספירה | תפעול |
-| שיחות שנפתחו מחדש | ספירה | איכות שירות |
-| חלק ההודעות שנוצרו ב-AI | `percentOf(ai_suggested, outbound)` | ממשל AI |
-| כפילויות שזוהו / מוזגו | ספירה | איכות נתונים |
+| מדד                           | נוסחה                                            | לאיזה דוח          |
+| ----------------------------- | ------------------------------------------------ | ------------------ |
+| לידים שנוצרו                  | ספירה                                            | משפך מכירות        |
+| המרת ליד להזמנה               | §7.5                                             | משפך · ביצועי סוכן |
+| זמן תגובה ראשון (חציון + P90) | §7.4                                             | תפעול · SLA        |
+| הצעות שנשלחו / נצפו / התקבלו  | ספירה + §7.5                                     | משפך               |
+| זמן מהצעה לאישור              | חציון `accepted_at − sent_at`                    | משפך               |
+| פילוח סיבות סגירה             | קיבוץ `lost_reason`                              | תמחור ומלאי        |
+| אורחים חוזרים                 | `percentOf(guests WHERE stay_count > 1, guests)` | נאמנות             |
+| ערך אורח מצטבר                | §7.6                                             | נאמנות · שיווק     |
+| נפח שיחות לפי ערוץ            | ספירה                                            | תפעול              |
+| שיחות שנפתחו מחדש             | ספירה                                            | איכות שירות        |
+| חלק ההודעות שנוצרו ב-AI       | `percentOf(ai_suggested, outbound)`              | ממשל AI            |
+| כפילויות שזוהו / מוזגו        | ספירה                                            | איכות נתונים       |
 
 **כל דוח מכבד Scope.** מנהל של 3 נכסים רואה משפך של 3 נכסים —
 **כולל בייצוא**.
@@ -1076,48 +1084,48 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 22 מקרים.
 
-| # | המקרה | מה קורה היום (מערכת חיה) | מה **צריך** לקרות | איך בודקים |
-| --- | --- | --- | --- | --- |
-| ק40-01 | טלפון מוקלד `050-123-4567` והאורח כבר קיים כ-`+972501234567` | נוצר אורח שני | הנרמול מזהה; ה-DB דוחה; הממשק מציג את הקיים | Integration: שני `insert`, השני נכשל `23505` ומחזיר `ConflictError` עם ה-ID הקיים |
-| ק40-02 | מספר זר `+33612345678` | נשמר כמחרוזת | נשמר כ-`+33612345678`, לא כישראלי | Unit על `normalize_phone_il` |
-| ק40-03 | מספר `972501234567` בלי `+` | — | מתפרש כישראלי (מגבלה מתועדת, ח40-03). הממשק הזהיר לפני כן | Unit + בדיקת קיום האזהרה בממשק |
-| ק40-04 | אותו מייל לשני אנשים (זוג) | — | **מותר.** שני אורחים, בלי אזהרה | Integration: שתי יצירות מצליחות |
-| ק40-05 | טלפון ריק, מייל בלבד | — | אורח נוצר; `phone_e164` null ולכן מחוץ לאינדקס הייחודי; דדופליקציה לפי מייל = הצעה בלבד | Integration |
-| ק40-06 | **מיזוג בזמן שנוצרת הזמנה מול המוזג** | לא קיים | שורת האורח נעולה; היצירה ממתינה ואז נכשלת `retryable` עם השורד; ניסיון חוזר מצליח על השורד | Concurrency: שתי טרנזקציות במקביל. אין הזמנה יתומה, אין כפילות |
-| ק40-07 | ביטול מיזוג אחרי שהזמנה שהוזזה עודכנה | לא קיים | הביטול **נדחה** ומפרט מה השתנה (ח40-15) | Integration |
-| ק40-08 | ביטול מיזוג אחרי 31 יום | לא קיים | נדחה: "חלון הביטול (30 יום) חלף. פנו לתמיכה." | Unit על גבול הזמן |
-| ק40-09 | מיזוג של אורח לתוך עצמו | לא קיים | נדחה בוולידציה | Unit |
-| ק40-10 | מיזוג משורשר: A→B, ואז B→C | לא קיים | `A.merged_into` מתעדכן ל-C. קישור ישן ל-A מגיע ל-C | Integration + מעבר על שרשרת |
-| ק40-11 | שני עובדים ממזגים את אותו זוג במקביל | לא קיים | הראשון מנצח; השני מקבל "הפרופילים כבר מוזגו" | Concurrency, נעילה בסדר `id` |
-| ק40-12 | ליד נכנס לאורח **חסום** | לא קיים | הליד נוצר עם דגל בולט "אורח חסום — {{סיבה}}". הצעה נחסמת עד אישור מנהל | Integration + בדיקת שלילה |
-| ק40-13 | ליד ללא טלפון וללא מייל | — | נדחה בוולידציה | Unit |
-| ק40-14 | ליד נסגר `lost`, האדם חוזר חודש אחרי | — | **ליד חדש**, מוצמד לאותו `guest_id`. הישן נשאר `lost` — כדי שסטטיסטיקת הסיבות לא תשקר | Integration |
-| ק40-15 | הצעה מתקבלת אחרי שהתאריכים נתפסו | לא קיים | נדחית עם הודעה + התראה מיידית לצוות + הצעת חלופה | Concurrency: קבלה + הזמנה מתחרה |
-| ק40-16 | הצעה נערכת אחרי שנשלחה | ניתן היה לשנות בשקט | נוצרת גרסה 2; הקישור הישן מציג "ההצעה עודכנה" ולא מחיר אחר | E2E: פתיחת הקישור הישן |
-| ק40-17 | הצעה פגה בזמן שהאורח פתוח בדף | לא קיים | הקבלה נדחית עם "ההצעה פגה ב-30.3". הדף מציג "בקש הצעה מעודכנת" | E2E עם שעון מוקפא |
-| ק40-18 | שני עובדים כותבים תשובה לאותה שיחה | לא קיים | השני רואה מחוון; שליחה דורשת אישור מפורש ונרשמת (ח40-30) | E2E שני דפדפנים |
-| ק40-19 | Webhook של הודעה נכנסת מגיע פעמיים | — | הודעה אחת. ייחודיות על `external_message_id` | Integration: שני POST זהים |
-| ק40-20 | אורח כותב בוואטסאפ ובמייל על אותה הזמנה | — | **שתי שיחות** (ערוצים שונים), שתיהן בלשונית ההודעות של הפרופיל וב-`booking`. מיזוג שיחות הוא פעולה יזומה | Integration |
-| ק40-21 | הודעה יוצאת נכשלת סופית | נעלמת | נשארת בשרשור עם ⚠️, נוצרת משימת מעקב, השיחה חוזרת ל-`assigned` | Integration עם ספק מדומה שנכשל |
-| ק40-22 | **בקשת מחיקה כשיש חוזה חתום וחשבונית** | לא קיים | פרטי קשר נמחקים; חוזה וחשבונית עוברים ל-`restricted` עם `retention_until`; tombstone נשאר; המבקש מקבל פירוט מה נשמר ולמה | Integration + Security: משתמש בלי `finance.view` לא מגיע לשכבה 2 |
+| #      | המקרה                                                        | מה קורה היום (מערכת חיה) | מה **צריך** לקרות                                                                                                        | איך בודקים                                                                        |
+| ------ | ------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| ק40-01 | טלפון מוקלד `050-123-4567` והאורח כבר קיים כ-`+972501234567` | נוצר אורח שני            | הנרמול מזהה; ה-DB דוחה; הממשק מציג את הקיים                                                                              | Integration: שני `insert`, השני נכשל `23505` ומחזיר `ConflictError` עם ה-ID הקיים |
+| ק40-02 | מספר זר `+33612345678`                                       | נשמר כמחרוזת             | נשמר כ-`+33612345678`, לא כישראלי                                                                                        | Unit על `normalize_phone_il`                                                      |
+| ק40-03 | מספר `972501234567` בלי `+`                                  | —                        | מתפרש כישראלי (מגבלה מתועדת, ח40-03). הממשק הזהיר לפני כן                                                                | Unit + בדיקת קיום האזהרה בממשק                                                    |
+| ק40-04 | אותו מייל לשני אנשים (זוג)                                   | —                        | **מותר.** שני אורחים, בלי אזהרה                                                                                          | Integration: שתי יצירות מצליחות                                                   |
+| ק40-05 | טלפון ריק, מייל בלבד                                         | —                        | אורח נוצר; `phone_e164` null ולכן מחוץ לאינדקס הייחודי; דדופליקציה לפי מייל = הצעה בלבד                                  | Integration                                                                       |
+| ק40-06 | **מיזוג בזמן שנוצרת הזמנה מול המוזג**                        | לא קיים                  | שורת האורח נעולה; היצירה ממתינה ואז נכשלת `retryable` עם השורד; ניסיון חוזר מצליח על השורד                               | Concurrency: שתי טרנזקציות במקביל. אין הזמנה יתומה, אין כפילות                    |
+| ק40-07 | ביטול מיזוג אחרי שהזמנה שהוזזה עודכנה                        | לא קיים                  | הביטול **נדחה** ומפרט מה השתנה (ח40-15)                                                                                  | Integration                                                                       |
+| ק40-08 | ביטול מיזוג אחרי 31 יום                                      | לא קיים                  | נדחה: "חלון הביטול (30 יום) חלף. פנו לתמיכה."                                                                            | Unit על גבול הזמן                                                                 |
+| ק40-09 | מיזוג של אורח לתוך עצמו                                      | לא קיים                  | נדחה בוולידציה                                                                                                           | Unit                                                                              |
+| ק40-10 | מיזוג משורשר: A→B, ואז B→C                                   | לא קיים                  | `A.merged_into` מתעדכן ל-C. קישור ישן ל-A מגיע ל-C                                                                       | Integration + מעבר על שרשרת                                                       |
+| ק40-11 | שני עובדים ממזגים את אותו זוג במקביל                         | לא קיים                  | הראשון מנצח; השני מקבל "הפרופילים כבר מוזגו"                                                                             | Concurrency, נעילה בסדר `id`                                                      |
+| ק40-12 | ליד נכנס לאורח **חסום**                                      | לא קיים                  | הליד נוצר עם דגל בולט "אורח חסום — {{סיבה}}". הצעה נחסמת עד אישור מנהל                                                   | Integration + בדיקת שלילה                                                         |
+| ק40-13 | ליד ללא טלפון וללא מייל                                      | —                        | נדחה בוולידציה                                                                                                           | Unit                                                                              |
+| ק40-14 | ליד נסגר `lost`, האדם חוזר חודש אחרי                         | —                        | **ליד חדש**, מוצמד לאותו `guest_id`. הישן נשאר `lost` — כדי שסטטיסטיקת הסיבות לא תשקר                                    | Integration                                                                       |
+| ק40-15 | הצעה מתקבלת אחרי שהתאריכים נתפסו                             | לא קיים                  | נדחית עם הודעה + התראה מיידית לצוות + הצעת חלופה                                                                         | Concurrency: קבלה + הזמנה מתחרה                                                   |
+| ק40-16 | הצעה נערכת אחרי שנשלחה                                       | ניתן היה לשנות בשקט      | נוצרת גרסה 2; הקישור הישן מציג "ההצעה עודכנה" ולא מחיר אחר                                                               | E2E: פתיחת הקישור הישן                                                            |
+| ק40-17 | הצעה פגה בזמן שהאורח פתוח בדף                                | לא קיים                  | הקבלה נדחית עם "ההצעה פגה ב-30.3". הדף מציג "בקש הצעה מעודכנת"                                                           | E2E עם שעון מוקפא                                                                 |
+| ק40-18 | שני עובדים כותבים תשובה לאותה שיחה                           | לא קיים                  | השני רואה מחוון; שליחה דורשת אישור מפורש ונרשמת (ח40-30)                                                                 | E2E שני דפדפנים                                                                   |
+| ק40-19 | Webhook של הודעה נכנסת מגיע פעמיים                           | —                        | הודעה אחת. ייחודיות על `external_message_id`                                                                             | Integration: שני POST זהים                                                        |
+| ק40-20 | אורח כותב בוואטסאפ ובמייל על אותה הזמנה                      | —                        | **שתי שיחות** (ערוצים שונים), שתיהן בלשונית ההודעות של הפרופיל וב-`booking`. מיזוג שיחות הוא פעולה יזומה                 | Integration                                                                       |
+| ק40-21 | הודעה יוצאת נכשלת סופית                                      | נעלמת                    | נשארת בשרשור עם ⚠️, נוצרת משימת מעקב, השיחה חוזרת ל-`assigned`                                                           | Integration עם ספק מדומה שנכשל                                                    |
+| ק40-22 | **בקשת מחיקה כשיש חוזה חתום וחשבונית**                       | לא קיים                  | פרטי קשר נמחקים; חוזה וחשבונית עוברים ל-`restricted` עם `retention_until`; tombstone נשאר; המבקש מקבל פירוט מה נשמר ולמה | Integration + Security: משתמש בלי `finance.view` לא מגיע לשכבה 2                  |
 
 ---
 
 ## 17. מניעת טעות אנוש
 
-| הטעות | המנגנון |
-| --- | --- |
-| **יצירת אורח כפול בדלפק** | חיפוש מנרמל את מחרוזת החיפוש; טופס היצירה בודק תוך כדי הקלדה ומציג "כבר קיים אורח עם הטלפון הזה — דנה לוי, 3 שהיות" עם כפתור "השתמש בקיים" |
-| **מיזוג של שני אנשים שונים** | מסך זו-מול-זו · מונים · אישור בהקלדת שם השורד · נימוק חובה · באנר ביטול 30 יום · הצעה רק מעל 0.85 · **המערכת לעולם לא ממזגת מעצמה** |
-| **הצעה בתאריכים שגויים** | אישור לפני שליחה עם התאריכים **במילים ובספרות** — "23–26 באפריל 2026 · 3 לילות". שתי טעויות הקלדה לא נראות אותו דבר במילים |
-| **הצעה בסכום שגוי** | סכום חריג ביחס למחירון הנכס (סטייה >30%) מציג "המחיר נמוך ב-42% מהמחירון. להמשיך?" |
-| **תשובה בשיחה הלא נכונה** | כותרת העורך מציגה שם + נכס + תאריכים בקבוע; טיוטה נשמרת **לפי שיחה** ולא נגררת בין שיחות; החלפת שיחה עם טיוטה פתוחה מבקשת אישור |
-| **שליחה לאורח שכבר עזב** | ההודעה מציגה תג "האורח עזב ב-26.4" ליד שדה השליחה |
-| **ייצוא של כל הארגון ע"י מנהל נכס** | הייצוא נבנה מתוך אותה שאילתה מוגבלת-Scope; מסך האישור מציג "412 אורחים · 3 נכסים: …" לפני ההורדה; בדיקת שלילה אוטומטית |
-| **קמפיין לאורח שביקש שלא** | `invite_back` מסננת `marketing_consent = true` **בשאילתה**, לא בבדיקה בסוף |
-| **חשיפת מסמך מזהה בטעות** | מוסתר תמיד; חשיפה חד־פעמית עם נימוק; נרשמת בשם המשתמש |
-| **תבנית עם משתנה שאין לו ערך** | השליחה נחסמת (ח40-37) |
-| **פעולה כפולה** (שליחה, מיזוג, ייצוא) | מפתח ייחודי לכל אחת (§10) |
+| הטעות                                 | המנגנון                                                                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **יצירת אורח כפול בדלפק**             | חיפוש מנרמל את מחרוזת החיפוש; טופס היצירה בודק תוך כדי הקלדה ומציג "כבר קיים אורח עם הטלפון הזה — דנה לוי, 3 שהיות" עם כפתור "השתמש בקיים" |
+| **מיזוג של שני אנשים שונים**          | מסך זו-מול-זו · מונים · אישור בהקלדת שם השורד · נימוק חובה · באנר ביטול 30 יום · הצעה רק מעל 0.85 · **המערכת לעולם לא ממזגת מעצמה**        |
+| **הצעה בתאריכים שגויים**              | אישור לפני שליחה עם התאריכים **במילים ובספרות** — "23–26 באפריל 2026 · 3 לילות". שתי טעויות הקלדה לא נראות אותו דבר במילים                 |
+| **הצעה בסכום שגוי**                   | סכום חריג ביחס למחירון הנכס (סטייה >30%) מציג "המחיר נמוך ב-42% מהמחירון. להמשיך?"                                                         |
+| **תשובה בשיחה הלא נכונה**             | כותרת העורך מציגה שם + נכס + תאריכים בקבוע; טיוטה נשמרת **לפי שיחה** ולא נגררת בין שיחות; החלפת שיחה עם טיוטה פתוחה מבקשת אישור            |
+| **שליחה לאורח שכבר עזב**              | ההודעה מציגה תג "האורח עזב ב-26.4" ליד שדה השליחה                                                                                          |
+| **ייצוא של כל הארגון ע"י מנהל נכס**   | הייצוא נבנה מתוך אותה שאילתה מוגבלת-Scope; מסך האישור מציג "412 אורחים · 3 נכסים: …" לפני ההורדה; בדיקת שלילה אוטומטית                     |
+| **קמפיין לאורח שביקש שלא**            | `invite_back` מסננת `marketing_consent = true` **בשאילתה**, לא בבדיקה בסוף                                                                 |
+| **חשיפת מסמך מזהה בטעות**             | מוסתר תמיד; חשיפה חד־פעמית עם נימוק; נרשמת בשם המשתמש                                                                                      |
+| **תבנית עם משתנה שאין לו ערך**        | השליחה נחסמת (ח40-37)                                                                                                                      |
+| **פעולה כפולה** (שליחה, מיזוג, ייצוא) | מפתח ייחודי לכל אחת (§10)                                                                                                                  |
 
 ### 🔴 שליחת הקישור של האורח הלא נכון
 
@@ -1154,33 +1162,33 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 **המודול תלוי ב:**
 
-| תלות | לשם מה |
-| --- | --- |
-| `src/lib/authz/` (`can`, `permissions`, `roles`) | כל בדיקת גישה |
-| `src/lib/actor/` | `Actor`, כולל השחקן של ה-AI |
-| `src/lib/service/operation.ts` · `idempotency.ts` · `transaction.ts` | נתיב הפעולה, מפתחות ייחודיים, אטומיות |
-| `src/lib/errors/` | `AppError`, `ConflictError`, `BusinessRuleError`, `DATA_OUTCOME_MESSAGE` |
-| `src/lib/audit/` | `AuditEventInput`, `ActorType`, `diffFields`, `NEVER_LOGGED` |
-| `src/lib/contracts/events.ts` | `guest.created` · `guest.merged` · `lead.*` · `quote.*` |
-| `src/lib/contracts/states.ts` | `Page` · `MAX_PAGE_SIZE` · `APPROVAL_*` |
-| `src/lib/booking/types.ts` | `BookingStatus` · `BookingSource` · `PriceLine` · `Hold` · `DateRange` |
-| `src/lib/metrics/` | כל חישוב, עיגול וחלוקה |
-| `public.normalize_phone_il` | דדופליקציה |
-| `0009_booking_core.sql` | `guests` · `bookings` · `holds` |
-| מודול הנכסים | `properties` · `units` · עובדות שפורסמו |
-| מודול התשלומים | יתרה, סטטוס תשלום |
+| תלות                                                                 | לשם מה                                                                   |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/lib/authz/` (`can`, `permissions`, `roles`)                     | כל בדיקת גישה                                                            |
+| `src/lib/actor/`                                                     | `Actor`, כולל השחקן של ה-AI                                              |
+| `src/lib/service/operation.ts` · `idempotency.ts` · `transaction.ts` | נתיב הפעולה, מפתחות ייחודיים, אטומיות                                    |
+| `src/lib/errors/`                                                    | `AppError`, `ConflictError`, `BusinessRuleError`, `DATA_OUTCOME_MESSAGE` |
+| `src/lib/audit/`                                                     | `AuditEventInput`, `ActorType`, `diffFields`, `NEVER_LOGGED`             |
+| `src/lib/contracts/events.ts`                                        | `guest.created` · `guest.merged` · `lead.*` · `quote.*`                  |
+| `src/lib/contracts/states.ts`                                        | `Page` · `MAX_PAGE_SIZE` · `APPROVAL_*`                                  |
+| `src/lib/booking/types.ts`                                           | `BookingStatus` · `BookingSource` · `PriceLine` · `Hold` · `DateRange`   |
+| `src/lib/metrics/`                                                   | כל חישוב, עיגול וחלוקה                                                   |
+| `public.normalize_phone_il`                                          | דדופליקציה                                                               |
+| `0009_booking_core.sql`                                              | `guests` · `bookings` · `holds`                                          |
+| מודול הנכסים                                                         | `properties` · `units` · עובדות שפורסמו                                  |
+| מודול התשלומים                                                       | יתרה, סטטוס תשלום                                                        |
 
 **תלויים בו:**
 
-| מי | במה |
-| --- | --- |
+| מי                                         | במה                                                                          |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
 | [`41-guest-portal.md`](41-guest-portal.md) | `guests` · `guest_access_links` · `message_templates` · שיחות `guest_portal` |
-| מודול ההזמנות | `guest_id` חובה על כל הזמנה |
-| Website Studio | טופס יצירת קשר → `lead` |
-| מודול הערוצים | הודעות OTA → `conversations` |
-| מודול הסוכנים | לידים והצעות של סוכן; ייחוס עמלה |
-| דוחות | משפך, נאמנות, פילוח ערוצים |
-| מודול החשבוניות | פרטי אורח על חשבונית |
+| מודול ההזמנות                              | `guest_id` חובה על כל הזמנה                                                  |
+| Website Studio                             | טופס יצירת קשר → `lead`                                                      |
+| מודול הערוצים                              | הודעות OTA → `conversations`                                                 |
+| מודול הסוכנים                              | לידים והצעות של סוכן; ייחוס עמלה                                             |
+| דוחות                                      | משפך, נאמנות, פילוח ערוצים                                                   |
+| מודול החשבוניות                            | פרטי אורח על חשבונית                                                         |
 
 ---
 
@@ -1188,31 +1196,31 @@ average_stay_value      = averagePer(lifetime_revenue_agorot, stay_count)
 
 ### Unit
 
-| בדיקה | מה היא מוכיחה |
-| --- | --- |
-| `normalize_phone_il` על 9 הפורמטים בח40-02 | הדדופליקציה עובדת על מה שאנשים באמת מקלידים |
-| נרמול מחזיר `null` על קלט ריק / לא ספרתי | לא נוצר מפתח דדופליקציה מזבל |
-| ציון התאמה §7.1 | הסף 0.85 לא מציע מיזוג של "דוד כהן" ו"דוד כהן" בלי טלפון משותף |
-| מכונת מצבי ליד | כל מעבר לא חוקי נדחה, כולל `booked → lost` |
-| מכונת מצבי הצעה | `accepted` סופי; `sent → draft` נדחה |
-| חישוב `valid_until` סביב שעון קיץ | הצעה לא פגה שעה מוקדם מדי |
-| רינדור תבנית | כל 17 המשתנים; משתנה חסר **חוסם** ולא מרנדר ריק |
-| נרמול `\n` בייבוא | פעם אחת בלבד |
-| `safeDivide` במכנה אפס | `null`, לא `0`, לא חלוקה באפס |
+| בדיקה                                      | מה היא מוכיחה                                                  |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `normalize_phone_il` על 9 הפורמטים בח40-02 | הדדופליקציה עובדת על מה שאנשים באמת מקלידים                    |
+| נרמול מחזיר `null` על קלט ריק / לא ספרתי   | לא נוצר מפתח דדופליקציה מזבל                                   |
+| ציון התאמה §7.1                            | הסף 0.85 לא מציע מיזוג של "דוד כהן" ו"דוד כהן" בלי טלפון משותף |
+| מכונת מצבי ליד                             | כל מעבר לא חוקי נדחה, כולל `booked → lost`                     |
+| מכונת מצבי הצעה                            | `accepted` סופי; `sent → draft` נדחה                           |
+| חישוב `valid_until` סביב שעון קיץ          | הצעה לא פגה שעה מוקדם מדי                                      |
+| רינדור תבנית                               | כל 17 המשתנים; משתנה חסר **חוסם** ולא מרנדר ריק                |
+| נרמול `\n` בייבוא                          | פעם אחת בלבד                                                   |
+| `safeDivide` במכנה אפס                     | `null`, לא `0`, לא חלוקה באפס                                  |
 
 ### Integration
 
-| בדיקה | מה היא מוכיחה |
-| --- | --- |
-| שתי יצירות עם אותו טלפון | האינדקס דוחה; `ConflictError` מפנה לקיים |
-| מיזוג מלא | כל הילדים זזו; `moved` שלם; המוזג `deleted_at` + `merged_into_guest_id` |
-| ביטול מיזוג | חוזר בדיוק, כולל שדות שנדרסו |
-| ביטול אחרי שינוי | **נדחה**, ומפרט |
-| שליחת הצעה | `lines_snapshot` + `document_sha256` הוקפאו; קישור הונפק |
-| עריכה אחרי שליחה | נוצרה גרסה 2; הקישור הישן בוטל |
-| Webhook כפול | שיחה אחת, הודעה אחת |
-| כשל משלוח | ההודעה נשארת; משימה נוצרה |
-| טריגר `lifetime_revenue_agorot` | מתעדכן ב-`confirmed` וב-`cancelled`, ולא מקבל ערך מ-Caller |
+| בדיקה                           | מה היא מוכיחה                                                           |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| שתי יצירות עם אותו טלפון        | האינדקס דוחה; `ConflictError` מפנה לקיים                                |
+| מיזוג מלא                       | כל הילדים זזו; `moved` שלם; המוזג `deleted_at` + `merged_into_guest_id` |
+| ביטול מיזוג                     | חוזר בדיוק, כולל שדות שנדרסו                                            |
+| ביטול אחרי שינוי                | **נדחה**, ומפרט                                                         |
+| שליחת הצעה                      | `lines_snapshot` + `document_sha256` הוקפאו; קישור הונפק                |
+| עריכה אחרי שליחה                | נוצרה גרסה 2; הקישור הישן בוטל                                          |
+| Webhook כפול                    | שיחה אחת, הודעה אחת                                                     |
+| כשל משלוח                       | ההודעה נשארת; משימה נוצרה                                               |
+| טריגר `lifetime_revenue_agorot` | מתעדכן ב-`confirmed` וב-`cancelled`, ולא מקבל ערך מ-Caller              |
 
 ### E2E
 
@@ -1258,18 +1266,19 @@ exported CSV contains no row outside the actor's scope
 
 ### Regression
 
-| בדיקה | מה היא מוכיחה |
-| --- | --- |
-| הצעה שנשלחה ב-1.1 מציגה את אותו מחיר אחרי שינוי מחירון | ההקפאה עובדת |
-| תבנית שהשתנתה לא משנה הודעה שכבר נשלחה | `rendered_at` + הקפאה |
+| בדיקה                                                         | מה היא מוכיחה                |
+| ------------------------------------------------------------- | ---------------------------- |
+| הצעה שנשלחה ב-1.1 מציגה את אותו מחיר אחרי שינוי מחירון        | ההקפאה עובדת                 |
+| תבנית שהשתנתה לא משנה הודעה שכבר נשלחה                        | `rendered_at` + הקפאה        |
 | ה-17 משתנים העבריים ממשיכים לעבוד אחרי כל שינוי במנוע התבניות | לא איבדנו יכולת מהמערכת החיה |
-| `guest_merges` ישנים נשארים ניתנים לקריאה | ביטול מיזוג לא נשבר בשדרוג |
+| `guest_merges` ישנים נשארים ניתנים לקריאה                     | ביטול מיזוג לא נשבר בשדרוג   |
 
 ---
 
 ## 20. תנאי קבלה
 
 **מסד**
+
 - [ ] `guests` הורחבה: `merged_into_guest_id` · `preferred_channel` · `preferences` · `first_stay_at` · `last_stay_at` · `stay_count` · `lifetime_revenue_agorot` · `erasure_state` · `erasure_requested_at` · `erased_at` · `retention_until` · `source_first_touch`
 - [ ] `guest_merges` · `leads` · `quotes` · `quote_lines` · `conversations` · `messages` · `conversation_drafts` · `message_templates` נוצרו, כולן עם `organization_id` ובלוק מטא-דאטה
 - [ ] אינדקסים לפי §3
@@ -1278,6 +1287,7 @@ exported CSV contains no row outside the actor's scope
 - [ ] RLS על כל טבלה, ארבע מדיניויות, `with check` ב-`insert`, אין `using (true)`
 
 **שרת**
+
 - [ ] כל פעולה משנת-מצב עוברת `can()` → ולידציה → חוק עסקי → טרנזקציה → Audit → Domain Event
 - [ ] מפתחות ייחודיים על שליחה · שליחת הצעה · קבלה · מיזוג · ביטול · ייצוא · הנפקת קישור
 - [ ] נעילה אופטימית על `guests` · `quotes` · `conversations`
@@ -1285,29 +1295,35 @@ exported CSV contains no row outside the actor's scope
 - [ ] ההצעה מרונדרת בהקרנת `rate.public` קבועה, ולא בהענקות השולח
 
 **הרשאות**
+
 - [ ] הסתרה ברמת שדה בשכבת השירות, לא במסך
 - [ ] ⚠️ `guest.merge` נוסף לקטלוג, או שהמיזוג דורש `guest.update` + `guest.delete` יחד
 - [ ] כל דוח וכל ייצוא מכבדים Scope
 
 **ממשק**
+
 - [ ] פרופיל 360° · רשימת אורחים · מיזוג · לוח לידים · עורך הצעה · תיבה
 - [ ] לכל מסך: מצב ריק, מצב טעינה, מצב שגיאה — נבדלים זה מזה
 - [ ] מובייל: לוח לידים כרשימה מקובצת, תיבה בשלושה מסכים
 - [ ] מחוון נוכחות בשיחה
 
 **בדיקות**
+
 - [ ] כל בדיקות §19 עוברות
 - [ ] לכל הרשאה קיימת בדיקת שלילה
 
 **Audit**
+
 - [ ] כל אירוע ב-§14 נרשם כמשפט בעברית עם לפני/אחרי
 - [ ] תוכן הודעה, מסמך מזהה וטוקן לעולם לא נרשמים
 
 **שגיאות**
+
 - [ ] כל כשל מחזיר `AppError` עם `userMessage` בעברית, `dataOutcome` ו-`retryable` נכונים
 - [ ] הודעה שנכשלה נשארת גלויה בשרשור
 
 **פתוח וממתין לבעל המוצר / למשפטן**
+
 - [ ] ❓ החזקת מספר ת"ז: מותר, לכמה זמן, ובאילו תנאים (ח40-07)
 - [ ] ❓ מחיקה מול חובת שמירה: תקופות ומעמד בקשת המחיקה (§13.6)
 - [ ] ❓ ברירת מחדל לתוקף הצעה לכל ארגון (ח40-25)

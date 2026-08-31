@@ -109,13 +109,13 @@ export const MENU: readonly MenuSectionDefinition[] = [
             'incident.view',
           ],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/action-center' },
       },
       {
         id: 'activity',
         label: 'פעילות אחרונה',
         requires: { kind: 'grant', anyOf: ['audit.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/activity' },
       },
     ],
   },
@@ -152,19 +152,19 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'guests',
         label: 'אורחים',
         requires: { kind: 'grant', anyOf: ['guest.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/guests' },
       },
       {
         id: 'leads',
         label: 'לידים',
         requires: { kind: 'grant', anyOf: ['lead.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/leads' },
       },
       {
         id: 'inbox',
         label: 'תיבת הודעות',
         requires: { kind: 'grant', anyOf: ['message.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/inbox' },
       },
     ],
   },
@@ -184,19 +184,19 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'agents',
         label: 'סוכנים',
         requires: { kind: 'grant', anyOf: ['agent.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/agents' },
       },
       {
         id: 'agencies',
         label: 'סוכנויות',
         requires: { kind: 'grant', anyOf: ['agency.manage'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/agencies' },
       },
       {
         id: 'quotes',
         label: 'הצעות מחיר',
         requires: { kind: 'grant', anyOf: ['quote.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/quotes' },
       },
       {
         id: 'promotions',
@@ -205,13 +205,13 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['pricing.manage', 'product.manage'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/promotions' },
       },
       {
         id: 'channels',
         label: 'ערוצי הפצה',
         requires: { kind: 'grant', anyOf: ['channel.manage'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/channels' },
       },
     ],
   },
@@ -228,13 +228,22 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['checklist.manage', 'task.complete', 'task.view'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/preparation' },
+      },
+      {
+        id: 'operations-report',
+        label: 'דוח תפעולי',
+        // Deliberately a different grant from the financial report: this screen
+        // refuses to carry a currency figure at all, so it reaches people the
+        // revenue report does not.
+        requires: { kind: 'grant', anyOf: ['availability.view'] },
+        destination: { status: 'ready', href: '/reports/operations' },
       },
       {
         id: 'tasks',
         label: 'משימות',
         requires: { kind: 'grant', anyOf: ['task.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/tasks' },
       },
       {
         id: 'maintenance',
@@ -243,7 +252,7 @@ export const MENU: readonly MenuSectionDefinition[] = [
         // tasks and incidents. When the module lands and the grant is added,
         // this line changes and nothing else does.
         requires: { kind: 'grant', anyOf: ['task.view', 'incident.update'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/maintenance' },
       },
       {
         id: 'incidents',
@@ -255,13 +264,13 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['incident.view', 'incident.create'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/incidents' },
       },
       {
         id: 'inventory',
         label: 'מלאי',
         requires: { kind: 'grant', anyOf: ['inventory.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/inventory' },
       },
     ],
   },
@@ -275,25 +284,25 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'payments',
         label: 'תשלומים',
         requires: { kind: 'grant', anyOf: ['payment.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/finance/payments' },
       },
       {
         id: 'invoices',
         label: 'חשבוניות',
         requires: { kind: 'grant', anyOf: ['invoice.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/finance/invoices' },
       },
       {
         id: 'expenses',
         label: 'הוצאות',
         requires: { kind: 'grant', anyOf: ['expense.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/finance/expenses' },
       },
       {
         id: 'commissions',
         label: 'עמלות',
         requires: { kind: 'grant', anyOf: ['commission.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/finance/commissions' },
       },
       {
         id: 'owners',
@@ -302,22 +311,26 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['owner.view', 'owner_statement.view'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/finance/owners' },
       },
       {
         id: 'reconciliation',
         label: 'התאמות',
         requires: { kind: 'grant', anyOf: ['finance.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/finance/reconciliation' },
       },
       {
         id: 'reports',
         label: 'דוחות',
         requires: {
           kind: 'grant',
-          anyOf: ['report.financial.view', 'report.agent.view'],
+          // Narrowed from `report.agent.view` as well: `/reports` gates on
+          // `report.financial.view` alone, so a revenue_manager or
+          // agency_manager saw the item, clicked it and was redirected. A menu
+          // entry that leads to a refusal is worse than no entry.
+          anyOf: ['report.financial.view'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/reports' },
       },
     ],
   },
@@ -374,14 +387,18 @@ export const MENU: readonly MenuSectionDefinition[] = [
       {
         id: 'units',
         label: 'יחידות',
-        requires: { kind: 'grant', anyOf: ['unit.manage'] },
-        destination: { status: 'planned' },
+        // `property.view` sits beside `unit.manage` because the screen is a
+        // read of inventory and the catalogue has no `unit.view`. Gating the
+        // entry on the write grant alone hid the list from everyone entitled
+        // to look at it without changing it.
+        requires: { kind: 'grant', anyOf: ['unit.manage', 'property.view'] },
+        destination: { status: 'ready', href: '/units' },
       },
       {
         id: 'team',
         label: 'צוות',
         requires: { kind: 'grant', anyOf: ['user.view'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/team' },
       },
       {
         id: 'roles',
@@ -390,21 +407,27 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['role.assign', 'role.create', 'permission.edit'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/roles' },
       },
       {
         id: 'integrations',
         label: 'חיבורים',
         requires: { kind: 'grant', anyOf: ['integration.manage'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/integrations' },
       },
       {
         id: 'audit',
         label: 'יומן ביקורת',
         // Distinct from `activity` above: that is a feed of what happened
         // recently, this is the searchable record with before/after values.
-        requires: { kind: 'grant', anyOf: ['audit.view', 'agent.audit.view'] },
-        destination: { status: 'planned' },
+        //
+        // `agent.audit.view` was here and had to go: a general manager holds
+        // it and does not hold `audit.view`, while `audit_events_select`
+        // requires `audit.view` — so the entry offered them a screen that
+        // redirected them straight back. It belongs here again the day an
+        // agent-only trail exists to send them to.
+        requires: { kind: 'grant', anyOf: ['audit.view'] },
+        destination: { status: 'ready', href: '/audit' },
       },
     ],
   },
@@ -424,7 +447,7 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'billing',
         label: 'חבילה וחיוב',
         requires: { kind: 'grant', anyOf: ['organization.billing.manage'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/settings/billing' },
       },
       {
         id: 'security',
@@ -433,7 +456,7 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['organization.settings.edit', 'permission.edit'],
         },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/settings/security' },
       },
     ],
   },
@@ -578,49 +601,49 @@ export const QUICK_CREATE: readonly MenuItemDefinition[] = [
     id: 'new-booking',
     label: 'הזמנה חדשה',
     requires: { kind: 'grant', anyOf: ['booking.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/bookings/new' },
   },
   {
     id: 'new-guest',
     label: 'אורח חדש',
     requires: { kind: 'grant', anyOf: ['guest.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/guests/new' },
   },
   {
     id: 'new-quote',
     label: 'הצעת מחיר',
     requires: { kind: 'grant', anyOf: ['quote.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/quotes/new' },
   },
   {
     id: 'new-task',
     label: 'משימה',
     requires: { kind: 'grant', anyOf: ['task.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/tasks/new' },
   },
   {
     id: 'new-incident',
     label: 'דיווח על תקלה',
     requires: { kind: 'grant', anyOf: ['incident.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/incidents/new' },
   },
   {
     id: 'new-expense',
     label: 'הוצאה',
     requires: { kind: 'grant', anyOf: ['expense.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/finance/expenses/new' },
   },
   {
     id: 'new-property',
     label: 'נכס',
     requires: { kind: 'grant', anyOf: ['property.create'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/properties/new' },
   },
   {
     id: 'invite-member',
     label: 'הזמנת חבר צוות',
     requires: { kind: 'grant', anyOf: ['user.invite', 'agent.invite'] },
-    destination: { status: 'planned' },
+    destination: { status: 'ready', href: '/team/invite' },
   },
 ]
 

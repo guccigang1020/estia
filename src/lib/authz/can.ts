@@ -356,6 +356,93 @@ function scopeReaches(
   }
 }
 
+// ── Comparing two scopes ──────────────────────────────────────────────────
+
+/**
+ * Is everything `inner` reaches also reached by `outer`?
+ *
+ * `scopeFor` replaces a scope rather than intersecting it, so it cannot tell a
+ * narrowing from a widening — its comment above says in as many words that
+ * whoever fills `scopeOverrides` owns that comparison. This is that
+ * comparison, written once so there is not a second opinion about it living
+ * somewhere else.
+ *
+ * Deny by default, and deliberately conservative: two scopes of different
+ * kinds are reported as *not* contained even where a person could argue
+ * otherwise. `units` inside `properties` is the clearest case — a unit list
+ * plainly feels like "less" than the properties holding those units, and this
+ * function cannot know which property a unit belongs to without a lookup. The
+ * honest answer is "cannot tell", and the safe spelling of "cannot tell" is
+ * `false`.
+ *
+ * `own_records` is contained by `all_organization` and by nothing else. It is
+ * not comparable to a location scope in either direction: a record the person
+ * created inside a property they no longer hold is reached by `own_records`
+ * and not by `properties`, and a colleague's record inside that property is
+ * reached by `properties` and not by `own_records`. `clampScope` below is what
+ * turns that incomparability into an answer.
+ */
+export function scopeContains(outer: Scope, inner: Scope): boolean {
+  switch (outer.kind) {
+    case 'all_organization':
+      return true
+
+    case 'properties':
+      return (
+        inner.kind === 'properties' &&
+        isSubset(inner.propertyIds, outer.propertyIds)
+      )
+
+    case 'units':
+      return inner.kind === 'units' && isSubset(inner.unitIds, outer.unitIds)
+
+    case 'team':
+      return inner.kind === 'team' && isSubset(inner.teamIds, outer.teamIds)
+
+    case 'own_records':
+      return inner.kind === 'own_records'
+
+    default:
+      return false
+  }
+}
+
+function isSubset(inner: readonly string[], outer: readonly string[]): boolean {
+  const held = new Set(outer)
+  return inner.every((id) => held.has(id))
+}
+
+/**
+ * The scope to actually apply, given what was **granted** and what was
+ * **asked for**.
+ *
+ * This is the function that makes `scopeOverrides` safe to populate at all. A
+ * grant comes from a `membership_scopes` row, which row level security lets
+ * only an authority write. A request comes from further out — an agent's
+ * stored terms, edited on a settings screen by somebody holding
+ * `agent.scope.manage`. The request may narrow the grant and may never exceed
+ * it, and this is where that is enforced rather than hoped for.
+ *
+ * Three outcomes, and every pair of inputs lands on one of them:
+ *
+ *   · the request is inside the grant → the request. A real narrowing, kept.
+ *   · the request is *wider*          → the grant. A settings screen cannot
+ *                                       widen what no membership scope gave.
+ *   · neither contains the other      → `own_records`, which is exactly the
+ *                                       `FALLBACK_SCOPE` `resolve.ts` already
+ *                                       applies when no scope row exists.
+ *
+ * So the result is always the request, the grant, or the floor — never a
+ * fourth thing, and never anything wider than the grant. That single property
+ * is what the regression tests assert, and it is the reason projecting an
+ * agent's configured reach into an override stopped being a widening.
+ */
+export function clampScope(granted: Scope, requested: Scope): Scope {
+  if (scopeContains(granted, requested)) return requested
+  if (scopeContains(requested, granted)) return granted
+  return { kind: 'own_records' }
+}
+
 // ── Field-level access ────────────────────────────────────────────────────
 
 /**

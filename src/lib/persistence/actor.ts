@@ -51,39 +51,51 @@
  * as an agency manager's own `agent.view` and `agent.invite`, are kept.
  * `agentRoleAssignment` in `src/lib/agents/access.ts` states the split.
  *
- * ── What is deliberately *not* projected: the inventory reach ─────────────
+ * ── The other half: the inventory reach ───────────────────────────────────
  *
- * `agentScopes` in `src/lib/agents/lifecycle.ts` computes the other half of an
- * agent's resolution — `scope: own_records` plus an `inventory` override for
- * the properties they may sell — and nothing here reads it. That looks like
- * the same defect as the one above, and it is not the same fix.
+ * `loadScopeNarrowing` reads the same terms row for the properties an agent
+ * may sell. This file used to refuse to, and the refusal was right at the
+ * time. `scopeFor` in `authz/can.ts` **replaces** the default scope with a
+ * per-family override rather than intersecting it, and `attachExistingUser`
+ * wrote agent memberships with no `membership_scopes` row at all — so every
+ * agent resolved to the `own_records` fallback, and projecting the stored
+ * reach onto `Actor.scopeOverrides` would have taken each of them from
+ * *nothing* to whatever the agent settings screen named, `all_properties`
+ * included, which converts to `all_organization`. That is a widening decided
+ * by a screen which is not the permissions screen.
  *
- * `scopeFor` in `authz/can.ts` **replaces** the default scope with the
- * override for that family; it does not intersect them. An agent membership is
- * written by `attachExistingUser` without a `membership_scopes` row at all, so
- * every agent in the product resolves to the `own_records` fallback — which
- * reaches no property and no unit, because neither carries an assignee.
- * Writing the stored inventory reach into `scopeOverrides.inventory` would
- * therefore *widen* every agent, from nothing to whatever the settings name,
- * and `all_properties` converts to `all_organization`.
+ * What changed is not this file's nerve; it is the grant underneath it.
+ * `attachExistingUser` now writes a real `membership_scopes` row derived from
+ * the same stored reach — policed by 0026's `membership_scopes_*_agent`
+ * policies — and `saveSettings` keeps it in step in both directions. So there
+ * is now something that was actually granted, and `resolveActor` clamps every
+ * value this method returns against it; see `applyScopeNarrowing` in
+ * `src/lib/actor/resolve.ts` and `clampScope` in `authz/can.ts`. The terms row
+ * can narrow the grant and cannot exceed it.
  *
- * That widening is the feature's stated intent, and it is still a widening: it
- * makes the agent settings screen the place where inventory reach is decided,
- * without any membership scope having granted it first. Closing it belongs
- * with whoever gives agent memberships a real scope row — not with a one-line
- * projection here, which is why this file leaves `Actor.scopeOverrides`
- * undefined and every agent fails closed on inventory instead.
+ * The direction that matters most is the one an agent with no scope row still
+ * takes. `clampScope` finds `properties` and `own_records` incomparable and
+ * answers with the floor, so a membership written before any of this reaches
+ * no inventory, exactly as it did yesterday. Nothing widens without a row an
+ * authority wrote.
  */
 
-import { loadAgentAccessForMembership } from './agents'
+import {
+  loadAgentAccessForMembership,
+  loadAgentInventoryForMembership,
+} from './agents'
 import { asAgentPresetRole } from '../agents/access'
-import { agentActorRoleAssignments } from '../agents/lifecycle'
+import {
+  agentActorRoleAssignments,
+  agentScopeNarrowing,
+} from '../agents/lifecycle'
 import { MEMBERSHIP_STATUSES } from '../authz/can'
 import type {
   ActorSource,
   MembershipRow,
   MembershipScopeRow,
   RoleAssignment,
+  ScopeNarrowing,
 } from '../actor/source'
 import type { SystemRole } from '../authz/roles'
 import type { Grant } from '../authz/permissions'
@@ -283,6 +295,34 @@ export class SupabaseActorSource implements ActorSource {
       unitIds: asStringArray(row, 'unit_ids'),
       teamIds: asStringArray(row, 'team_ids'),
     }
+  }
+
+  /**
+   * The per-family reach of an agent membership, or `null` for everybody else.
+   *
+   * One read, on `agent_organization_settings.membership_id`, which is
+   * `UNIQUE`. It is a second read of the table `projectAgentAccess` may also
+   * touch, and they are separate for the reason `AGENT_INVENTORY_COLUMNS` is
+   * named separately from `AGENT_ACCESS_COLUMNS`: one answers what an agent
+   * may do and the other where, they are consumed by different halves of the
+   * actor, and `projectAgentAccess` does not run at all unless a preset role
+   * is on the membership. Folding them together would make the *scope* half
+   * conditional on the *role* half, and a membership whose preset role was
+   * removed would silently keep the reach.
+   *
+   * A membership with no terms row is not an agent, answers `null`, and
+   * resolves exactly as every ordinary membership does — one scope, no
+   * overrides, every existing call site unchanged.
+   */
+  async loadScopeNarrowing(
+    membershipId: string,
+  ): Promise<ScopeNarrowing | null> {
+    const inventory = await loadAgentInventoryForMembership(
+      this.db,
+      membershipId,
+    )
+    if (inventory === null) return null
+    return agentScopeNarrowing(inventory)
   }
 
   async loadPlan(organizationId: string): Promise<EffectivePlan | null> {

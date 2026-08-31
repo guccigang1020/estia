@@ -19,7 +19,7 @@
  * `resolve.ts` where they are tested.
  */
 
-import type { MembershipStatus } from '../authz/can'
+import type { MembershipStatus, ResourceFamily, Scope } from '../authz/can'
 import type { Grant } from '../authz/permissions'
 import type { EffectivePlan } from '../plans/plan'
 
@@ -73,6 +73,31 @@ export interface MembershipScopeRow {
 }
 
 /**
+ * A membership whose reach genuinely differs by what is being reached for.
+ *
+ * One `membership_scopes` row cannot say two things, and an external sales
+ * agent needs it to: *these properties* to see what is free to sell, and *only
+ * their own records* for the bookings, commissions and leads inside them. So
+ * the row grants the breadth, and this says which family may spend it.
+ *
+ * It is a **request**, not an answer. `resolve.ts` clamps every value here
+ * against the scope the row actually granted — see `clampScope` in
+ * `authz/can.ts` — so a source that asked for more than the membership holds
+ * gets the membership's answer and not its own. That is what lets this be
+ * populated from a settings screen without the settings screen becoming the
+ * place inventory reach is decided.
+ *
+ * Absent for almost every membership. An employee has one scope, `loadScopeNarrowing`
+ * answers `null`, and nothing about their resolution changes.
+ */
+export interface ScopeNarrowing {
+  /** Applies wherever no family below names something else. */
+  scope: Scope
+  /** Per-family requests, each clamped to the granted scope by `resolve.ts`. */
+  families: Partial<Record<ResourceFamily, Scope>>
+}
+
+/**
  * The data-access contract.
  *
  * Every method returns plain data or `null`. None of them throw for "absent" —
@@ -94,6 +119,19 @@ export interface ActorSource {
    * A missing scope is not treated as "everything" — see `resolve.ts`.
    */
   loadScope(membershipId: string): Promise<MembershipScopeRow | null>
+
+  /**
+   * The per-family narrowing this membership carries, or `null` for the
+   * overwhelming majority that carry none.
+   *
+   * Optional on the interface so that a source written before this existed
+   * still satisfies it and still resolves exactly as it did. `resolveActor`
+   * treats a source without the method and a source answering `null`
+   * identically: `Actor.scopeOverrides` is left undefined and every resource
+   * uses the membership's one scope, which is the behaviour every call site
+   * was written against.
+   */
+  loadScopeNarrowing?(membershipId: string): Promise<ScopeNarrowing | null>
 
   /** The organization's live subscription and the plan it points at. */
   loadPlan(organizationId: string): Promise<EffectivePlan | null>

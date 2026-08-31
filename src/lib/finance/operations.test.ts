@@ -603,3 +603,157 @@ describe('outstandingAgorot', () => {
     expect(outstandingAgorot(100_000, [payment])).toBe(75_000)
   })
 })
+
+/* ================================================== expense.rule.create == */
+
+const EXPENSE_RULE_ID = 'dddddddd-0000-4000-8000-000000000004'
+
+const expenseInput = {
+  ruleId: EXPENSE_RULE_ID,
+  label: 'תחזוקת בריכה',
+  category: 'אחזקה',
+  kind: 'fixed' as const,
+  frequency: 'monthly' as const,
+  amountAgorot: 145_000,
+  allocation: 'per_day' as const,
+  scopeKind: 'organization' as const,
+  effectiveFrom: '2026-01-01',
+  approvalRequired: true,
+}
+
+/**
+ * `Record<string, unknown>` rather than a `Partial` of the input.
+ *
+ * `expenseInput` is written with `as const` on its enum fields so the happy
+ * path is checked against the real tuples — which makes a `Partial` of it
+ * refuse `{ kind: 'variable' }`, and the refusals below are exactly the cases
+ * that have to vary those fields. What validates the result is the operation's
+ * own schema, which is the check that matters here.
+ */
+async function createExpenseOnce(
+  overrides: Record<string, unknown> = {},
+  key: string | null = 'expense-key-1',
+) {
+  return ops.createExpenseRule.run({
+    request: { input: { ...expenseInput, ...overrides }, idempotencyKey: key },
+    context: context(),
+    services: services(),
+  })
+}
+
+describe('expense.rule.create', () => {
+  it('writes the rule and records one audit event naming what was agreed', async () => {
+    const outcome = await createExpenseOnce()
+
+    expect(outcome.data.id).toBe(EXPENSE_RULE_ID)
+    expect(outcome.data.kind).toBe('fixed')
+    expect(outcome.data.amountAgorot).toBe(145_000)
+    expect(outcome.data.approvalRequired).toBe(true)
+    expect(repo.expenseRules.get(EXPENSE_RULE_ID)).toBeDefined()
+
+    expect(audit.records).toHaveLength(1)
+    expect(audit.records[0].action).toBe('expense.create')
+    expect(audit.records[0].summary).toContain('תחזוקת בריכה')
+  })
+
+  it('replays rather than writing a second rule for the same key', async () => {
+    const first = await createExpenseOnce()
+    const second = await createExpenseOnce()
+
+    expect(second.replayed).toBe(true)
+    expect(second.data.id).toBe(first.data.id)
+    expect(repo.expenseRules.size).toBe(1)
+    // The audit event belongs to the run that actually happened.
+    expect(audit.records).toHaveLength(1)
+  })
+
+  it('refuses a cleaner, who holds no expense grant at all', async () => {
+    await expect(
+      ops.createExpenseRule.run({
+        request: { input: expenseInput, idempotencyKey: 'expense-key-2' },
+        context: context({ actor: cleanerActor() }),
+        services: services(),
+      }),
+    ).rejects.toBeInstanceOf(AuthorizationError)
+
+    expect(repo.expenseRules.size).toBe(0)
+  })
+
+  it('refuses a variable rule with no formula, before the database does', async () => {
+    // `expense_rules_formula_pair` would refuse the insert anyway. It is
+    // refused here as well because the database's message names a column the
+    // person filling in a form never saw — and because "a variable rule is one
+    // that is computed" is a sentence about the domain, not about a table.
+    await expect(
+      createExpenseOnce(
+        { kind: 'variable', amountAgorot: 0, formulaKind: null },
+        'expense-key-3',
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleError)
+  })
+
+  it('refuses a fixed rule that carries a formula', async () => {
+    await expect(
+      createExpenseOnce(
+        { formulaKind: 'per_night', formulaRateAgorot: 4_200 },
+        'expense-key-4',
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleError)
+  })
+
+  it('refuses a fixed rule worth nothing', async () => {
+    await expect(
+      createExpenseOnce({ amountAgorot: 0 }, 'expense-key-5'),
+    ).rejects.toBeInstanceOf(BusinessRuleError)
+  })
+
+  it('refuses a property-scoped rule that names no property', async () => {
+    await expect(
+      createExpenseOnce({ scopeKind: 'property' }, 'expense-key-6'),
+    ).rejects.toBeInstanceOf(BusinessRuleError)
+  })
+
+  it('refuses an end date that is not after the start', async () => {
+    await expect(
+      createExpenseOnce({ effectiveTo: '2026-01-01' }, 'expense-key-7'),
+    ).rejects.toBeInstanceOf(BusinessRuleError)
+  })
+
+  it('writes a variable rule with the formula the domain declares', async () => {
+    const outcome = await createExpenseOnce(
+      {
+        kind: 'variable',
+        amountAgorot: 0,
+        formulaKind: 'percent_of_revenue',
+        formulaPercent: 1.45,
+        allocation: 'by_revenue',
+      },
+      'expense-key-8',
+    )
+
+    expect(outcome.data.kind).toBe('variable')
+    // A variable rule's cost is its formula. Its periodic amount is zero by
+    // definition, and writing anything else would put a figure on a screen
+    // that nothing ever charges.
+    expect(outcome.data.amountAgorot).toBe(0)
+    expect(outcome.data.formula).toEqual({
+      kind: 'percent_of_revenue',
+      percent: 1.45,
+    })
+  })
+
+  it('refuses a scope the screen cannot fill in', async () => {
+    // `unit` and `booking` exist in the schema and have no screen. Refused
+    // rather than written half-formed: a rule scoped to a unit that names no
+    // unit is a rule nothing can ever apply.
+    await expect(
+      createExpenseOnce({ scopeKind: 'unit' }, 'expense-key-9'),
+    ).rejects.toBeInstanceOf(BusinessRuleError)
+  })
+
+  it('refuses a negative amount at the schema, not at the database', async () => {
+    await expect(
+      createExpenseOnce({ amountAgorot: -1 }, 'expense-key-10'),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+})

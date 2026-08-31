@@ -16,6 +16,12 @@ const eslintConfig = defineConfig([
     // .gitignore, so it was linting the coverage reporter's own bundled
     // scripts and warning about code nobody here wrote.
     'coverage/**',
+    // The demo server's build output. `scripts/demo.mjs` points Next at
+    // `.next-demo` so a demo run cannot collide with `npm run dev`, and the
+    // directory is git-ignored for exactly the reason `.next` is — but ESLint
+    // does not read .gitignore, so the moment anybody runs the demo the gate
+    // turns red with hundreds of errors inside Turbopack's own bundles.
+    '.next-demo/**',
     // The frozen legacy product, kept verbatim as reference. Not ours to
     // lint, and it must never be reformatted.
     '_reference/**',

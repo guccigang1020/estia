@@ -256,7 +256,23 @@ export {
   type ReconciliationReport,
 } from './reconciliation'
 
-export { InMemoryFinanceRepository, type FinanceRepository } from './repository'
+export {
+  InMemoryFinanceRepository,
+  type CommissionListQuery,
+  type CommissionListRow,
+  type CommissionPayee,
+  type ExpenseAllocationRow,
+  type ExpenseRuleDraft,
+  type ExpenseRuleListQuery,
+  type ExpenseRuleListRow,
+  type FinanceListQuery,
+  type FinanceRepository,
+  type InvoiceListQuery,
+  type InvoiceListRow,
+  type InvoicePaymentLinkRow,
+  type PaymentListQuery,
+  type PaymentListRow,
+} from './repository'
 
 export {
   defineFinanceOperations,

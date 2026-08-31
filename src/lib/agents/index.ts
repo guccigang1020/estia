@@ -177,7 +177,7 @@ export {
   PRESERVED_ON_REMOVAL,
   agentAccessBlockedReason,
   agentActorRoleAssignments,
-  agentScopes,
+  agentScopeNarrowing,
   canChangeAgentStatus,
   changeAgentStatus,
   reinstateAgent,

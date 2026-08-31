@@ -62,15 +62,20 @@ import {
   settleRefund,
   type RefundApprovalPolicy,
 } from './refunds'
-import type { FinanceRepository } from './repository'
+import type { ExpenseRuleListRow, FinanceRepository } from './repository'
 import type { FinanceSnapshot } from './snapshot'
 import {
+  ALLOCATION_METHODS,
   COLLECTION_CHANNELS,
+  EXPENSE_FREQUENCIES,
+  EXPENSE_KINDS,
+  EXPENSE_SCOPE_KINDS,
   PAYMENT_PURPOSES,
   REFUND_REASONS,
   type Invoice,
   type Payment,
   type Refund,
+  type VariableFormula,
 } from './types'
 import { INVOICE_KINDS } from './types'
 
@@ -448,7 +453,230 @@ export function defineFinanceOperations(
     },
   })
 
-  return { recordPayment, refundPayment, issueInvoice }
+  // ── expense.create ──────────────────────────────────────────────────────
+
+  /**
+   * Write down a cost the business carries.
+   *
+   * A rule, not a row per month. `expense_rules` says what recurs and
+   * `expense_allocations` says which booking carried a share of it; there is no
+   * `expenses` table and this operation does not invent one. What it writes is
+   * the terms, and the terms are what `finance_snapshots` freezes onto a
+   * booking so that editing a rule today does not change what March cost.
+   *
+   * ── The two constraints refused here rather than at the database ─────────
+   *
+   * `expense_rules_formula_pair` requires `(kind = 'variable') = (formula is
+   * not null)`, and `expense_rules_scope_target` requires a scope that names
+   * something at the level it claims. Both would refuse the insert anyway. They
+   * are refused here as well because the database's message names a column the
+   * person filling in a form never saw — and because "a variable rule is one
+   * that is computed" is a sentence about the domain, not about a table.
+   *
+   * ── Scope is asserted by hand ───────────────────────────────────────────
+   *
+   * The pipeline checks tenant and scope against the *loaded* resource, and a
+   * create operation has none. Without this call a manager scoped to one
+   * property could write a rule against another.
+   */
+  const createExpenseRule = defineOperation({
+    name: 'expense.rule.create',
+    permission: 'expense.create',
+    resourceType: 'expense_rule',
+    input: s.object({
+      // The client chooses the id, so the same id and the same idempotency key
+      // travel together through a retry. A server-generated id would make the
+      // retry a second rule.
+      ruleId: s.uuid({ label: 'מזהה כלל' }),
+      label: s.string({ min: 2, max: 120, label: 'שם ההוצאה' }),
+      category: s.string({ min: 2, max: 60, label: 'קטגוריה' }),
+      kind: s.enumOf(EXPENSE_KINDS, { label: 'סוג ההוצאה' }),
+      frequency: s.enumOf(EXPENSE_FREQUENCIES, { label: 'תדירות' }),
+      amountAgorot: s.agorot({ label: 'סכום' }),
+      allocation: s.enumOf(ALLOCATION_METHODS, { label: 'שיטת ייחוס' }),
+      scopeKind: s.enumOf(EXPENSE_SCOPE_KINDS, { label: 'תחולה' }),
+      scopePropertyId: s.optional(s.nullable(s.uuid({ label: 'נכס' }))),
+      // The five formulas the domain declares, flattened: a discriminated
+      // union is not a shape a form posts, and a closed set of fields is what
+      // stops an expression the customer types from ever existing.
+      formulaKind: s.optional(
+        s.nullable(s.enumOf(VARIABLE_FORMULA_KINDS, { label: 'נוסחה' })),
+      ),
+      formulaRateAgorot: s.optional(s.nullable(s.agorot({ label: 'תעריף' }))),
+      formulaPercent: s.optional(
+        s.nullable(s.number({ min: 0, max: 100, label: 'אחוז' })),
+      ),
+      effectiveFrom: s.string({
+        label: 'בתוקף מ־',
+        pattern: /^\d{4}-\d{2}-\d{2}$/,
+        patternMessage: 'תאריך אינו תקין.',
+      }),
+      effectiveTo: s.optional(
+        s.nullable(
+          s.string({
+            label: 'בתוקף עד',
+            pattern: /^\d{4}-\d{2}-\d{2}$/,
+            patternMessage: 'תאריך אינו תקין.',
+          }),
+        ),
+      ),
+      approvalRequired: s.boolean({ label: 'דורש אישור' }),
+    }),
+
+    async rule({ input, context }) {
+      assertCan(
+        context.actor,
+        'expense.create',
+        financeResource(context.actor, input.scopePropertyId ?? null),
+      )
+
+      const formula = formulaFrom(input)
+
+      if (input.kind === 'variable' && formula === null) {
+        throw new BusinessRuleError({
+          code: 'finance.expense_formula_required',
+          userMessage:
+            'הוצאה משתנה מחושבת מתוך ההזמנה, ולכן חייבת נוסחה — לפי לילה, ' +
+            'לפי אורח, לפי הזמנה או כאחוז מההכנסה.',
+          message: 'A variable expense rule was submitted without a formula',
+        })
+      }
+
+      if (input.kind === 'fixed' && formula !== null) {
+        throw new BusinessRuleError({
+          code: 'finance.expense_formula_not_allowed',
+          userMessage:
+            'הוצאה קבועה היא סכום לתקופה ולא חישוב. הסר את הנוסחה, או שנה ' +
+            'את סוג ההוצאה למשתנה.',
+          message: 'A fixed expense rule was submitted with a formula',
+        })
+      }
+
+      if (input.kind === 'fixed' && input.amountAgorot <= 0) {
+        throw new BusinessRuleError({
+          code: 'finance.expense_amount_required',
+          userMessage: 'הוצאה קבועה חייבת סכום גדול מאפס.',
+          message: 'A fixed expense rule was submitted with no amount',
+        })
+      }
+
+      if (input.scopeKind === 'property' && !input.scopePropertyId) {
+        throw new BusinessRuleError({
+          code: 'finance.expense_scope_incomplete',
+          userMessage: 'כלל שחל על נכס מסוים חייב לציין באיזה נכס מדובר.',
+          message: 'A property-scoped expense rule named no property',
+        })
+      }
+
+      // `unit` and `booking` scopes exist in the schema and have no screen.
+      // Refused rather than written half-formed: a rule scoped to a unit that
+      // names no unit is a rule nothing can ever apply.
+      if (input.scopeKind === 'unit' || input.scopeKind === 'booking') {
+        throw new BusinessRuleError({
+          code: 'finance.expense_scope_unsupported',
+          userMessage:
+            'כרגע אפשר להגדיר כלל לכל הארגון או לנכס מסוים. תחולה ליחידה ' +
+            'או להזמנה בודדת עדיין אינה נתמכת במסך הזה.',
+          message: `Unsupported expense scope: ${input.scopeKind}`,
+        })
+      }
+
+      if (
+        input.effectiveTo != null &&
+        input.effectiveTo <= input.effectiveFrom
+      ) {
+        throw new BusinessRuleError({
+          code: 'finance.expense_dates_ordered',
+          userMessage: 'תאריך הסיום חייב להיות אחרי תאריך ההתחלה.',
+          message: 'effectiveTo is not after effectiveFrom',
+        })
+      }
+    },
+
+    async execute({ input, context, tx }): Promise<ExpenseRuleListRow> {
+      const propertyId = input.scopePropertyId ?? null
+
+      return repo.insertExpenseRule(
+        {
+          id: input.ruleId,
+          organizationId: context.actor.organizationId,
+          label: input.label,
+          category: input.category,
+          kind: input.kind,
+          frequency: input.frequency,
+          // A variable rule's periodic amount is zero by definition: its cost
+          // is whatever the formula produces for a stay.
+          amountAgorot: input.kind === 'variable' ? 0 : input.amountAgorot,
+          formula: formulaFrom(input),
+          allocation: input.allocation,
+          scope:
+            input.scopeKind === 'property'
+              ? { kind: 'property', propertyId }
+              : { kind: 'organization' },
+          effectiveFrom: input.effectiveFrom,
+          effectiveTo: input.effectiveTo ?? null,
+          approvalRequired: input.approvalRequired,
+          createdByUserId: context.actor.userId,
+        },
+        tx,
+      )
+    },
+
+    audit({ result, context }) {
+      return {
+        resourceId: result.id,
+        propertyId: result.scopePropertyId,
+        summary:
+          `${context.auditActor.label} הגדיר כלל הוצאה ״${result.label}״ ` +
+          (result.kind === 'fixed'
+            ? `על סך ${formatAgorot(result.amountAgorot)} לתקופה.`
+            : 'המחושב מתוך כל הזמנה.'),
+        after: {
+          label: result.label,
+          kind: result.kind,
+          frequency: result.frequency,
+          amountAgorot: result.amountAgorot,
+          allocation: result.allocation,
+          scopeKind: result.scopeKind,
+        },
+      }
+    },
+  })
+
+  return { recordPayment, refundPayment, issueInvoice, createExpenseRule }
+}
+
+/** The five, as a tuple the schema can validate against. */
+const VARIABLE_FORMULA_KINDS = [
+  'per_night',
+  'per_guest_night',
+  'per_booking',
+  'per_guest',
+  'percent_of_revenue',
+] as const
+
+/**
+ * The formula, rebuilt from the flat fields a form posts.
+ *
+ * `null` when no kind was chosen, and `null` when the figure the chosen kind
+ * needs is missing — which `rule` above turns into a refusal for a variable
+ * rule rather than writing a formula that computes nothing.
+ */
+function formulaFrom(input: {
+  formulaKind?: (typeof VARIABLE_FORMULA_KINDS)[number] | null
+  formulaRateAgorot?: number | null
+  formulaPercent?: number | null
+}): VariableFormula | null {
+  const kind = input.formulaKind ?? null
+  if (kind === null) return null
+
+  if (kind === 'percent_of_revenue') {
+    const percent = input.formulaPercent
+    return typeof percent === 'number' ? { kind, percent } : null
+  }
+
+  const rate = input.formulaRateAgorot
+  return typeof rate === 'number' ? { kind, rateAgorot: rate } : null
 }
 
 export type FinanceOperations = ReturnType<typeof defineFinanceOperations>

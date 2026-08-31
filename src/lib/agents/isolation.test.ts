@@ -33,7 +33,7 @@ import type {
 import type { EffectivePlan } from '../plans/plan'
 import { SEED_PLANS } from '../plans/catalog'
 import { AGENT_PRESETS, grantsForAgentAccess } from './access'
-import { agentScopes, changeAgentStatus } from './lifecycle'
+import { agentScopeNarrowing, changeAgentStatus } from './lifecycle'
 import type { AgentOrganizationSettings } from './types'
 import {
   advanceCommission,
@@ -158,8 +158,32 @@ function makeSource(record: {
         },
       ]
     },
+    /**
+     * The scope row `attachExistingUser` writes, derived from the same stored
+     * reach — not a hand-written `own_records`.
+     *
+     * This used to answer `own_records`, and `resolveAgent` below then spread
+     * `agentScopes(record.current)` over the resolved actor by hand. Every
+     * assertion in the file was therefore made against an actor no request
+     * could produce: the real one had no `membership_scopes` row at all, so it
+     * fell back to `own_records` for `inventory` too and reached no property
+     * and no unit. The scope row is the grant, so it is modelled here as one.
+     */
     async loadScope(): Promise<MembershipScopeRow | null> {
-      return { kind: 'own_records' }
+      const { inventory } = record.current
+      switch (inventory.kind) {
+        case 'all_properties':
+          return { kind: 'all_organization' }
+        case 'properties':
+          return { kind: 'properties', propertyIds: [...inventory.propertyIds] }
+        case 'units':
+          return { kind: 'units', unitIds: [...inventory.unitIds] }
+        default:
+          return { kind: 'own_records' }
+      }
+    },
+    async loadScopeNarrowing() {
+      return agentScopeNarrowing(record.current.inventory)
     },
     async loadPlan(): Promise<EffectivePlan | null> {
       return PLAN
@@ -167,7 +191,13 @@ function makeSource(record: {
   }
 }
 
-/** Resolve an agent the way a request does, then apply their two scopes. */
+/**
+ * Resolve an agent exactly the way a request does.
+ *
+ * Nothing is spread over the result. `resolveActor` reads the scope row, reads
+ * the narrowing, clamps the second against the first, and what comes out is
+ * the actor `authorize()` is handed in production.
+ */
 async function resolveAgent(record: {
   current: AgentOrganizationSettings
 }): Promise<Actor> {
@@ -178,8 +208,7 @@ async function resolveAgent(record: {
   )
   if (!resolution.ok) throw new Error(`no actor: ${resolution.reason}`)
 
-  const scopes = agentScopes(record.current)
-  return { ...resolution.actor, ...scopes }
+  return resolution.actor
 }
 
 function agentActor(over: Partial<AgentOrganizationSettings> = {}) {

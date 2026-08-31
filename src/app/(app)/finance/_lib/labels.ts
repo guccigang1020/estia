@@ -36,12 +36,20 @@ import type {
   PaymentStatus,
 } from '@/lib/contracts/states'
 import type {
+  AllocationMethod,
   CollectionChannel,
+  ExpenseFrequency,
+  ExpenseKind,
+  ExpenseScopeKind,
   InvoiceKind,
   InvoiceStatus,
   PaymentAttention,
   PaymentPurpose,
+  VariableFormula,
 } from '@/lib/finance'
+import { formatAgorot } from '@/lib/plans/plan'
+
+import type { ReconciliationOutcome } from './queries'
 
 /**
  * What a screen prints where a value exists and this reader may not see it.
@@ -148,6 +156,105 @@ export function commissionStatusTone(status: CommissionStatus): BadgeTone {
 
 export function commissionStatusVoided(status: CommissionStatus): boolean {
   return status === 'cancelled'
+}
+
+/* -------------------------------------------------------------- expense -- */
+
+/**
+ * `EXPENSE_KINDS`. Two words that carry the whole distinction.
+ *
+ * A variable cost is caused by the stay and is computed from it; a fixed cost
+ * belongs to a period and exists whether or not anybody stayed. Everything else
+ * on the expenses screen follows from which of the two a rule is, which is why
+ * the labels say what the rule *does* rather than repeating the enum.
+ */
+export const EXPENSE_KIND_LABEL: Record<ExpenseKind, string> = {
+  fixed: 'קבועה — סכום לתקופה',
+  variable: 'משתנה — מחושבת לפי ההזמנה',
+}
+
+/** `EXPENSE_FREQUENCIES`. How often a fixed rule recurs. */
+export const EXPENSE_FREQUENCY_LABEL: Record<ExpenseFrequency, string> = {
+  one_time: 'חד־פעמי',
+  daily: 'יומי',
+  weekly: 'שבועי',
+  monthly: 'חודשי',
+  quarterly: 'רבעוני',
+  yearly: 'שנתי',
+}
+
+/**
+ * `ALLOCATION_METHODS` — how a period cost is attributed to the stays in it.
+ *
+ * Worded as the statement each one makes, because businesses genuinely disagree
+ * and the disagreement is not about rounding: a monthly premium spread
+ * `per_day` says the cost existed whether or not anyone stayed, and spread
+ * `per_occupied_night` it says the opposite. Both are defensible; the product's
+ * job is to let the business say which and then be consistent for ever.
+ */
+export const ALLOCATION_METHOD_LABEL: Record<AllocationMethod, string> = {
+  per_day: 'לפי ימי התקופה',
+  per_occupied_night: 'לפי לילות תפוסים',
+  per_booking: 'בחלוקה שווה בין ההזמנות',
+  per_guest: 'לפי מספר האורחים',
+  by_revenue: 'לפי ההכנסה נטו',
+  by_unit: 'בחלוקה שווה בין היחידות',
+  custom: 'לפי משקלים ידניים',
+}
+
+/** `EXPENSE_SCOPE_KINDS` — where the rule applies. */
+export const EXPENSE_SCOPE_LABEL: Record<ExpenseScopeKind, string> = {
+  organization: 'כל הארגון',
+  property: 'נכס מסוים',
+  unit: 'יחידה מסוימת',
+  booking: 'הזמנה בודדת',
+}
+
+/** The five formulas a variable rule may be computed by. */
+export const VARIABLE_FORMULA_LABEL: Record<VariableFormula['kind'], string> = {
+  per_night: 'תעריף לכל לילה',
+  per_guest_night: 'תעריף לכל אורח לכל לילה',
+  per_booking: 'תעריף לכל הזמנה',
+  per_guest: 'תעריף לכל אורח',
+  percent_of_revenue: 'אחוז מההכנסה נטו',
+}
+
+/**
+ * A variable rule's calculation, in one Hebrew line.
+ *
+ * The figure is formatted here and only here at the display border —
+ * `formatAgorot` for a rate, a plain percentage for the other. Nothing divides
+ * by 100 to get shekels; `formatAgorot` is the product's one ₪ formatter.
+ */
+export function describeFormula(formula: VariableFormula): string {
+  if (formula.kind === 'percent_of_revenue') {
+    return `${formula.percent}% מההכנסה נטו של ההזמנה`
+  }
+  return `${formatAgorot(formula.rateAgorot)} · ${VARIABLE_FORMULA_LABEL[formula.kind]}`
+}
+
+/* ------------------------------------------------------- reconciliation -- */
+
+/**
+ * The three answers a reconciliation row can give.
+ *
+ * `unresolved` is not a kind of difference and must not read as one. A payment
+ * the processor never answered about is money that may or may not have been
+ * taken, and the row is on screen precisely because nobody can yet say which.
+ */
+export const RECONCILIATION_OUTCOME_LABEL: Record<
+  ReconciliationOutcome,
+  string
+> = {
+  unresolved: 'ממתין לבירור מול הסולק',
+  difference: 'יש פער בין הצפוי לנגבה',
+  matched: 'תואם במלואו',
+}
+
+export function reconciliationTone(outcome: ReconciliationOutcome): BadgeTone {
+  if (outcome === 'unresolved') return 'accent'
+  if (outcome === 'matched') return 'brand'
+  return 'neutral'
 }
 
 /* ------------------------------------------------------------ fallbacks -- */

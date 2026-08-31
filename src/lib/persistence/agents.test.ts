@@ -61,6 +61,25 @@ const SETTINGS_ROW = {
   memberships: { status: 'active' },
 }
 
+/**
+ * The membership scope row, as the fake must answer for it.
+ *
+ * Every write of an agent's terms now also writes the reach those terms
+ * describe — see `syncMembershipScope`. The fake refuses an unseeded query on
+ * purpose, so a test that drives a settings write has to say what the scope
+ * row does, and "there already is one" is the ordinary case.
+ */
+const SCOPE_HELD = {
+  'membership_scopes:select': { data: { id: 'scope-1' } },
+  'membership_scopes:update': { data: [{ id: 'scope-1' }] },
+}
+
+/** No row yet — the state a brand-new agent membership is in. */
+const SCOPE_ABSENT = {
+  'membership_scopes:select': { data: null },
+  'membership_scopes:insert': { data: null },
+}
+
 const INVITATION_ROW = {
   id: 'inv-1',
   organization_id: 'org-a',
@@ -506,7 +525,10 @@ describe('the agent settings row, and the status that is not on it', () => {
     // and `tg_touch_row` increments the stored value again. Locking on
     // `settings.version` would match nothing and conflict on every save.
     const client = new FakeSupabaseClient({
-      responses: { agent_organization_settings: { data: [SETTINGS_ROW] } },
+      responses: {
+        agent_organization_settings: { data: [SETTINGS_ROW] },
+        ...SCOPE_HELD,
+      },
     })
 
     await new SupabaseAgentRepository(client.asDb()).saveSettings(
@@ -525,7 +547,10 @@ describe('the agent settings row, and the status that is not on it', () => {
     // `agent.manage` does not have. An unconditional write would refuse every
     // ordinary edit of the ladders for a status nobody was changing.
     const client = new FakeSupabaseClient({
-      responses: { agent_organization_settings: { data: [SETTINGS_ROW] } },
+      responses: {
+        agent_organization_settings: { data: [SETTINGS_ROW] },
+        ...SCOPE_HELD,
+      },
     })
 
     await new SupabaseAgentRepository(client.asDb()).saveSettings(
@@ -541,6 +566,7 @@ describe('the agent settings row, and the status that is not on it', () => {
     const client = new FakeSupabaseClient({
       responses: {
         agent_organization_settings: { data: [SETTINGS_ROW] },
+        ...SCOPE_HELD,
         'memberships:update': { data: [{ status: 'suspended' }] },
       },
     })
@@ -564,6 +590,7 @@ describe('the agent settings row, and the status that is not on it', () => {
     const client = new FakeSupabaseClient({
       responses: {
         agent_organization_settings: { data: [SETTINGS_ROW] },
+        ...SCOPE_HELD,
         'memberships:update': { data: [] },
       },
     })
@@ -583,7 +610,10 @@ describe('the agent settings row, and the status that is not on it', () => {
     // `agent_organization_settings_booking_rights_coherent` to refuse, or for
     // a later promotion to silently restore rights nobody re-granted.
     const client = new FakeSupabaseClient({
-      responses: { agent_organization_settings: { data: [SETTINGS_ROW] } },
+      responses: {
+        agent_organization_settings: { data: [SETTINGS_ROW] },
+        ...SCOPE_HELD,
+      },
     })
 
     await new SupabaseAgentRepository(client.asDb()).saveSettings(
@@ -614,6 +644,7 @@ describe('the agent settings row, and the status that is not on it', () => {
         roles: { data: { id: 'role-sales' } },
         membership_roles: { data: { role_id: 'role-sales' } },
         agent_organization_settings: { data: SETTINGS_ROW },
+        ...SCOPE_ABSENT,
       },
     })
 
@@ -652,6 +683,7 @@ describe('the agent settings row, and the status that is not on it', () => {
         'membership_roles:insert': { data: null },
         'agent_organization_settings:select': { data: null },
         'agent_organization_settings:insert': { data: SETTINGS_ROW },
+        ...SCOPE_ABSENT,
       },
     })
 
@@ -739,5 +771,260 @@ describe('the commission base enum, now that 0018 widened it', () => {
     await expect(
       new SupabaseAgentRepository(client.asDb()).loadCommission('org-a', 'c-1'),
     ).rejects.toThrow(/base/)
+  })
+})
+
+describe('the membership scope an agent could not act without', () => {
+  /**
+   * The defect this closes, stated once.
+   *
+   * `Actor.scope` comes from `membership_scopes`, and `attachExistingUser`
+   * wrote a membership, its role and its terms and no scope row at all. So
+   * every agent in the product resolved to the `own_records` fallback — which
+   * reaches no property and no unit, because neither carries an assignee — and
+   * the inventory reach an owner configured was stored, shown on the settings
+   * screen, and consulted by nothing.
+   *
+   * The repair is a row and not a projection: `scopeFor` in `authz/can.ts`
+   * replaces the default with a per-family override rather than intersecting
+   * it, so writing the stored reach onto `Actor.scopeOverrides` would have
+   * widened every agent from nothing to whatever the screen named. A row is
+   * something an authority granted, and `clampScope` will not let the terms
+   * exceed it.
+   */
+  function attachClient() {
+    return new FakeSupabaseClient({
+      responses: {
+        'memberships:select': { data: null },
+        'memberships:insert': { data: { id: 'mem-9' } },
+        roles: { data: { id: 'role-sales' } },
+        'membership_roles:select': { data: null },
+        'membership_roles:insert': { data: null },
+        'agent_organization_settings:select': { data: null },
+        'agent_organization_settings:insert': { data: SETTINGS_ROW },
+        ...SCOPE_ABSENT,
+      },
+    })
+  }
+
+  it('writes the reach the terms describe, in the same act as the membership', async () => {
+    const client = attachClient()
+
+    await new SupabaseAgentRepository(client.asDb()).attachExistingUser(
+      {
+        organizationId: 'org-a',
+        userId: 'agent-1',
+        preset: 'sales',
+        settings: settings(),
+      },
+      undefined,
+    )
+
+    const write = client
+      .queriesFor('membership_scopes')
+      .find((query) => query.verb === 'insert')
+
+    expect(write?.payload).toEqual({
+      membership_id: 'mem-9',
+      organization_id: 'org-a',
+      kind: 'properties',
+      property_ids: ['prop-a'],
+      unit_ids: [],
+      team_ids: [],
+    })
+  })
+
+  it('writes the scope after the terms, because the policy asks whether the terms exist', async () => {
+    // 0026's `membership_scopes_insert_agent` requires `is_agent_membership`,
+    // which is true only once `agent_organization_settings` holds a row. A
+    // scope written beside the membership instead would be refused for every
+    // general manager in the product — the caller 0025 exists to admit.
+    const client = attachClient()
+
+    await new SupabaseAgentRepository(client.asDb()).attachExistingUser(
+      {
+        organizationId: 'org-a',
+        userId: 'agent-1',
+        preset: 'sales',
+        settings: settings(),
+      },
+      undefined,
+    )
+
+    const order = client.queries
+      .filter(
+        (query) =>
+          query.verb === 'insert' &&
+          (query.table === 'agent_organization_settings' ||
+            query.table === 'membership_scopes'),
+      )
+      .map((query) => query.table)
+
+    expect(order).toEqual(['agent_organization_settings', 'membership_scopes'])
+  })
+
+  it('rebuilds a re-admitted agent scope from the terms that survived', async () => {
+    // The stored ladders win, and so does the reach derived from them. The
+    // caller passes `all_properties` down this path for both the attach and
+    // reactivate branches; writing it would hand a reinstated agent the whole
+    // portfolio a day after somebody narrowed them to one property.
+    const client = new FakeSupabaseClient({
+      responses: {
+        memberships: {
+          data: { id: 'mem-1', user_id: 'agent-1', status: 'active' },
+        },
+        roles: { data: { id: 'role-sales' } },
+        membership_roles: { data: { role_id: 'role-sales' } },
+        agent_organization_settings: { data: SETTINGS_ROW },
+        ...SCOPE_ABSENT,
+      },
+    })
+
+    await new SupabaseAgentRepository(client.asDb()).attachExistingUser(
+      {
+        organizationId: 'org-a',
+        userId: 'agent-1',
+        preset: 'sales',
+        settings: settings({ inventory: { kind: 'all_properties' } }),
+      },
+      undefined,
+    )
+
+    const payload = client
+      .queriesFor('membership_scopes')
+      .find((query) => query.verb === 'insert')?.payload as Record<
+      string,
+      unknown
+    >
+
+    expect(payload.kind).toBe('properties')
+    expect(payload.property_ids).toEqual(['prop-a'])
+  })
+
+  it('follows the terms when an owner narrows an agent on the settings screen', async () => {
+    // The same defect one level down. A settings write that left the scope row
+    // alone would leave the grant saying something nobody asked for.
+    const narrowed = {
+      ...SETTINGS_ROW,
+      inventory_kind: 'units',
+      inventory_property_ids: [],
+      inventory_unit_ids: ['unit-a'],
+    }
+    const client = new FakeSupabaseClient({
+      responses: {
+        agent_organization_settings: { data: [narrowed] },
+        ...SCOPE_HELD,
+      },
+    })
+
+    await new SupabaseAgentRepository(client.asDb()).saveSettings(
+      settings({ inventory: { kind: 'units', unitIds: ['unit-a'] } }),
+      4,
+      undefined,
+    )
+
+    const write = client
+      .queriesFor('membership_scopes')
+      .find((query) => query.verb === 'update')
+
+    // All three arrays on every write. `membership_scopes_shape` requires that
+    // only the one belonging to `kind` is populated, so a patch writing the
+    // new list alone would be refused the first time an agent moved between
+    // kinds — which is exactly this move.
+    expect(write?.payload).toEqual({
+      kind: 'units',
+      property_ids: [],
+      unit_ids: ['unit-a'],
+      team_ids: [],
+    })
+  })
+
+  it('follows a widening too, so the scope row is not merely a ratchet', async () => {
+    const widened = {
+      ...SETTINGS_ROW,
+      inventory_kind: 'all_properties',
+      inventory_property_ids: [],
+      inventory_unit_ids: [],
+    }
+    const client = new FakeSupabaseClient({
+      responses: {
+        agent_organization_settings: { data: [widened] },
+        ...SCOPE_HELD,
+      },
+    })
+
+    await new SupabaseAgentRepository(client.asDb()).saveSettings(
+      settings({ inventory: { kind: 'all_properties' } }),
+      4,
+      undefined,
+    )
+
+    const payload = client
+      .queriesFor('membership_scopes')
+      .find((query) => query.verb === 'update')?.payload as Record<
+      string,
+      unknown
+    >
+
+    // `all_organization` and not a snapshot of today's property ids: an agent
+    // given everything must reach the property bought next month.
+    expect(payload.kind).toBe('all_organization')
+  })
+
+  it('refuses to report success when the scope write matched nothing', async () => {
+    // Most likely a caller a policy would not admit. Returning quietly would
+    // leave the stale row granting a portfolio an owner just took away — and
+    // on this record the other direction is just as wrong.
+    const client = new FakeSupabaseClient({
+      responses: {
+        agent_organization_settings: { data: [SETTINGS_ROW] },
+        'membership_scopes:select': { data: { id: 'scope-1' } },
+        'membership_scopes:update': { data: [] },
+      },
+    })
+
+    await expect(
+      new SupabaseAgentRepository(client.asDb()).saveSettings(
+        settings(),
+        4,
+        undefined,
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('writes own_records rather than a shape the constraint refuses', async () => {
+    // `membership_scopes_shape` refuses an empty `properties` list, and an
+    // inventory resource carries no assignee — so `own_records` is both the
+    // storable answer and the deny-by-default one. The agent sells nothing
+    // until somebody says which properties.
+    const empty = {
+      ...SETTINGS_ROW,
+      inventory_kind: 'properties',
+      inventory_property_ids: [],
+      inventory_unit_ids: [],
+    }
+    const client = new FakeSupabaseClient({
+      responses: {
+        agent_organization_settings: { data: [empty] },
+        ...SCOPE_HELD,
+      },
+    })
+
+    await new SupabaseAgentRepository(client.asDb()).saveSettings(
+      settings({ inventory: { kind: 'properties', propertyIds: [] } }),
+      4,
+      undefined,
+    )
+
+    const write = client
+      .queriesFor('membership_scopes')
+      .find((query) => query.verb === 'update')
+
+    expect(write?.payload).toEqual({
+      kind: 'own_records',
+      property_ids: [],
+      unit_ids: [],
+      team_ids: [],
+    })
   })
 })
