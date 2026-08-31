@@ -192,6 +192,14 @@ export const DEMO_RELATIONS: Readonly<Record<string, Relation>> = {
  *   · `bookings.reference` — a booking number is what a person quotes on the
  *     telephone, and `asString(row, 'reference')` throws without one.
  *   · `bookings.guest_token` — the guest portal is a capability URL.
+ *   · `bookings.total_agorot` — `not null default 0` in 0009. This one was
+ *     missing, and the consequence was not cosmetic: the demo reproduces the
+ *     trigger that sums the price lines, and that function skips any row where
+ *     the key is absent. A freshly inserted booking therefore never acquired
+ *     one, the adapter's re-read raised `RowShapeError`, and no booking could
+ *     be created anywhere in the demo. The trigger needs the column to exist
+ *     before it can recompute it — which is exactly what the database default
+ *     guarantees and what this line restores.
  *
  * A column absent from here is absent from the row, and the mappers say so
  * loudly by name. That is the intended failure: it names a piece of database
@@ -201,6 +209,7 @@ const GENERATED: Readonly<Record<string, Record<string, () => unknown>>> = {
   bookings: {
     reference: () => `B${randomHex(4).toUpperCase()}`,
     guest_token: () => randomHex(32),
+    total_agorot: () => 0,
   },
 }
 

@@ -248,6 +248,26 @@ describe('buildMenu and the plan', () => {
     )
   })
 
+  it('links a locked item whose route renders the offer', () => {
+    const menu = buildMenu(
+      actor({
+        grants: ['agent.view'],
+        // No "agents" entitlement: the distribution network is not bought.
+        entitlements: ['core'],
+      }),
+    )
+
+    const distribution = menu.find((section) => section.id === 'distribution')
+    const agents = distribution?.items.find((item) => item.id === 'agents')
+
+    expect(agents?.state).toBe('locked')
+    // Linked, unlike the tasks entry above, because `/agents` renders a
+    // `PlanLock` on this exact branch instead of redirecting. A padlock the
+    // customer cannot press is a padlock on the only screen that asks them to
+    // pay.
+    expect(agents?.href).toBe('/agents')
+  })
+
   it('hides rather than upsells when the permission is missing too', () => {
     const menu = buildMenu(
       actor({ grants: ['booking.view'], entitlements: ['core'] }),

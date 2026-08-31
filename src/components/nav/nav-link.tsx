@@ -15,17 +15,34 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/components/ui/cn'
+
+import { NavIcon } from './icons'
 
 export function NavLink({
   href,
   label,
   onNavigate,
+  note,
+  icon,
 }: {
   href: string
   label: string
   /** Lets the mobile drawer close itself when a destination is chosen. */
   onNavigate?: () => void
+  /**
+   * A short badge after the label — today, the entitlement that would unlock
+   * a plan-locked destination.
+   *
+   * A locked item is still a link, because the route it leads to explains the
+   * feature and offers it rather than refusing. The badge is what keeps that
+   * honest: the customer is told before they press it that this is not
+   * included, so arriving at an offer instead of the feature is not a
+   * surprise.
+   */
+  note?: string
+  icon?: 'lock'
 }) {
   const pathname = usePathname()
   const active = pathname === href || pathname.startsWith(`${href}/`)
@@ -49,7 +66,18 @@ export function NavLink({
           className="absolute inset-y-1.5 start-0 w-1 rounded-full bg-primary"
         />
       ) : null}
-      <span className="truncate">{label}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        {icon ? <NavIcon name="lock" className="size-3.5 shrink-0" /> : null}
+        <span className="truncate">{label}</span>
+      </span>
+      {note ? (
+        <Badge
+          tone="neutral"
+          className="ms-2 shrink-0 px-2 py-0.5 text-[0.6875rem]"
+        >
+          {note}
+        </Badge>
+      ) : null}
     </Link>
   )
 }

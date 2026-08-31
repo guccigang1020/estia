@@ -1,12 +1,26 @@
 /**
  * The invitation domain, in one import.
  *
- * Creation only. Accepting an invitation — hashing the token from the link,
- * finding the row by `token_hash`, checking the expiry and turning it into a
- * membership — is the other half and is not written yet. When it is, it uses
- * `hashInvitationToken` from here: two implementations of that hash means the
- * acceptance path never finds what the creation path wrote.
+ * Both halves now. Creation mints the token, hashes it and writes the row;
+ * acceptance hashes the token from the link with the *same* function and
+ * redeems it. That shared hash is why `hashInvitationToken` is exported rather
+ * than kept private — two implementations of it would mean the acceptance path
+ * never finds what the creation path wrote.
+ *
+ * The asymmetry between them is deliberate. Creation is a `defineOperation`
+ * like every other write in the codebase. Acceptance cannot be: the person
+ * redeeming a token has no membership in that organization, therefore no role,
+ * therefore no actor for the pipeline to authorize. Possession of the token is
+ * the authorization, and it is checked in one atomic place — see
+ * `acceptance.ts` and migration 0027.
  */
+
+export {
+  ACCEPTANCE_REFUSAL_CODES,
+  InvitationRefusedError,
+  acceptInvitation,
+  type AcceptedInvitation,
+} from './acceptance'
 
 export {
   CapturingInvitationDelivery,

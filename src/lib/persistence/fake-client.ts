@@ -42,7 +42,18 @@ export interface RecordedQuery {
 /** What the fake should answer with, keyed by `table:verb`. */
 export interface FakeResponse {
   data?: unknown
-  error?: { code: string; message: string; details?: string | null } | null
+  error?: {
+    code: string
+    message: string
+    details?: string | null
+    /**
+     * PostgREST passes a raised exception's HINT through, and the invitation
+     * acceptance path reads it — `accept_invitation` raises a machine-readable
+     * message with a Hebrew hint beside it. Optional because almost nothing
+     * else sets one.
+     */
+    hint?: string | null
+  } | null
 }
 
 export interface FakeClientOptions {

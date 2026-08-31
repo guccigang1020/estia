@@ -17,6 +17,21 @@
  *               the feature. Named as such, because "upgrade to use this" and
  *               "you are not allowed" are different sentences and a customer
  *               deserves the right one.
+ *
+ * ── A locked item is a link when its route exists ─────────────────────────
+ *
+ * It was not, and that was a defect worth naming. Seven screens —
+ * `/agents`, `/agencies`, `/quotes`, `/promotions`, `/channels`,
+ * `/finance/owners` and `/automations` — render an upgrade offer on exactly
+ * the plan-refusal branch, built for the customer who has not bought the
+ * feature. Rendering their menu entry as an inert `<span>` meant that
+ * customer could see the padlock and could not reach the offer behind it. The
+ * only place in the product that asks to be paid for was unreachable from the
+ * navigation.
+ *
+ * So: locked with a route is a real link carrying the padlock and the
+ * entitlement badge, and locked without one stays inert, because there is
+ * genuinely nothing to reach.
  */
 
 import { Badge } from '@/components/ui/badge'
@@ -83,15 +98,29 @@ export function NavMenu({
                     onNavigate={onNavigate}
                   />
                 ) : item.state === 'locked' ? (
-                  <InertItem
-                    label={item.label}
-                    icon="lock"
-                    note={
-                      item.entitlement
-                        ? `בחבילה: ${entitlementLabel(item.entitlement)}`
-                        : 'לא בחבילה'
-                    }
-                  />
+                  item.href ? (
+                    <NavLink
+                      href={item.href}
+                      label={item.label}
+                      onNavigate={onNavigate}
+                      icon="lock"
+                      note={
+                        item.entitlement
+                          ? entitlementLabel(item.entitlement)
+                          : 'לא בחבילה'
+                      }
+                    />
+                  ) : (
+                    <InertItem
+                      label={item.label}
+                      icon="lock"
+                      note={
+                        item.entitlement
+                          ? `בחבילה: ${entitlementLabel(item.entitlement)}`
+                          : 'לא בחבילה'
+                      }
+                    />
+                  )
                 ) : (
                   <InertItem label={item.label} note="בקרוב" />
                 )}

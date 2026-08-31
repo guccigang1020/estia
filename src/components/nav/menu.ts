@@ -56,7 +56,28 @@ export type MenuRequirement =
  * of pointing at 404s.
  */
 export type MenuDestination =
-  { status: 'ready'; href: string } | { status: 'planned' }
+  | {
+      status: 'ready'
+      href: string
+      /**
+       * True when the route renders the upgrade offer for a customer whose
+       * plan does not include it, rather than redirecting them away.
+       *
+       * This is a claim about a specific page, so it is declared per item and
+       * never inferred. The blanket rule — "link every locked item whose
+       * route exists" — was written first and was wrong within a minute:
+       * `/tasks` is gated by the `operations` entitlement and guarded by plain
+       * `requireGrant`, which redirects a plan refusal to the dashboard. A
+       * padlock that does nothing is a poor experience; a padlock that bounces
+       * you to a page saying you lack a permission you actually hold is worse.
+       *
+       * Seven routes earn the flag today, each holding a `PlanLock` on exactly
+       * the `plan_does_not_include` branch. A route that gains one gains the
+       * flag here in the same change.
+       */
+      offersUpgrade?: true
+    }
+  | { status: 'planned' }
 
 export type MenuItemDefinition = {
   id: string
@@ -184,19 +205,31 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'agents',
         label: 'סוכנים',
         requires: { kind: 'grant', anyOf: ['agent.view'] },
-        destination: { status: 'ready', href: '/agents' },
+        destination: {
+          status: 'ready',
+          href: '/agents',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'agencies',
         label: 'סוכנויות',
         requires: { kind: 'grant', anyOf: ['agency.manage'] },
-        destination: { status: 'ready', href: '/agencies' },
+        destination: {
+          status: 'ready',
+          href: '/agencies',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'quotes',
         label: 'הצעות מחיר',
         requires: { kind: 'grant', anyOf: ['quote.view'] },
-        destination: { status: 'ready', href: '/quotes' },
+        destination: {
+          status: 'ready',
+          href: '/quotes',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'promotions',
@@ -205,13 +238,21 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['pricing.manage', 'product.manage'],
         },
-        destination: { status: 'ready', href: '/promotions' },
+        destination: {
+          status: 'ready',
+          href: '/promotions',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'channels',
         label: 'ערוצי הפצה',
         requires: { kind: 'grant', anyOf: ['channel.manage'] },
-        destination: { status: 'ready', href: '/channels' },
+        destination: {
+          status: 'ready',
+          href: '/channels',
+          offersUpgrade: true,
+        },
       },
     ],
   },
@@ -229,6 +270,16 @@ export const MENU: readonly MenuSectionDefinition[] = [
           anyOf: ['checklist.manage', 'task.complete', 'task.view'],
         },
         destination: { status: 'ready', href: '/preparation' },
+      },
+      {
+        id: 'preparation-policy',
+        label: 'מדיניות הכנה',
+        // `checklist.manage` alone, and deliberately narrower than the board
+        // above it. The route gates on that one grant, so listing `task.view`
+        // here would put an entry in a cleaner's sidebar that redirects her
+        // the moment she presses it.
+        requires: { kind: 'grant', anyOf: ['checklist.manage'] },
+        destination: { status: 'ready', href: '/preparation/policy' },
       },
       {
         id: 'operations-report',
@@ -311,7 +362,11 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['owner.view', 'owner_statement.view'],
         },
-        destination: { status: 'ready', href: '/finance/owners' },
+        destination: {
+          status: 'ready',
+          href: '/finance/owners',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'reconciliation',
@@ -353,13 +408,17 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'automations',
         label: 'אוטומציות',
         requires: { kind: 'grant', anyOf: ['automation.view'] },
-        destination: { status: 'planned' },
+        destination: {
+          status: 'ready',
+          href: '/automations',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'templates',
         label: 'תבניות',
         requires: { kind: 'grant', anyOf: ['template.manage'] },
-        destination: { status: 'planned' },
+        destination: { status: 'ready', href: '/templates' },
       },
       {
         id: 'insights',
@@ -482,7 +541,21 @@ export type ResolvedMenuItem = {
   id: string
   label: string
   state: MenuItemState
-  /** Non-null only for `available`. Nothing else is ever a link. */
+  /**
+   * The route, when there is one to reach.
+   *
+   * Non-null for `available`, and — deliberately — for a `locked` item whose
+   * route offers the upgrade. It used to be null for every locked item, and
+   * the consequence was
+   * that six screens which render an upgrade offer could not be reached by the
+   * customer being offered the upgrade: the sidebar showed a padlock and
+   * nothing happened when it was pressed. A locked route does not refuse. It
+   * explains what the feature is, on the customer's own data, and says what it
+   * would cost. Making it unreachable turned the only place the product asks
+   * to be paid for into a dead end.
+   *
+   * Null for `planned`, always. There is nothing built to reach.
+   */
   href: string | null
   /** The plan feature that would unlock it. Set only for `locked`. */
   entitlement: Entitlement | null
@@ -541,7 +614,14 @@ function resolveItem(
     return {
       ...base,
       state: 'locked',
-      href: null,
+      // Linked only where the route says it renders the offer. Anywhere else
+      // the padlock stays inert, because the alternative is a link that
+      // bounces the customer to "you lack a permission" for a permission they
+      // hold. See `offersUpgrade` on `MenuDestination`.
+      href:
+        item.destination.status === 'ready' && item.destination.offersUpgrade
+          ? item.destination.href
+          : null,
       entitlement: planRefusal.entitlement ?? null,
     }
   }

@@ -63,6 +63,23 @@ scripts/**                                    coordinator          write
 project-memory/**                             coordinator          write
 docs/**                                       coordinator          write
 
+# ── Accepting an invitation. Claimed by name, above both owners below. ────
+#
+# The acceptance path crosses two territories that belong to different owners:
+# it needs a migration (`authz`) and it needs the invitation domain
+# (`domain-writes`). Neither of those workers is running, and splitting one act
+# across two claims is how the SQL and the code that calls it end up disagreeing
+# about what a used token means. So the four files are claimed here, by name,
+# and the broader rows below keep everything else they had.
+supabase/migrations/0027_invitation_acceptance.sql  coordinator    write
+src/lib/invitations/acceptance.ts             coordinator          write
+src/lib/invitations/acceptance.test.ts        coordinator          write
+# The barrel, claimed for one reason: its header says acceptance "is not
+# written yet". That sentence is now false, and a false comment at the top of
+# the module people read first is worse than no comment.
+src/lib/invitations/index.ts                  coordinator          write
+src/app/invite/**                             coordinator          write
+
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
 src/lib/agents/**                             authz                write
@@ -96,6 +113,23 @@ src/app/(app)/insights/**                     ai-website           write
 src/components/website/**                     ai-website           write
 src/lib/website/**                            ai-website           write
 src/lib/automation/**                         ai-website           write
+
+# ── The preparation chain: intake, policy, plan. ──────────────────────────
+#
+# The preparation engine is built and thorough — sleeping allocation, quantity
+# rules driven by policy rather than by constants, the delta when a booking
+# grows, a cleaner's view, an optional inventory layer. What is missing is at
+# both ends: the booking form collects one guest count where the engine wants
+# adults, children, infants, an event type and the extra beds, and the property
+# configuration that decides every quantity has no screen anywhere.
+src/app/(app)/bookings/**                     booking-intake       write
+src/components/booking/**                     booking-intake       write
+src/lib/booking/**                            booking-intake       write
+
+src/app/(app)/preparation/**                  preparation-config   write
+src/components/preparation/**                 preparation-config   write
+src/lib/preparation/**                        preparation-config   write
+src/lib/persistence/preparation.ts            preparation-config   write
 
 # ── The home screen, rebuilt role by role. ────────────────────────────────
 src/app/(app)/dashboard/**                    dashboard            write
@@ -149,20 +183,17 @@ src/components/shell-screens/**               shell                write
 src/lib/demo/dataset-support.ts               shell                write
 
 src/app/(app)/reports/**                      reporting            write
-src/app/(app)/preparation/**                  reporting            write
 src/components/reports/**                     reporting            write
-src/components/preparation/**                 reporting            write
 src/lib/metrics/**                            reporting            write
-src/lib/preparation/**                        reporting            write
 src/lib/persistence/metrics.ts                reporting            write
-src/lib/persistence/preparation.ts            reporting            write
+# Everything preparation moved to preparation-config — see the block above.
 
 # ── Everything else under the app shell and the persistence layer. ────────
 src/app/(app)/_lib/**                          coordinator          write
 src/app/(app)/layout.tsx                       coordinator          write
 # dashboard moved to its own owner — see the block above.
 src/app/(app)/onboarding/**                    coordinator          write
-src/app/(app)/bookings/**                      coordinator          write
+# bookings moved to booking-intake — see the block above.
 src/app/(app)/calendar/**                      coordinator          write
 src/app/(auth)/**                              coordinator          write
 src/components/onboarding/**                   coordinator          write
