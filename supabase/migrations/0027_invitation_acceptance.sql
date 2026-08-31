@@ -360,7 +360,7 @@ language plpgsql
 stable
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_user_id   uuid := (select auth.uid());
   v_email     text;
@@ -435,7 +435,7 @@ begin
     'signedInEmail',    v_email
   );
 end;
-$;
+$$;
 
 comment on function public.invitation_preview(text) is
   'Reads an invitation by token hash without consuming it, so the acceptance screen can render before anything is written. Returns the organization name, the role name, the expiry and one status string mirroring accept_invitation''s refusal order; the invited address comes back masked. SECURITY DEFINER for the same reason accept_invitation is — the invitee cannot satisfy invitations_select.';
