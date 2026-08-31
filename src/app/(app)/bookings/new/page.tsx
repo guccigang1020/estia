@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { can } from '@/lib/authz/can'
 import { toSafeResponse } from '@/lib/errors'
 
 import { ALL_PROPERTIES, shellContext } from '../../_lib/context'
@@ -30,8 +31,19 @@ export const metadata: Metadata = { title: 'הזמנה חדשה' }
  * WHAT THE FORM IS GIVEN. Active units for the organization and the selected
  * property, with their stored prices, capacity and minimum stay. Nothing on
  * this screen is invented: the rates are `units.base_price_agorot` and its
- * siblings, and they are shown read-only because the server reads them again
- * rather than trusting anything the browser sends back.
+ * siblings, and the server reads them again rather than trusting the browser.
+ *
+ * WHO MAY NAME A PRICE. A villa or צימר is not a hotel with a rate card — the
+ * owner quotes a number for this stay, and two identical stays selling for
+ * different amounts is the normal case. So the nightly rate is editable, and
+ * `booking.override_price` decides for whom. It is asked here **per unit**
+ * rather than once: a grant can be scoped to a property, so a reservation
+ * manager may set the price in one house and not in another, and one boolean
+ * for the whole form would be wrong in whichever direction it guessed.
+ *
+ * The answer only decides what the screen offers. `createBookingAction`
+ * asserts the same grant, and `booking.create` asserts it a third time before
+ * it prices anything, because hiding a control is not authorization.
  *
  * WHY ONLY ACTIVE UNITS. `checkAvailability` refuses a unit whose rules row
  * does not resolve, and `loadRules` returns null for any status other than
@@ -62,6 +74,15 @@ export default async function NewBookingPage() {
     failure = toSafeResponse(cause, crypto.randomUUID())
   }
 
+  const mayPriceByUnit: Record<string, boolean> = {}
+  for (const unit of units) {
+    mayPriceByUnit[unit.id] = can(actor, 'booking.override_price', {
+      organizationId: actor.organizationId,
+      unitId: unit.id,
+      propertyId: unit.propertyId,
+    })
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
       <nav aria-label="פירורי לחם" className="text-sm">
@@ -88,8 +109,8 @@ export default async function NewBookingPage() {
         <CardHeader>
           <CardTitle as="h2">פרטי השהות</CardTitle>
           <CardDescription>
-            המחיר אינו שדה בטופס. הוא נקרא מהיחידה עצמה בשרת, כדי שלא יהיה מספר
-            שאי אפשר להסביר מאיפה הגיע.
+            המחיר מתחיל במחיר השמור ביחידה, ואפשר לשנות אותו להזמנה הזו. הסכום
+            הסופי הוא תמיד סכימת השורות, כדי שתמיד אפשר יהיה להסביר אותו.
           </CardDescription>
         </CardHeader>
 
@@ -97,7 +118,7 @@ export default async function NewBookingPage() {
           {failure ? (
             <ActionError error={failure.error} />
           ) : (
-            <CreateBookingForm units={units} />
+            <CreateBookingForm units={units} mayPriceByUnit={mayPriceByUnit} />
           )}
         </div>
       </Card>

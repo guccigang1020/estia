@@ -90,6 +90,31 @@ export {
   type StayQuote,
 } from './pricing'
 
+/**
+ * The intake vocabulary.
+ *
+ * `EVENT_TYPES` is deliberately **not** re-exported here. It belongs to
+ * `src/lib/preparation/types.ts` and a second door to one frozen list is how
+ * two lists begin — a caller that needs the values imports them from the module
+ * that owns them. What travels with the booking domain is the party, the
+ * sleeping request and the arithmetic over them.
+ */
+export {
+  DEFAULT_EVENT_TYPE,
+  EVENT_TYPE_LABEL,
+  SPECIAL_REQUESTS_MAX,
+  assertParty,
+  describeParty,
+  legacyParty,
+  partyIssues,
+  sleepingGuests,
+  suggestedCouples,
+  totalGuests,
+  type BookingIntake,
+  type BookingParty,
+  type SleepingRequest,
+} from './party'
+
 export type {
   BookingDraft,
   BookingPatch,

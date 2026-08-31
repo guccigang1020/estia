@@ -15,9 +15,11 @@
  * connection would break that without failing anything.
  */
 
+import type { EventType } from '../preparation/types'
 import type { TransactionHandle } from '../service'
 import type { AvailabilitySource } from './availability'
 import type { HoldDraft } from './holds'
+import type { BookingParty, SleepingRequest } from './party'
 import type { BookingSnapshot } from './state-machine'
 import type {
   Agorot,
@@ -27,13 +29,53 @@ import type {
   PriceLine,
 } from './types'
 
-/** A booking before the database has given it an id, a reference or a version. */
+/**
+ * A booking before the database has given it an id, a reference or a version.
+ *
+ * ── `guestCount` and `party` are both here, and both are load-bearing ──────
+ *
+ * `guestCount` is the whole head count and stays because it is what the stay is
+ * priced and its capacity checked against. `party` is the same number split the
+ * way `public.bookings` has stored it since 0009 — `adults`, `children`,
+ * `infants` — and `totalGuests(party)` always equals `guestCount`; the create
+ * operation refuses the draft otherwise. Two fields rather than one derived
+ * accessor because the adapter writes three columns and the pricing reads one,
+ * and a port that made either of them compute the other would push arithmetic
+ * into a mapping layer.
+ *
+ * ── What an adapter is expected to do with the last four fields ────────────
+ *
+ * `party` maps onto the three existing columns. `sleeping`, `eventType` and
+ * `specialRequests` have **no columns yet** — see the migration described in
+ * this work's report — and `SupabaseBookingRepository` therefore cannot store
+ * them today. They are on the draft regardless, because the operation collects
+ * them, validates them and names them in the audit event, and a port that
+ * omitted them would make the intake unreachable rather than merely unstored.
+ *
+ * All four are optional, and the reason is honesty about a port mid-migration
+ * rather than doubt about whether they matter. `booking.create` always supplies
+ * every one of them; what optionality buys is that an adapter written before
+ * the split, and the fixtures that exercise it, keep compiling and keep
+ * behaving exactly as they did. An adapter that finds them absent is looking at
+ * a draft from a caller older than the split, and `legacyParty(guestCount)` in
+ * `./party` is the documented answer for that case — the same whole-party-as-
+ * adults mapping the Supabase adapter has always written.
+ */
 export interface BookingDraft {
   organizationId: string
   propertyId: string | null
   unitId: string
   guestName: string
+  /** Every head, infants included. Always `totalGuests(party)`. */
   guestCount: number
+  /** The same party, as the three columns the schema already holds. */
+  party?: BookingParty
+  /** Couples, extra beds and cots, as asked for at the desk. */
+  sleeping?: SleepingRequest
+  /** Which kind of stay this is, from the preparation engine's frozen list. */
+  eventType?: EventType
+  /** Free Hebrew text — "שתי מיטות תינוק". Null when nothing was said. */
+  specialRequests?: string | null
   checkIn: string
   checkOut: string
   status: BookingStatus

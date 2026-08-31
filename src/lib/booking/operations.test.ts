@@ -123,6 +123,17 @@ class MemoryRepository implements BookingRepository {
     return booking ?? null
   }
 
+  /**
+   * The drafts as the domain handed them over, by booking id.
+   *
+   * Kept beside the snapshots because a `BookingSnapshot` deliberately does not
+   * carry the party split, the sleeping request or the event type: `hydrate` in
+   * `src/lib/persistence/booking.ts` builds snapshots from columns, and three
+   * of those four have no column yet. Asserting the intake against the *draft*
+   * is asserting the thing this layer is actually responsible for producing.
+   */
+  drafts = new Map<string, BookingDraft>()
+
   async insertBooking(draft: BookingDraft): Promise<BookingSnapshot> {
     if (this.enforceExclusion) this.assertNoOverlap(draft)
 
@@ -135,6 +146,7 @@ class MemoryRepository implements BookingRepository {
       depositHeldAgorot: 0,
     }
     this.bookings.set(booking.id, booking)
+    this.drafts.set(booking.id, draft)
     return booking
   }
 
@@ -342,7 +354,7 @@ describe('booking.create', () => {
     expect(outcome.data.quote.nights).toBe(3)
     expect(services.audit.records[0].summary).toBe(
       'דנה כהן יצרה את הזמנה 8892 עבור משה לוי ביחידה וילה הכרמל ' +
-        'לתאריכים 3.9–6.9 (3 לילות) בסך ₪3,600',
+        'לתאריכים 3.9–6.9 (3 לילות) עבור 2 מבוגרים (לינה) בסך ₪3,600',
     )
     expect(services.events.published[0].name).toBe('booking.created')
     expect(services.transactions?.constructor.name).toBe(
@@ -1480,5 +1492,298 @@ describe('two bookings for the same dates at the same instant', () => {
 
     expect(services.audit.records).toHaveLength(0)
     expect(services.events.published).toHaveLength(0)
+  })
+})
+
+// ── The intake ────────────────────────────────────────────────────────────
+
+/**
+ * What the booking screen now collects, and where each piece lands.
+ *
+ * `public.bookings` has held `adults`, `children` and `infants` as separate
+ * columns since 0009 and the form sent one number, so the schema was ahead of
+ * the screen and the preparation engine was ahead of both. These tests exercise
+ * the middle: the operation takes the split, refuses the ways it can be wrong,
+ * and hands a draft that names every fact a work plan is built from.
+ */
+describe('booking.create · the party and the preparation intake', () => {
+  it('carries the split, the sleeping shape and the event type onto the draft', async () => {
+    const outcome = await operations.createBooking.run({
+      request: {
+        input: createInput({
+          guestCount: 7,
+          adults: 4,
+          children: 2,
+          infants: 1,
+          couples: 2,
+          extraBedsRequested: 1,
+          cotsRequested: 2,
+          eventType: 'shabbat',
+          specialRequests: '  שתי מיטות תינוק  ',
+        }),
+      },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    const written = repo.drafts.get(outcome.data.booking.id)
+    expect(written).toBeDefined()
+    expect(written?.party).toEqual({ adults: 4, children: 2, infants: 1 })
+    expect(written?.sleeping).toEqual({
+      couples: 2,
+      extraBedsRequested: 1,
+      cotsRequested: 2,
+    })
+    expect(written?.eventType).toBe('shabbat')
+    // Trimmed, because "  " is not a special request and a stored blank is a
+    // note a cleaner has to read to discover it says nothing.
+    expect(written?.specialRequests).toBe('שתי מיטות תינוק')
+    // The head count still totals the party, so nothing that prices or
+    // capacity-checks a stay has changed meaning underneath it.
+    expect(written?.guestCount).toBe(7)
+  })
+
+  it('defaults to the plain stay and the whole party as adults', async () => {
+    // A caller that predates the split — a channel importer, the old form —
+    // gets exactly what `SupabaseBookingRepository` has always written, named
+    // rather than accidental.
+    const outcome = await operations.createBooking.run({
+      request: { input: createInput({ guestCount: 5 }) },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    const written = repo.drafts.get(outcome.data.booking.id)
+    expect(written?.party).toEqual({ adults: 5, children: 0, infants: 0 })
+    expect(written?.eventType).toBe('accommodation')
+    expect(written?.specialRequests).toBeNull()
+  })
+
+  it('refuses a split that does not add up to the head count', async () => {
+    const error = await rejection<ValidationError>(
+      operations.createBooking.run({
+        request: {
+          input: createInput({ guestCount: 7, adults: 4, children: 2 }),
+        },
+        context: contextFor(owner()),
+        services: wiring(),
+      }),
+    )
+
+    expect(error).toBeInstanceOf(ValidationError)
+    expect(error.issues[0].field).toBe('guestCount')
+  })
+
+  it('refuses more couples than there are adults to make them', async () => {
+    const error = await rejection<ValidationError>(
+      operations.createBooking.run({
+        request: {
+          input: createInput({ guestCount: 4, adults: 4, couples: 3 }),
+        },
+        context: contextFor(owner()),
+        services: wiring(),
+      }),
+    )
+
+    expect(error.issues[0].field).toBe('couples')
+    expect(error.issues[0].message).toContain('3 זוגות')
+  })
+
+  it('refuses an event type outside the frozen list', async () => {
+    const error = await rejection<ValidationError>(
+      operations.createBooking.run({
+        request: { input: createInput({ eventType: 'bar_mitzvah' }) },
+        context: contextFor(owner()),
+        services: wiring(),
+      }),
+    )
+
+    expect(error).toBeInstanceOf(ValidationError)
+    expect(error.issues[0].field).toBe('eventType')
+  })
+
+  it('names the party and the event in the audit sentence and the payload', async () => {
+    const services = wiring()
+
+    await operations.createBooking.run({
+      request: {
+        input: createInput({
+          guestCount: 7,
+          adults: 4,
+          children: 2,
+          infants: 1,
+          couples: 2,
+          cotsRequested: 2,
+          eventType: 'shabbat',
+        }),
+      },
+      context: contextFor(owner()),
+      services,
+    })
+
+    expect(services.audit.records[0].summary).toContain(
+      'עבור 4 מבוגרים, 2 ילדים, תינוק אחד (שבת)',
+    )
+    // Until the columns exist, this payload is the only machine-readable record
+    // of the event type and the cots. Asserted here so that is a decision
+    // somebody made rather than something discovered later.
+    expect(services.audit.records[0].after).toMatchObject({
+      adults: 4,
+      children: 2,
+      infants: 1,
+      couples: 2,
+      cotsRequested: 2,
+      eventType: 'shabbat',
+    })
+    expect(services.events.published[0].payload).toMatchObject({
+      adults: 4,
+      children: 2,
+      infants: 1,
+      eventType: 'shabbat',
+    })
+  })
+})
+
+// ── The agreed price ──────────────────────────────────────────────────────
+
+/**
+ * The price of a stay is whatever the seller decides, deal by deal.
+ *
+ * A villa owner is not running a hotel with a rate card: two identical stays
+ * can sell for different amounts and neither is a mistake. The unit's stored
+ * rate is a default, not a floor. What must stay true is that the price is
+ * *authorized* rather than merely accepted, and that the stored total is the
+ * sum of the lines the quote produced.
+ */
+describe('booking.create · the price the seller agreed', () => {
+  it('prices the stay at the agreed rate rather than the unit rate', async () => {
+    const outcome = await operations.createBooking.run({
+      request: { input: createInput({ agreedNightlyAgorot: 90000 }) },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    // Three nights at ₪900 rather than three at ₪1,200. Below the unit's rate,
+    // and that is an ordinary sale rather than something to warn about.
+    expect(outcome.data.booking.totalAgorot).toBe(270000)
+    expect(
+      outcome.data.quote.lines
+        .filter((line) => line.kind === 'accommodation')
+        .every((line) => line.amount === 90000),
+    ).toBe(true)
+  })
+
+  it('accepts a price above the unit rate just as readily', async () => {
+    const outcome = await operations.createBooking.run({
+      request: { input: createInput({ agreedNightlyAgorot: 200000 }) },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    expect(outcome.data.booking.totalAgorot).toBe(600000)
+  })
+
+  it('refuses an agreed price without the permission that governs prices', async () => {
+    const error = await rejection<AuthorizationError>(
+      operations.createBooking.run({
+        request: { input: createInput({ agreedNightlyAgorot: 90000 }) },
+        context: contextFor(actorWith(['booking.create'])),
+        services: wiring(),
+      }),
+    )
+
+    expect(error).toBeInstanceOf(AuthorizationError)
+    expect(error.grant).toBe('booking.override_price')
+  })
+
+  it('asks for no justification, because an agreed price is not an exception', async () => {
+    // A manual discount demands a reason and is tested above. This does not:
+    // making the normal case explain itself teaches a desk to type a full stop
+    // into the box.
+    const services = wiring()
+
+    const outcome = await operations.createBooking.run({
+      request: { input: createInput({ agreedNightlyAgorot: 90000 }) },
+      context: contextFor(owner()),
+      services,
+    })
+
+    expect(outcome.ok).toBe(true)
+    expect(services.audit.records[0].summary).toContain(
+      'במחיר מוסכם של ₪900 ללילה',
+    )
+    expect(services.audit.records[0].after).toMatchObject({
+      agreedNightlyAgorot: 90000,
+    })
+  })
+
+  it('drops the extra-guest supplement, because an agreed rate covers the party', async () => {
+    const withoutAgreement = await operations.createBooking.run({
+      request: {
+        input: createInput({
+          guestCount: 6,
+          pricing: {
+            baseNightlyAgorot: 120000,
+            includedGuests: 2,
+            extraGuestNightlyAgorot: 10000,
+          },
+        }),
+      },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    // Four guests over the included two, at ₪100 each per night, for 3 nights.
+    expect(
+      withoutAgreement.data.quote.lines.some(
+        (line) => line.kind === 'extra_guest',
+      ),
+    ).toBe(true)
+    expect(withoutAgreement.data.booking.totalAgorot).toBe(480000)
+
+    const withAgreement = await operations.createBooking.run({
+      request: {
+        input: createInput({
+          guestCount: 6,
+          checkIn: '2026-10-03',
+          checkOut: '2026-10-06',
+          agreedNightlyAgorot: 120000,
+          pricing: {
+            baseNightlyAgorot: 120000,
+            includedGuests: 2,
+            extraGuestNightlyAgorot: 10000,
+          },
+        }),
+      },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    expect(
+      withAgreement.data.quote.lines.some(
+        (line) => line.kind === 'extra_guest',
+      ),
+    ).toBe(false)
+    expect(withAgreement.data.booking.totalAgorot).toBe(360000)
+  })
+
+  it('keeps the total a sum of its lines', async () => {
+    const outcome = await operations.createBooking.run({
+      request: {
+        input: createInput({
+          agreedNightlyAgorot: 87543,
+          pricing: { baseNightlyAgorot: 120000, cleaningFeeAgorot: 25000 },
+        }),
+      },
+      context: contextFor(owner()),
+      services: wiring(),
+    })
+
+    const summed = outcome.data.quote.lines.reduce(
+      (total, line) => total + line.amount,
+      0,
+    )
+    expect(outcome.data.booking.totalAgorot).toBe(summed)
+    expect(summed).toBe(87543 * 3 + 25000)
   })
 })

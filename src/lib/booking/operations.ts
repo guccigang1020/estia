@@ -35,6 +35,7 @@
 import { assertCan, type Actor, type Resource } from '../authz/can'
 import { BusinessRuleError, ConflictError, ValidationError } from '../errors'
 import { formatAgorot } from '../plans/plan'
+import { EVENT_TYPES, type EventType } from '../preparation/types'
 import { defineOperation, s } from '../service'
 import {
   checkAvailability,
@@ -42,6 +43,18 @@ import {
   type AvailabilityResult,
 } from './availability'
 import { describeDateChange, formatRange, isIsoDate } from './dates'
+import {
+  DEFAULT_EVENT_TYPE,
+  EVENT_TYPE_LABEL,
+  SPECIAL_REQUESTS_MAX,
+  assertParty,
+  describeParty,
+  legacyParty,
+  totalGuests,
+  type BookingIntake,
+  type BookingParty,
+  type SleepingRequest,
+} from './party'
 import {
   HOLD_REASON_LABEL,
   assertHoldCovers,
@@ -142,12 +155,41 @@ export interface PricingInput {
  * The manual discount arrives as its own field rather than inside `discounts`
  * because it is the one a permission guards. Keeping it separate means the
  * check cannot be defeated by hiding an override among ordinary promotions.
+ *
+ * ── The agreed price, and why it is a third field rather than a rate ───────
+ *
+ * `agreedNightlyAgorot` is separate from `pricing.baseNightlyAgorot` for
+ * exactly the reason the manual discount is separate from `discounts`. The
+ * `pricing` block is what the *server* read off the unit; the agreed price is
+ * what a *person* decided for this booking, and it is guarded by
+ * `booking.override_price`. If the two shared a field, the guard could be
+ * defeated by sending a different base rate and calling it the unit's.
+ *
+ * A villa or צימר is not a hotel with a rate card. The owner quotes a number
+ * for this stay — a slow week, a returning guest, a friend of a friend — and
+ * two identical stays selling for different amounts is the normal case rather
+ * than an exception. So the unit's stored rate is a *default and a suggestion*.
+ * A price below it is not an error and nothing here treats it as one; the only
+ * floor is `s.agorot`'s, which refuses a negative number and nothing else.
+ *
+ * When a price is agreed, the extra-guest supplement is dropped. That is not a
+ * special case in the engine — `StayPricingRequest.includedGuests` already
+ * documents itself as "guests the nightly rate already covers", and it defaults
+ * to all of them. A rate agreed for this party covers this party; adding a
+ * per-head supplement on top would charge more than the number the seller said
+ * out loud, which is the one thing an agreed price must never do. The cleaning
+ * fee and the refundable deposit stay: they are separate charges the guest
+ * genuinely pays, and the form shows the resulting total before anything is
+ * submitted.
  */
 function toPricingRequest(
   range: DateRange,
   guests: number,
   input: PricingInput,
-  manualDiscountAgorot?: number,
+  options: {
+    manualDiscountAgorot?: number
+    agreedNightlyAgorot?: number
+  } = {},
 ): StayPricingRequest {
   const discounts: NonNullable<StayPricingRequest['discounts']>[number][] = []
 
@@ -159,25 +201,99 @@ function toPricingRequest(
       lineKind: 'promotion',
     })
   }
-  if (manualDiscountAgorot !== undefined && manualDiscountAgorot > 0) {
+  if (
+    options.manualDiscountAgorot !== undefined &&
+    options.manualDiscountAgorot > 0
+  ) {
     discounts.push({
       label: 'הנחה שאושרה ידנית',
       kind: 'fixed',
-      value: manualDiscountAgorot,
+      value: options.manualDiscountAgorot,
     })
   }
+
+  const agreed = options.agreedNightlyAgorot
+  const sellerPriced = agreed !== undefined
 
   return {
     range,
     guests,
-    baseNightlyAgorot: input.baseNightlyAgorot,
-    includedGuests: input.includedGuests,
-    extraGuestNightlyAgorot: input.extraGuestNightlyAgorot,
+    baseNightlyAgorot: sellerPriced ? agreed : input.baseNightlyAgorot,
+    includedGuests: sellerPriced ? undefined : input.includedGuests,
+    extraGuestNightlyAgorot: sellerPriced
+      ? undefined
+      : input.extraGuestNightlyAgorot,
     cleaningFeeAgorot: input.cleaningFeeAgorot,
     addons: input.addons,
     discounts,
     taxRatePercent: input.taxRatePercent,
     depositAgorot: input.depositAgorot,
+  }
+}
+
+/**
+ * The party, the sleeping shape and the event type, resolved and refused.
+ *
+ * Pure, and recomputed wherever it is needed rather than stashed between the
+ * pipeline's steps — the definition object is shared by every concurrent run of
+ * the operation, so a value computed in `rule` and read in `execute` would be
+ * one request's answer used for another's. See the file header.
+ *
+ * A caller that sends no `adults` gets `legacyParty`: the whole count as
+ * adults, which is what `SupabaseBookingRepository` has written since it was
+ * written, made explicit here so that an old caller has a documented answer
+ * rather than an accident. A caller that sends the split gets it checked
+ * against `guestCount`, because two numbers describing one party are two
+ * numbers that can disagree.
+ */
+function resolveIntake(input: {
+  guestCount: number
+  adults?: number
+  children?: number
+  infants?: number
+  couples?: number
+  extraBedsRequested?: number
+  cotsRequested?: number
+  eventType?: EventType
+  specialRequests?: string | null
+}): BookingIntake {
+  const party: BookingParty =
+    input.adults === undefined
+      ? legacyParty(input.guestCount)
+      : {
+          adults: input.adults,
+          children: input.children ?? 0,
+          infants: input.infants ?? 0,
+        }
+
+  const sleeping: SleepingRequest = {
+    couples: input.couples ?? 0,
+    extraBedsRequested: input.extraBedsRequested ?? 0,
+    cotsRequested: input.cotsRequested ?? 0,
+  }
+
+  assertParty(party, sleeping)
+
+  if (totalGuests(party) !== input.guestCount) {
+    throw new ValidationError([
+      {
+        field: 'guestCount',
+        code: 'mismatch',
+        message:
+          `סך האורחים (${input.guestCount}) אינו שווה לפירוט: ` +
+          `${describeParty(party)}.`,
+        label: 'מספר אורחים',
+      },
+    ])
+  }
+
+  const requests = input.specialRequests?.trim() ?? ''
+
+  return {
+    party,
+    sleeping,
+    eventType: input.eventType ?? DEFAULT_EVENT_TYPE,
+    specialRequests: requests.length > 0 ? requests : null,
   }
 }
 
@@ -320,6 +436,37 @@ export function defineBookingOperations(repo: BookingRepository) {
         max: 50,
         label: 'מספר אורחים',
       }),
+      // ── The party, as the schema has held it since 0009 ──────────────────
+      // Optional as a set: a caller that sends none of them keeps the old
+      // behaviour, and one that sends `adults` must send a split that sums to
+      // `guestCount`. `resolveIntake` is where that is decided; the schema's
+      // job is only to refuse a fraction or a negative.
+      adults: s.optional(
+        s.number({ integer: true, min: 1, max: 50, label: 'מבוגרים' }),
+      ),
+      children: s.optional(
+        s.number({ integer: true, min: 0, max: 50, label: 'ילדים' }),
+      ),
+      infants: s.optional(
+        s.number({ integer: true, min: 0, max: 50, label: 'תינוקות' }),
+      ),
+      couples: s.optional(
+        s.number({ integer: true, min: 0, max: 25, label: 'זוגות' }),
+      ),
+      extraBedsRequested: s.optional(
+        s.number({ integer: true, min: 0, max: 50, label: 'מיטות נוספות' }),
+      ),
+      cotsRequested: s.optional(
+        s.number({ integer: true, min: 0, max: 20, label: 'מיטות תינוק' }),
+      ),
+      // The frozen list, imported rather than restated. A value this build does
+      // not know is refused here rather than reaching a work plan.
+      eventType: s.optional(s.enumOf(EVENT_TYPES, { label: 'סוג האירוח' })),
+      specialRequests: s.optional(
+        s.nullable(
+          s.string({ max: SPECIAL_REQUESTS_MAX, label: 'בקשות מיוחדות' }),
+        ),
+      ),
       checkIn: isoDate('תאריך הגעה'),
       checkOut: isoDate('תאריך עזיבה'),
       source: s.enumOf(BOOKING_SOURCES, { label: 'מקור ההזמנה' }),
@@ -330,6 +477,14 @@ export function defineBookingOperations(repo: BookingRepository) {
       referralId: s.optional(s.nullable(s.string())),
       status: s.optional(s.enumOf(INITIAL_STATUSES, { label: 'סטטוס' })),
       pricing: pricingInput,
+      /**
+       * The price the seller agreed for this booking, per night.
+       *
+       * Guarded by `booking.override_price` in `rule`. Absent means "use the
+       * unit's stored rate", which is what most bookings do and what makes the
+       * common case one keystroke on the form.
+       */
+      agreedNightlyAgorot: s.optional(s.agorot({ label: 'מחיר מוסכם ללילה' })),
       manualDiscountAgorot: s.optional(s.agorot({ label: 'הנחה ידנית' })),
       overrideAvailability: s.optional(s.boolean({ label: 'עקיפת זמינות' })),
       fromHoldId: s.optional(s.string()),
@@ -343,6 +498,21 @@ export function defineBookingOperations(repo: BookingRepository) {
       // This is that check, before a single row is read.
       assertCan(actor, 'booking.create', target)
 
+      // Refused before anything is read, and before the price is used. The
+      // browser's number is never trusted on its own: this is the authorization,
+      // and `createBookingAction` asserts the same grant independently on its
+      // own side of the wire.
+      //
+      // No reason is demanded, and that is deliberate rather than an omission.
+      // A manual discount is an exception to a price and has to be explained;
+      // a price agreed with the guest *is* the price in this business, and
+      // making the normal case justify itself in a free-text box would teach
+      // the desk to type a full stop. What is recorded instead is the fact and
+      // the figure, in the audit sentence below.
+      if (input.agreedNightlyAgorot !== undefined) {
+        assertCan(actor, 'booking.override_price', target)
+      }
+
       if (
         input.manualDiscountAgorot !== undefined &&
         input.manualDiscountAgorot > 0
@@ -353,6 +523,12 @@ export function defineBookingOperations(repo: BookingRepository) {
           'הנחה ידנית דורשת נימוק. הסבר בקצרה מדוע היא ניתנת.',
         )
       }
+
+      // Throws a `ValidationError` naming the field when the split does not add
+      // up, when a party has three couples among four adults, or when the event
+      // type is one this build does not know. Done in `rule` so a bad booking
+      // is refused before a guest row is created for it.
+      resolveIntake(input)
 
       const range: DateRange = {
         checkIn: input.checkIn,
@@ -397,13 +573,13 @@ export function defineBookingOperations(repo: BookingRepository) {
         checkIn: input.checkIn,
         checkOut: input.checkOut,
       }
+      // Recomputed rather than carried from `rule` — see the file header.
+      const intake = resolveIntake(input)
       const quote = priceStay(
-        toPricingRequest(
-          range,
-          input.guestCount,
-          input.pricing,
-          input.manualDiscountAgorot,
-        ),
+        toPricingRequest(range, input.guestCount, input.pricing, {
+          manualDiscountAgorot: input.manualDiscountAgorot,
+          agreedNightlyAgorot: input.agreedNightlyAgorot,
+        }),
       )
 
       const booking = await repo.insertBooking(
@@ -413,6 +589,10 @@ export function defineBookingOperations(repo: BookingRepository) {
           unitId: input.unitId,
           guestName: input.guestName,
           guestCount: input.guestCount,
+          party: intake.party,
+          sleeping: intake.sleeping,
+          eventType: intake.eventType,
+          specialRequests: intake.specialRequests,
           checkIn: range.checkIn,
           checkOut: range.checkOut,
           status: input.status ?? 'inquiry',
@@ -442,13 +622,32 @@ export function defineBookingOperations(repo: BookingRepository) {
       return { booking, quote, hold }
     },
 
+    /**
+     * The sentence, and the record underneath it.
+     *
+     * `after` carries the whole intake — the split party, the sleeping shape,
+     * the event type and the special request. Worth being plain about what that
+     * is and is not: `bookings` has columns for the party and for nothing else
+     * on that list, so until the migration described alongside this work lands,
+     * the audit event is the *only* place the event type and the cot request
+     * are written down at all. That is a record, not a source of truth, and no
+     * screen should read a booking's facts back out of it.
+     */
     audit({ input, result, context }) {
       const range: DateRange = {
         checkIn: input.checkIn,
         checkOut: input.checkOut,
       }
+      const intake = resolveIntake(input)
       const override =
         input.overrideAvailability === true ? ' (בעקיפת זמינות)' : ''
+      // Named in the sentence rather than only in the payload: "was this sold
+      // at the list price?" is the question an owner asks about their own desk,
+      // and it should be answerable by reading the line.
+      const priced =
+        input.agreedNightlyAgorot === undefined
+          ? ''
+          : ` במחיר מוסכם של ${formatAgorot(input.agreedNightlyAgorot)} ללילה`
 
       return {
         resourceId: result.booking.id,
@@ -460,16 +659,36 @@ export function defineBookingOperations(repo: BookingRepository) {
           guestName: result.booking.guestName,
           totalAgorot: result.booking.totalAgorot,
           source: input.source,
+          adults: intake.party.adults,
+          children: intake.party.children,
+          infants: intake.party.infants,
+          couples: intake.sleeping.couples,
+          extraBedsRequested: intake.sleeping.extraBedsRequested,
+          cotsRequested: intake.sleeping.cotsRequested,
+          eventType: intake.eventType,
+          specialRequests: intake.specialRequests,
+          agreedNightlyAgorot: input.agreedNightlyAgorot ?? null,
         },
         summary:
           `${context.auditActor.label} יצרה את הזמנה ${result.booking.reference} ` +
           `עבור ${input.guestName} ביחידה ${input.unitLabel} ` +
           `לתאריכים ${formatRange(range)} (${result.quote.nights} לילות) ` +
-          `בסך ${formatAgorot(result.quote.totalAgorot)}${override}`,
+          `עבור ${describeParty(intake.party)} ` +
+          `(${EVENT_TYPE_LABEL[intake.eventType]}) ` +
+          `בסך ${formatAgorot(result.quote.totalAgorot)}${priced}${override}`,
       }
     },
 
-    events({ result }) {
+    /**
+     * What a subscriber needs to start preparing.
+     *
+     * The party and the event type ride on the event because the preparation
+     * engine's whole input is these numbers, and a subscriber that had to read
+     * them back off `bookings` would find columns that do not exist yet.
+     */
+    events({ input, result }) {
+      const intake = resolveIntake(input)
+
       return [
         {
           name: 'booking.created',
@@ -482,6 +701,13 @@ export function defineBookingOperations(repo: BookingRepository) {
             checkOut: result.booking.checkOut,
             totalAgorot: result.booking.totalAgorot,
             convertedHoldId: result.hold === null ? null : result.hold.id,
+            adults: intake.party.adults,
+            children: intake.party.children,
+            infants: intake.party.infants,
+            couples: intake.sleeping.couples,
+            extraBedsRequested: intake.sleeping.extraBedsRequested,
+            cotsRequested: intake.sleeping.cotsRequested,
+            eventType: intake.eventType,
           },
         },
       ]
@@ -680,7 +906,9 @@ export function defineBookingOperations(repo: BookingRepository) {
       const quote =
         input.pricing === undefined
           ? null
-          : priceStay(toPricingRequest(range, entity.guestCount, input.pricing))
+          : priceStay(
+              toPricingRequest(range, entity.guestCount, input.pricing, {}),
+            )
 
       const booking = await repo.updateBooking({
         bookingId: entity.id,

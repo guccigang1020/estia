@@ -39,12 +39,19 @@ import { assertCan, can, type Resource } from '@/lib/authz/can'
 import {
   BOOKING_STATUSES,
   checkAvailability,
+  totalGuests,
   type AvailabilityBlocker,
   type BookingSource,
   type BookingStatus,
 } from '@/lib/booking'
-import { NotFoundError, toSafeResponse, type SafeErrorBody } from '@/lib/errors'
+import {
+  BusinessRuleError,
+  NotFoundError,
+  toSafeResponse,
+  type SafeErrorBody,
+} from '@/lib/errors'
 import { asAgorot, asNumber, toRow } from '@/lib/persistence'
+import type { EventType } from '@/lib/preparation/types'
 
 import { shellContext } from '../../_lib/context'
 import { auditActorFor, bookingWiring } from './wiring'
@@ -117,11 +124,36 @@ export type CreateBookingInput = {
   unitLabel: string
   propertyId: string | null
   guestName: string
-  guestCount: number
+  /**
+   * The party, split the way `public.bookings` has stored it since 0009.
+   *
+   * There is no `guestCount` here any more. The total is `adults + children +
+   * infants` and it is derived below rather than sent, so a browser cannot
+   * offer a total that disagrees with its own breakdown — the operation refuses
+   * that pair, and a field that can only ever be wrong is a field worth not
+   * having.
+   */
+  adults: number
+  children: number
+  infants: number
+  /** Pairs sharing a bed. Decides double beds against separate ones. */
+  couples: number
+  extraBedsRequested: number
+  cotsRequested: number
+  eventType: EventType
+  specialRequests: string | null
   checkIn: string
   checkOut: string
   status: BookingStatus
   source: BookingSource
+  /**
+   * The price the seller agreed for this booking, per night, or null to use the
+   * unit's stored rate.
+   *
+   * Non-null is refused for an actor without `booking.override_price` — twice,
+   * here and inside the operation. See the block in `createBookingAction`.
+   */
+  agreedNightlyAgorot: number | null
   /**
    * Generated once per form instance in the browser. A second submission of
    * the same form replays the first answer instead of creating a second
@@ -172,16 +204,51 @@ export async function createBookingAction(
       throw new Error(`Unsupported initial status: ${input.status}`)
     }
 
+    // ── The agreed price, authorized rather than merely accepted ───────────
+    //
+    // A villa owner sells at the price they agreed with the guest, and two
+    // identical stays going for different amounts is the normal case here
+    // rather than an exception. So a price may come from the browser — but
+    // only from somebody entitled to set one. This is the independent refusal;
+    // `booking.create` asserts the same grant again inside the operation,
+    // before it prices anything. An actor without the grant that posts a price
+    // anyway is refused here and never reaches the second check.
+    //
+    // Nothing below treats a low price as suspicious. The unit's stored rate is
+    // a default and a suggestion, never a floor.
+    if (input.agreedNightlyAgorot !== null) {
+      assertCan(context.actor, 'booking.override_price', resource)
+    }
+
     const { operations, services, db } = await bookingWiring()
 
-    // The price is the unit's own, read from the unit, never sent by the
-    // browser. A nightly rate arriving from a form is a number a guest can
-    // change with the developer tools.
-    const pricing = await pricingForUnit(
+    // The unit's own price list and its capacity, read from the unit. The rate
+    // is the *default*: it is what a booking is priced at unless somebody
+    // holding `booking.override_price` names another number, and it is never
+    // taken from the browser on its own.
+    const unit = await unitTermsFor(
       db,
       context.actor.organizationId,
       input.unitId,
     )
+
+    // Capacity, checked on the server. The form checks the same thing, and a
+    // form check is not enforcement — a Server Action is a POST, and a crafted
+    // one could otherwise put fifty people into a four-person cabin.
+    const guestCount = totalGuests({
+      adults: input.adults,
+      children: input.children,
+      infants: input.infants,
+    })
+    if (guestCount > unit.maxGuests) {
+      throw new BusinessRuleError({
+        code: 'booking.over_capacity',
+        message: `Party of ${guestCount} exceeds unit capacity ${unit.maxGuests}`,
+        userMessage:
+          `היחידה מכילה עד ${unit.maxGuests} אורחים, וההזמנה מונה ` +
+          `${guestCount}. בחר יחידה גדולה יותר או עדכן את מספר האורחים.`,
+      })
+    }
 
     // Assembled key by key rather than spread. `s.object` refuses a field it
     // does not name — `allowUnknown` is off by design — so passing the form's
@@ -191,12 +258,23 @@ export async function createBookingAction(
       unitId: input.unitId,
       unitLabel: input.unitLabel,
       guestName: input.guestName,
-      guestCount: input.guestCount,
+      guestCount,
+      adults: input.adults,
+      children: input.children,
+      infants: input.infants,
+      couples: input.couples,
+      extraBedsRequested: input.extraBedsRequested,
+      cotsRequested: input.cotsRequested,
+      eventType: input.eventType,
+      specialRequests: input.specialRequests,
       checkIn: input.checkIn,
       checkOut: input.checkOut,
       source: input.source,
       status: input.status,
-      pricing,
+      pricing: unit.pricing,
+      ...(input.agreedNightlyAgorot !== null
+        ? { agreedNightlyAgorot: input.agreedNightlyAgorot }
+        : {}),
       ...(input.propertyId !== null ? { propertyId: input.propertyId } : {}),
     }
 
@@ -227,13 +305,19 @@ export async function createBookingAction(
 }
 
 /**
- * The unit's price list, as stored.
+ * The unit's price list and its capacity, as stored.
  *
  * `checkAvailability` and `priceStay` both refuse to invent a number, and so
  * does this: a unit whose row cannot be read produces a failure the caller
  * sees, not a zero that quietly prices a stay at nothing.
+ *
+ * The rate read here is the *default*. Where a business wants a fixed price,
+ * this is that fixed price and nothing further is needed; where a business
+ * quotes deal by deal, it is the number the field starts on. Neither shape is
+ * forced, and a unit priced at zero is a unit nobody has configured rather than
+ * a free stay — which is why the read fails loudly instead of defaulting.
  */
-async function pricingForUnit(
+async function unitTermsFor(
   db: Awaited<ReturnType<typeof bookingWiring>>['db'],
   organizationId: string,
   unitId: string,
@@ -242,7 +326,7 @@ async function pricingForUnit(
     .from('units')
     .select(
       'base_price_agorot, extra_guest_price_agorot, cleaning_fee_agorot, ' +
-        'deposit_agorot, standard_guests',
+        'deposit_agorot, standard_guests, max_guests',
     )
     .eq('organization_id', organizationId)
     .eq('id', unitId)
@@ -263,11 +347,14 @@ async function pricingForUnit(
   const row = toRow(data)
 
   return {
-    baseNightlyAgorot: asAgorot(row, 'base_price_agorot'),
-    extraGuestNightlyAgorot: asAgorot(row, 'extra_guest_price_agorot'),
-    cleaningFeeAgorot: asAgorot(row, 'cleaning_fee_agorot'),
-    depositAgorot: asAgorot(row, 'deposit_agorot'),
-    includedGuests: asNumber(row, 'standard_guests'),
+    maxGuests: asNumber(row, 'max_guests'),
+    pricing: {
+      baseNightlyAgorot: asAgorot(row, 'base_price_agorot'),
+      extraGuestNightlyAgorot: asAgorot(row, 'extra_guest_price_agorot'),
+      cleaningFeeAgorot: asAgorot(row, 'cleaning_fee_agorot'),
+      depositAgorot: asAgorot(row, 'deposit_agorot'),
+      includedGuests: asNumber(row, 'standard_guests'),
+    },
   }
 }
 
