@@ -34,9 +34,27 @@ export type CreateGuestInput = {
   tags: readonly string[]
   notes: string
   marketingConsent: boolean
+  /**
+   * Minted once per card being filled in, not once per submit.
+   *
+   * This is what turns a double click, an impatient second press or a retry
+   * after a dropped connection into one guest instead of two. It stays the
+   * same for as long as the person is working on *this* card, so the pipeline
+   * recognises the second attempt as the same request and hands back the first
+   * result; starting a new card mints a new key, because that genuinely is a
+   * different guest.
+   */
+  idempotencyKey: string
 }
 
-export const EMPTY_GUEST_INPUT: CreateGuestInput = {
+/**
+ * `idempotencyKey` is deliberately absent here and minted by the form.
+ *
+ * A constant would be worse than none: every card in every browser would share
+ * one key, and the second guest anybody ever created would come back as the
+ * first one. The form calls `crypto.randomUUID()` when it mounts.
+ */
+export const EMPTY_GUEST_INPUT: Omit<CreateGuestInput, 'idempotencyKey'> = {
   fullName: '',
   phone: '',
   email: '',

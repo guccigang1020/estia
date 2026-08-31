@@ -104,7 +104,7 @@ export default async function NewGuestPage() {
           {failure ? (
             <ActionError error={failure.error} />
           ) : (
-            <CreateGuestForm knownTags={tags} />
+            <CreateGuestForm knownTags={tags} mayList={mayList} />
           )}
         </div>
       </Card>

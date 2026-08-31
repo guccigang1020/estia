@@ -69,21 +69,51 @@ const LANGUAGES: readonly { code: string; label: string }[] = [
 export function CreateGuestForm({
   /** Tags already in use, offered so the vocabulary does not fork by typo. */
   knownTags,
+  /**
+   * May this person open the guest list?
+   *
+   * `guest.create` and `guest.view` are separate grants, and an external agent
+   * holds the first without the second — they may add the guest they are
+   * booking for and may not browse the customer list. Cancel used to link to
+   * `/guests` regardless, so for that persona the way out of the form was a
+   * redirect to `/dashboard?denied=guest.view`. A cancel that refuses you is
+   * worse than no cancel, so when the list is closed the control goes back to
+   * the one screen that is certainly open.
+   */
+  mayList,
 }: {
   knownTags: readonly string[]
+  mayList: boolean
 }) {
   const router = useRouter()
 
-  const [input, setInput] = useState<CreateGuestInput>(EMPTY_GUEST_INPUT)
+  const [input, setInput] = useState(EMPTY_GUEST_INPUT)
   const [tagText, setTagText] = useState('')
   const [touched, setTouched] = useState(false)
   const [failure, setFailure] = useState<SafeErrorBody | null>(null)
   const [created, setCreated] = useState<{ fullName: string } | null>(null)
 
+  /**
+   * One key per card, minted lazily and kept across submits.
+   *
+   * This is the whole of the double-submit protection: the same key on a
+   * second press makes the pipeline recognise the same request and return the
+   * first guest instead of creating a second. It survives a failed attempt on
+   * purpose — a retry after a dropped connection is the case that matters
+   * most, because the caller cannot know whether the first one landed.
+   *
+   * `useState` with an initialiser rather than `useRef(crypto.randomUUID())`:
+   * the argument form would mint a fresh id on every render and throw the
+   * result away, which works until somebody wonders why it is there.
+   */
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  )
+
   const create = useAsyncAction<void>()
 
   const tags = normalizeTags(tagText.split(','))
-  const draft: CreateGuestInput = { ...input, tags }
+  const draft: CreateGuestInput = { ...input, tags, idempotencyKey }
   const issues = validateGuest(draft)
   const issueFor = (field: string) =>
     touched ? issues.find((issue) => issue.field === field)?.message : undefined
@@ -118,6 +148,11 @@ export function CreateGuestForm({
               setInput(EMPTY_GUEST_INPUT)
               setTagText('')
               setTouched(false)
+              // A new card is a different guest, so it gets a different key.
+              // Reusing the last one would make the second guest come back as
+              // the first — the exact failure the key exists to prevent,
+              // inverted.
+              setIdempotencyKey(crypto.randomUUID())
             }}
           >
             צור אורח נוסף
@@ -313,7 +348,7 @@ export function CreateGuestForm({
         <Button type="submit" disabled={create.pending}>
           {create.pending ? 'שומר…' : 'צור כרטיס אורח'}
         </Button>
-        <Button href="/guests" variant="ghost">
+        <Button href={mayList ? '/guests' : '/dashboard'} variant="ghost">
           ביטול
         </Button>
 

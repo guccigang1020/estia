@@ -102,6 +102,12 @@ export default async function TeamPage() {
   // The control is offered only when the route behind it would admit them.
   const mayInvite = holdsGrant(actor, 'user.invite')
   const maySeeContact = holdsGrant(actor, 'user.edit')
+  // `/roles` is gated on `role.assign`, which a general manager, a property
+  // manager, reception and an accountant all lack. Linking them to it sent
+  // them to `/dashboard?denied=role.assign` — a sentence explaining a withheld
+  // column by pointing at a screen the reader is refused. The explanation is
+  // still true without the link, so only the link goes.
+  const maySeeRoles = holdsGrant(actor, 'role.assign')
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
@@ -176,14 +182,19 @@ export default async function TeamPage() {
             <code dir="ltr">auth.users</code>, ששום שאילתה של לקוח אינה קוראת.
             מספרי טלפון מוצגים רק למי שמחזיק בהרשאה לערוך אנשים (
             <code dir="ltr">user.edit</code>), ולא לכל מי שרשאי לראות את הרשימה.
-            ראו את{' '}
-            <Link
-              href="/roles"
-              className="text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              מסך התפקידים
-            </Link>{' '}
-            כדי לראות מי מחזיק במה.
+            {maySeeRoles ? (
+              <>
+                {' '}
+                ראו את{' '}
+                <Link
+                  href="/roles"
+                  className="text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  מסך התפקידים
+                </Link>{' '}
+                כדי לראות מי מחזיק במה.
+              </>
+            ) : null}
           </Notice>
         </>
       )}

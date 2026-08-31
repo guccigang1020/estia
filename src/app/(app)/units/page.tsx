@@ -14,6 +14,7 @@ import { Notice } from '@/components/management/notice'
 import { PageHeader } from '@/components/management/page-header'
 import { ModuleEmptyState } from '@/components/states/empty-state'
 import { Badge } from '@/components/ui/badge'
+import { holdsGrant } from '@/lib/authz/can'
 import { toLogEntry } from '@/lib/errors'
 import { formatAgorot } from '@/lib/plans/plan'
 import { createClient } from '@/lib/supabase/server'
@@ -93,6 +94,12 @@ export default async function UnitsPage() {
   let failure: unknown = null
   const correlationId = crypto.randomUUID()
 
+  // `/roles` is gated on `role.assign`, which reception and an accountant do
+  // not hold — and they are exactly the readers who see a hidden column here.
+  // Sending them to a screen that refuses them explains nothing, so the
+  // sentence keeps its meaning and loses its link.
+  const maySeeRoles = holdsGrant(actor, 'role.assign')
+
   try {
     const db = await createClient()
     units = await listUnits({
@@ -165,14 +172,19 @@ export default async function UnitsPage() {
 
           <p className="text-sm text-muted-foreground">
             מחירים ופיקדונות מוצגים למי שרשאי לראותם. אם עמודה מסומנת כמוסתרת,
-            הערך קיים ואינו מוצג לך —{' '}
-            <Link
-              href="/roles"
-              className="text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              מסך התפקידים
-            </Link>{' '}
-            מראה אילו הרשאות פותחות אותה.
+            הערך קיים ואינו מוצג לך.
+            {maySeeRoles ? (
+              <>
+                {' '}
+                <Link
+                  href="/roles"
+                  className="text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  מסך התפקידים
+                </Link>{' '}
+                מראה אילו הרשאות פותחות אותה.
+              </>
+            ) : null}
           </p>
         </>
       )}

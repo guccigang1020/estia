@@ -29,21 +29,18 @@
  * code change.
  */
 
-import type { AuditActor } from '@/lib/audit/events'
 import { defineBookingOperations } from '@/lib/booking'
 import type { BookingOperations } from '@/lib/booking'
 import type { OperationServices } from '@/lib/service'
 import {
-  AtomicTransactionUnavailableError,
   SupabaseAuditWriter,
   SupabaseBookingRepository,
   SupabaseIdempotencyStore,
-  postgresUnitOfWork,
-  sequentialUnitOfWork,
   type Db,
 } from '@/lib/persistence'
 import { createClient } from '@/lib/supabase/server'
-import type { User } from '@supabase/supabase-js'
+
+import { transactionRunner } from '../../_lib/wiring'
 
 export type BookingWiring = {
   db: Db
@@ -54,34 +51,9 @@ export type BookingWiring = {
   atomic: boolean
 }
 
-/** Logged once, not once per booking. */
-let warnedAboutTransactions = false
-
-function transactionRunner(db: Db): {
-  transactions: OperationServices['transactions']
-  atomic: boolean
-} {
-  try {
-    return { transactions: postgresUnitOfWork(db), atomic: true }
-  } catch (cause) {
-    if (!(cause instanceof AtomicTransactionUnavailableError)) throw cause
-
-    if (!warnedAboutTransactions) {
-      warnedAboutTransactions = true
-      console.warn(
-        '[bookings] DATABASE_URL is not set, so booking writes are sequential ' +
-          'rather than transactional. A failure after the booking row is ' +
-          'written leaves the audit event or the price lines behind it ' +
-          'uncommitted, and PartialCommitError will name which. Point ' +
-          'DATABASE_URL at the Supabase transaction pooler (port 6543) to ' +
-          'restore atomicity.',
-        cause.message,
-      )
-    }
-
-    return { transactions: sequentialUnitOfWork(db), atomic: false }
-  }
-}
+// `transactionRunner` moved to `src/app/(app)/_lib/wiring.ts` for the same
+// reason `auditActorFor` did: three other write paths need it, and importing
+// bookings from guests would say something false about how they relate.
 
 /**
  * The domain, bound to this request.
@@ -113,23 +85,11 @@ export async function bookingWiring(): Promise<BookingWiring> {
 }
 
 /**
- * How this person is named in the audit timeline.
+ * Re-exported, not defined here any more.
  *
- * The authorization engine deals in ids and would be wrong to know a name;
- * the audit trail is worthless without one. Falls back through the profile
- * name, the email, and finally the id — never to "משתמש", which would make two
- * different people's actions indistinguishable in a dispute.
+ * `auditActorFor` was never about bookings — a guest, a property and an
+ * invitation all need the same answer to "whose name goes in the audit trail".
+ * It lives in `src/app/(app)/_lib/wiring.ts` now. The re-export stays so the
+ * call sites inside this module read the way they always did.
  */
-export function auditActorFor(user: User): AuditActor {
-  const fullName =
-    typeof user.user_metadata?.full_name === 'string' &&
-    user.user_metadata.full_name.trim().length > 0
-      ? user.user_metadata.full_name.trim()
-      : null
-
-  return {
-    type: 'user',
-    userId: user.id,
-    label: fullName ?? user.email ?? user.id,
-  }
-}
+export { auditActorFor } from '../../_lib/wiring'

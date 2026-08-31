@@ -72,6 +72,35 @@ src/lib/persistence/agents.ts                 authz                write
 supabase/migrations/**                        authz                write
 supabase/tests/**                             authz                write
 
+# ── The write paths behind screens that already ship. ─────────────────────
+#
+# Three forms exist and cannot honestly submit: guest creation writes with no
+# audit event and no idempotency key, and property creation and the team
+# invitation have no domain operation at all, so their submits are disabled
+# on screen. Closing that means new domain modules plus the three action files
+# that call them, which is why those three files are claimed here and out of
+# their screen group's hands for the duration.
+src/lib/guests/**                             domain-writes        write
+src/lib/properties/**                         domain-writes        write
+src/lib/invitations/**                        domain-writes        write
+src/lib/service/**                            domain-writes        write
+src/app/(app)/guests/_lib/actions.ts          domain-writes        write
+src/app/(app)/properties/**                   domain-writes        write
+src/app/(app)/team/invite/**                  domain-writes        write
+
+# ── The one block with no domain at all, not merely no screen. ─────────────
+src/app/(app)/website/**                      ai-website           write
+src/app/(app)/automations/**                  ai-website           write
+src/app/(app)/templates/**                    ai-website           write
+src/app/(app)/insights/**                     ai-website           write
+src/components/website/**                     ai-website           write
+src/lib/website/**                            ai-website           write
+src/lib/automation/**                         ai-website           write
+
+# ── End-to-end verification. Writes its own suite and nothing else. ───────
+e2e/**                                        qa                   write
+playwright.config.ts                          qa                   write
+
 # ── Screen groups. Each owns its routes, its components, its demo data. ───
 src/app/(app)/guests/**                       guests               write
 src/components/guests/**                      guests               write
@@ -95,7 +124,7 @@ src/app/(app)/team/**                         management           write
 src/app/(app)/roles/**                        management           write
 src/app/(app)/integrations/**                 management           write
 src/app/(app)/audit/**                        management           write
-src/app/(app)/properties/**                   management           write
+# properties moved to domain-writes for this wave — see the block above.
 src/components/management/**                  management           write
 src/lib/demo/dataset-inventory.ts             management           write
 

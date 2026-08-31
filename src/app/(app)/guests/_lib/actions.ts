@@ -3,28 +3,23 @@
 /**
  * EXECUTION CONTEXT — SERVER ACTION. Creating a guest.
  *
- * ── This writes a row directly, and that is a compromise, not a pattern ───
+ * ── This writes no row. It hands the request to an operation ──────────────
  *
  * `bookings/_lib/actions.ts` opens by saying that not one of its functions
- * writes a row: each hands the request to an operation from
- * `defineBookingOperations`, which is the only path with authorization,
- * validation, optimistic locking, the transaction, the audit event and
- * idempotency wired in that order. There is no equivalent for a guest —
- * `src/lib/guests` does not exist, there is no `GuestRepository` port, and the
- * only guest write anywhere in the codebase is the private `createGuest`
- * inside `SupabaseBookingRepository`, which creates a guest carrying nothing
- * but a name. So this action is written the way
- * `settings/organization/_lib/actions.ts` is: the signed-in user's client,
- * `assertCan` first and independently, validation before the write, and the
- * database's own constraints as the final authority.
+ * writes a row: each hands the request to an operation, which is the only path
+ * with authorization, validation, the transaction, the audit event and
+ * idempotency wired in that order. This file said the opposite for a while,
+ * and said so honestly — there was no guest domain, so it inserted into
+ * `guests` itself, with no audit event and no idempotency key. A second POST
+ * of the same form created a second guest unless the telephone number happened
+ * to collide with `guests_organization_phone_idx`.
  *
- * WHAT THAT COSTS, STATED RATHER THAN HIDDEN. No audit event is recorded for a
- * guest created here, and no idempotency key protects a resubmission — a
- * second POST of the same form creates a second guest unless the telephone
- * number collides with `guests_organization_phone_idx`, in which case the
- * database refuses it and the person is told exactly that. Both are closed by
- * a `createGuest` operation in the service pipeline, which is the gap this
- * screen reports rather than papers over.
+ * `defineGuestOperations` closed that. The insert, the duplicate-phone
+ * translation and the "written but not readable back" case all moved into
+ * `src/lib/guests`, where the pipeline records the audit event and the
+ * idempotency key around them. What is left here is the shape of the request:
+ * trimming the form's strings to `null`, naming the person for the audit
+ * trail, and turning any failure into a sentence.
  *
  * ── Why `assertCan` is called here as well ────────────────────────────────
  *
@@ -45,16 +40,20 @@ import { revalidatePath } from 'next/cache'
 
 import { assertCan, holdsGrant } from '@/lib/authz/can'
 import {
-  BusinessRuleError,
   ValidationError,
   toSafeResponse,
   type SafeErrorBody,
 } from '@/lib/errors'
-import { PG_ERROR } from '@/lib/persistence'
+import { defineGuestOperations, normalizeTags } from '@/lib/guests'
+import {
+  SupabaseAuditWriter,
+  SupabaseIdempotencyStore,
+} from '@/lib/persistence'
 import { createClient } from '@/lib/supabase/server'
 
+import { auditActorFor, transactionRunner } from '../../_lib/wiring'
 import { shellContext } from '../../_lib/context'
-import { normalizeTags, validateGuest, type CreateGuestInput } from './schema'
+import { validateGuest, type CreateGuestInput } from './schema'
 
 export type ActionResult<TData> =
   { ok: true; data: TData } | { ok: false; error: SafeErrorBody }
@@ -111,19 +110,6 @@ async function requireReady() {
   return { ok: true as const, context }
 }
 
-/** Is this the deduplication index refusing a telephone number it already holds? */
-function isDuplicatePhone(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false
-  const record = error as {
-    code?: unknown
-    message?: unknown
-    details?: unknown
-  }
-  if (record.code !== PG_ERROR.UNIQUE_VIOLATION) return false
-  const haystack = `${String(record.message ?? '')} ${String(record.details ?? '')}`
-  return haystack.includes('guests_organization_phone_idx')
-}
-
 /* ---------------------------------------------------------- the action -- */
 
 export async function createGuestAction(
@@ -147,77 +133,57 @@ export async function createGuestAction(
     if (issues.length > 0) throw new ValidationError(issues)
 
     const supabase = await createClient()
+    const { transactions } = transactionRunner(supabase)
+    const operations = defineGuestOperations({ db: supabase })
 
-    const email = input.email.trim()
-    const phone = input.phone.trim()
-    const nationality = input.nationality.trim().toUpperCase()
-    const city = input.city.trim()
-    const notes = input.notes.trim()
-    const fullName = input.fullName.trim()
-
-    const { data, error } = await supabase
-      .from('guests')
-      .insert({
-        organization_id: context.actor.organizationId,
-        full_name: fullName,
-        // Written only where a value was actually given. An empty string is a
-        // value: it would fail the format check, and where it did not it would
-        // read on screen as "we hold an address for this person" when we hold
-        // nothing at all.
-        email: email.length > 0 ? email : null,
-        phone: phone.length > 0 ? phone : null,
-        language: input.language.trim(),
-        nationality: nationality.length > 0 ? nationality : null,
-        city: city.length > 0 ? city : null,
-        tags: normalizeTags(input.tags),
-        notes: notes.length > 0 ? notes : null,
-        marketing_consent: input.marketingConsent,
-        // The date is the evidence, not decoration: consent with no date is a
-        // claim nobody can defend later. Written only when consent was given,
-        // which is also what keeps it truthful when it is withdrawn.
-        marketing_consent_at: input.marketingConsent
-          ? new Date().toISOString()
-          : null,
-        created_by: context.user.id,
-        // `phone_e164` is deliberately absent: it is a generated column and
-        // Postgres refuses a write to it. The deduplication key is computed
-        // from `phone` by `normalize_phone_il` precisely so that no write path
-        // can skip it — including this one.
-      })
-      .select('id, full_name')
-      .single()
-
-    if (isDuplicatePhone(error)) {
-      throw new BusinessRuleError({
-        code: 'guest_phone_taken',
-        message: 'guests_organization_phone_idx rejected a duplicate phone',
-        userMessage:
-          'כבר קיים אורח עם מספר הטלפון הזה בארגון. חפש אותו ברשימת האורחים ' +
-          'ועדכן את הכרטיס הקיים, במקום לפתוח כרטיס שני לאותו אדם.',
-        cause: error,
-      })
+    // `GuestDraft` says an absent value is `null` and never `''`, so the trim
+    // happens here rather than in the domain: an empty string is a value, it
+    // fails `guests_email_format`, and where it does not it reads on screen as
+    // "we hold an address for this person" when we hold nothing at all.
+    const orNull = (value: string): string | null => {
+      const trimmed = value.trim()
+      return trimmed.length > 0 ? trimmed : null
     }
-    if (error) throw error
-    if (!data) {
-      // `.single()` with no error and no row means the insert was written and
-      // the policy then refused to return it. Saying "created" would be a lie
-      // and saying "failed" would be a different one, so the failure names
-      // what actually happened.
-      throw new BusinessRuleError({
-        code: 'guest_not_returned',
-        userMessage:
-          'האורח נשמר אך לא ניתן להציג אותו בהרשאות שלך. חפש אותו ברשימת ' +
-          'האורחים או פנה למנהל המערכת.',
-      })
-    }
+
+    const outcome = await operations.createGuest.run({
+      request: {
+        input: {
+          fullName: input.fullName.trim(),
+          phone: orNull(input.phone),
+          email: orNull(input.email),
+          language: input.language.trim(),
+          nationality: orNull(input.nationality.toUpperCase()),
+          city: orNull(input.city),
+          tags: normalizeTags(input.tags),
+          notes: orNull(input.notes),
+          marketingConsent: input.marketingConsent,
+        },
+        idempotencyKey: input.idempotencyKey,
+      },
+      context: {
+        actor: context.actor,
+        auditActor: auditActorFor(context.user),
+        correlationId,
+      },
+      services: {
+        audit: new SupabaseAuditWriter(supabase),
+        idempotency: new SupabaseIdempotencyStore(supabase),
+        transactions,
+        onEventError(error) {
+          // Never rethrown: a created guest whose event failed to deliver is
+          // still a created guest. Logged so the loss is not silent.
+          console.error('[guests] domain event delivery failed', error)
+        },
+      },
+    })
 
     revalidatePath('/guests')
 
     return {
       ok: true,
       data: {
-        id: data.id as string,
-        fullName: data.full_name as string,
+        id: outcome.data.id,
+        fullName: outcome.data.fullName,
         // `guest.create` and `guest.view` are separate grants, and an external
         // sales agent holds the first without the second — see `roles.ts`.
         // Redirecting them to a page that would bounce them to the dashboard

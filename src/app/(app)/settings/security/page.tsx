@@ -189,8 +189,18 @@ export default async function SecuritySettingsPage() {
             שקיימת בקוד ורצה בפועל, לא הבטחה.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button href="/forgot-password" variant="secondary">
-              שליחת קישור להחלפת סיסמה
+            {/*
+              `/reset-password`, not `/forgot-password`. The latter lives in
+              the `(guest)` route group, which redirects anyone already signed
+              in — so the one working control on this screen sent every reader
+              to `/account` and changed nothing. `/reset-password` sits outside
+              both groups deliberately (opening a recovery link signs you in, so
+              a guest guard would break the flow it exists to serve) and renders
+              the password form for any live session, which is precisely what
+              somebody standing on the security screen has.
+            */}
+            <Button href="/reset-password" variant="secondary">
+              החלפת סיסמה
             </Button>
             <Button href="/account" variant="ghost">
               יציאה מהדפדפן הזה

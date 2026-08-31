@@ -1,0 +1,86 @@
+[
+  {
+    "persona": "owner",
+    "dead": [
+      {
+        "href": "/forgot-password",
+        "verdict": "REFUSED",
+        "why": "redirected to /account with no stated reason",
+        "denied": null,
+        "offeredBy": ["/settings/security"]
+      }
+    ]
+  },
+  {
+    "persona": "administrator",
+    "dead": [
+      {
+        "href": "/forgot-password",
+        "verdict": "REFUSED",
+        "why": "redirected to /account with no stated reason",
+        "denied": null,
+        "offeredBy": ["/settings/security"]
+      }
+    ]
+  },
+  {
+    "persona": "general-manager",
+    "dead": [
+      {
+        "href": "/roles",
+        "verdict": "REFUSED",
+        "why": "redirected to /dashboard?denied=role.assign&reason=missing_permission",
+        "denied": "role.assign",
+        "offeredBy": ["/team", "/units"]
+      }
+    ]
+  },
+  {
+    "persona": "property-manager",
+    "dead": [
+      {
+        "href": "/roles",
+        "verdict": "REFUSED",
+        "why": "redirected to /dashboard?denied=role.assign&reason=missing_permission",
+        "denied": "role.assign",
+        "offeredBy": ["/team", "/units"]
+      }
+    ]
+  },
+  {
+    "persona": "reception",
+    "dead": [
+      {
+        "href": "/roles",
+        "verdict": "REFUSED",
+        "why": "redirected to /dashboard?denied=role.assign&reason=missing_permission",
+        "denied": "role.assign",
+        "offeredBy": ["/units"]
+      }
+    ]
+  },
+  {
+    "persona": "accountant",
+    "dead": [
+      {
+        "href": "/roles",
+        "verdict": "REFUSED",
+        "why": "redirected to /dashboard?denied=role.assign&reason=missing_permission",
+        "denied": "role.assign",
+        "offeredBy": ["/units"]
+      }
+    ]
+  },
+  {
+    "persona": "sales-agent",
+    "dead": [
+      {
+        "href": "/guests",
+        "verdict": "REFUSED",
+        "why": "redirected to /dashboard?denied=guest.view&reason=missing_permission",
+        "denied": "guest.view",
+        "offeredBy": ["/guests/new"]
+      }
+    ]
+  }
+]
