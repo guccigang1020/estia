@@ -1,0 +1,99 @@
+/**
+ * EXECUTION CONTEXT — SERVER ONLY.
+ *
+ * The route guard for the automation section.
+ *
+ * The same shape and the same argument as `agents/_lib/gate.ts`, which made
+ * this case first: `requireGrant` flattens every refusal into one redirect and
+ * one sentence — "המסך שביקשת דורש הרשאה שאין לך" — and that sentence is false
+ * for a plan refusal in the way that costs money. An owner holds
+ * `automation.view`; every role that reaches this screen holds it. What Basic,
+ * Direct and Pro do not carry is the `automation` entitlement, and telling the
+ * owner they lack a permission sends them to an administrator who cannot help,
+ * who then tells them the product is broken.
+ *
+ * ── Why the automation section needs its own copy and not the agents' ─────
+ *
+ * `requireDistributionGrant` is identical in behaviour and lives inside the
+ * distribution screens' `_lib`, whose owner is a different agent. Importing a
+ * route guard across two screen groups makes one group's refusal policy the
+ * other's dependency — and the entitlement lookup, which is the only line that
+ * matters, is read from the catalogue's own `ENTITLEMENT_FOR_GRANT` in both
+ * places, so the two cannot disagree about the answer even though they are two
+ * functions. If a third section needs this, it belongs in `_lib/guard.ts`
+ * beside `requireGrant`, which is the coordinator's file.
+ *
+ * IT IS NOT A WEAKER GATE. Every outcome except `plan_does_not_include` is the
+ * identical redirect `guard.ts` performs, through the identical `routeAccess`
+ * decision. The plan branch renders a screen rather than hiding one, and that
+ * screen offers nothing the module would have done — see `page.tsx`.
+ */
+
+import { redirect } from 'next/navigation'
+
+import type { Actor, Resource } from '@/lib/authz/can'
+import type { Grant } from '@/lib/authz/permissions'
+import {
+  ENTITLEMENT_FOR_GRANT,
+  type Entitlement,
+} from '@/lib/plans/entitlements'
+
+import { routeAccess } from '../../_lib/access'
+import { shellContext } from '../../_lib/context'
+
+/** Matches `SHELL_HOME` in `_lib/guard.ts`. The same landing page. */
+const SHELL_HOME = '/dashboard'
+
+/** Matches `SIGN_IN_PATH` in `src/lib/supabase/proxy.ts`. */
+const SIGN_IN = '/sign-in'
+
+export type AutomationAccess =
+  | { kind: 'allow'; actor: Actor }
+  /**
+   * Holds the right; the organization has not bought the feature.
+   *
+   * The actor is carried through, unlike the distribution gate's version, and
+   * that is the whole point of this screen: the dry run below the lock reads
+   * bookings, tasks and payments **as this person**, and needs their grants and
+   * their scope to do it. A lock that discarded the actor could only render a
+   * brochure.
+   */
+  | {
+      kind: 'locked'
+      actor: Actor
+      grant: Grant
+      entitlement: Entitlement | null
+    }
+
+export async function requireAutomationGrant(
+  grant: Grant,
+  resource?: Resource,
+): Promise<AutomationAccess> {
+  const context = await shellContext()
+  const decision = routeAccess(context, grant, resource)
+
+  switch (decision.outcome) {
+    case 'allow':
+      return { kind: 'allow', actor: decision.actor }
+    case 'sign_in':
+      redirect(SIGN_IN)
+    case 'no_workspace':
+      redirect(SHELL_HOME)
+    case 'denied':
+      if (
+        decision.reason === 'plan_does_not_include' &&
+        context !== null &&
+        context.status === 'ready'
+      ) {
+        return {
+          kind: 'locked',
+          actor: context.actor,
+          grant,
+          entitlement: ENTITLEMENT_FOR_GRANT[grant] ?? null,
+        }
+      }
+      redirect(
+        `${SHELL_HOME}?denied=${encodeURIComponent(grant)}&reason=${encodeURIComponent(decision.reason)}`,
+      )
+  }
+}

@@ -37,6 +37,7 @@
 import { nightsBetween } from '@/lib/booking/types'
 import type { Actor } from '@/lib/authz/can'
 import type { DomainEvent, DomainEventName } from '@/lib/contracts/events'
+import { TASK_STATUSES, type TaskStatus } from '@/lib/contracts/states'
 import {
   InMemoryAutomationLedger,
   runAutomations,
@@ -56,7 +57,17 @@ export interface BookingFact {
   checkIn: string
   checkOut: string
   propertyId: string | null
-  source: string
+  /**
+   * `null` when the reader may not see it — `booking.view_source` is a grant a
+   * receptionist and a cleaner do not hold.
+   *
+   * Null means the fact is **omitted** from the candidate below, not filled
+   * with a placeholder. That is this file's own rule applied to a privacy rule
+   * rather than to a schema gap: a condition comparing `source`, read by
+   * somebody who may not see `source`, must evaluate unmet and name the missing
+   * fact — not match a fabricated `'unknown'` that no column contains.
+   */
+  source: string | null
 }
 
 export interface TaskFact {
@@ -94,7 +105,37 @@ export interface Candidate {
 const PRE_ARRIVAL_DAYS = 3
 
 const OCCUPYING_SOON = new Set(['confirmed', 'deposit_paid'])
-const OPEN_TASK = new Set(['pending', 'assigned', 'in_progress'])
+
+/**
+ * A job that has not finished, expressed as what it is *not*.
+ *
+ * This was written as an allow-list — `['pending', 'assigned', 'in_progress']`
+ * — and it was wrong twice over, in the way an allow-list of enum members
+ * written from memory always eventually is. `pending` is not a member of
+ * `TASK_STATUSES` at all, so it matched nothing; and `new`, `accepted`,
+ * `blocked` and `awaiting_approval` are every bit as unfinished as `assigned`
+ * and were excluded. The effect was that `task.overdue` — the one simulated
+ * trigger the operations rules hang off — produced zero candidates for every
+ * reader on every dataset, and reported it as "your business has no late work".
+ * A confident wrong zero, on the screen whose entire job is to be believed.
+ *
+ * Written as the complement of the three settled statuses instead, from the
+ * frozen vocabulary itself, so a status added to `TASK_STATUSES` next year is
+ * open by default rather than silently invisible — which is the safe direction:
+ * an extra candidate is a number somebody questions, a missing one is a number
+ * nobody sees. It is the same reading `summariseTasks` takes in
+ * `tasks/_lib/queries.ts`, and it is derived rather than copied so the two
+ * cannot drift.
+ */
+const SETTLED_TASK: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  'completed',
+  'verified',
+  'cancelled',
+])
+
+const OPEN_TASK: ReadonlySet<string> = new Set<string>(
+  TASK_STATUSES.filter((status) => !SETTLED_TASK.has(status)),
+)
 
 export function candidateEvents(
   organizationId: string,
@@ -114,11 +155,12 @@ export function candidateEvents(
       occurredAt: now.toISOString(),
     }
     const name = booking.reference ?? 'הזמנה'
-    const facts = {
+    const facts: Record<string, string | number | boolean | null> = {
       status: booking.status,
-      source: booking.source,
       nights,
     }
+    // Written only when it is known. See `BookingFact.source`.
+    if (booking.source !== null) facts.source = booking.source
 
     if (booking.status === 'confirmed') {
       candidates.push({
