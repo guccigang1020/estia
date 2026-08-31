@@ -97,6 +97,10 @@ src/components/website/**                     ai-website           write
 src/lib/website/**                            ai-website           write
 src/lib/automation/**                         ai-website           write
 
+# ── The home screen, rebuilt role by role. ────────────────────────────────
+src/app/(app)/dashboard/**                    dashboard            write
+src/components/dashboard/**                   dashboard            write
+
 # ── End-to-end verification. Writes its own suite and nothing else. ───────
 e2e/**                                        qa                   write
 playwright.config.ts                          qa                   write
@@ -156,7 +160,7 @@ src/lib/persistence/preparation.ts            reporting            write
 # ── Everything else under the app shell and the persistence layer. ────────
 src/app/(app)/_lib/**                          coordinator          write
 src/app/(app)/layout.tsx                       coordinator          write
-src/app/(app)/dashboard/**                     coordinator          write
+# dashboard moved to its own owner — see the block above.
 src/app/(app)/onboarding/**                    coordinator          write
 src/app/(app)/bookings/**                      coordinator          write
 src/app/(app)/calendar/**                      coordinator          write

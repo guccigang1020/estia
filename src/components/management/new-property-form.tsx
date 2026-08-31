@@ -17,26 +17,42 @@
  * business ends up with a property configured differently from every other one
  * it created through the API.
  *
- * ── Why the submit is disabled ────────────────────────────────────────────
+ * ── The submit was disabled, and now is not ───────────────────────────────
  *
- * There is no `defineOperation` for creating a property. Every write in this
- * product goes through that pipeline — authorization, validation, optimistic
- * locking, the domain rule, the transaction, the audit event, idempotency, in
- * that order — and an `insert` issued from a route handler would skip all
- * seven while looking identical on screen. The one that matters most here is
- * the audit event: a property created with no row in `audit_events` is a
- * change nobody can trace, on the record that the audit screen next door
- * presents as evidence.
+ * This form shipped complete with its button switched off and the reason
+ * stated on screen: there was no `defineOperation` for creating a property, so
+ * the only way to make it work would have been an `insert` from a route
+ * handler — identical to a person, and skipping authorization, validation, the
+ * domain rule, the transaction, the audit event and idempotency. The audit
+ * event was the one that decided it: a property created with no row in
+ * `audit_events` is a change nobody can trace, on the very record the audit
+ * screen next door presents as evidence.
  *
- * So the form is complete and honest about what it cannot yet do. The gap is
- * named on screen and in the report accompanying this work.
+ * `definePropertyOperations` exists now, so the button works and none of that
+ * was traded away.
+ *
+ * ── Why this became a client component ────────────────────────────────────
+ *
+ * It was a server component, correctly, while it could not submit: nothing on
+ * it changes in response to anything else on it. Submitting needs three things
+ * a server component cannot hold — the pending state, the failure to render,
+ * and an idempotency key that survives a retry — so it moved. The inputs stay
+ * uncontrolled, because mirroring nine fields into React state would buy
+ * nothing but a second place for them to disagree with the DOM.
  */
 
+'use client'
+
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+import { createPropertyAction } from '@/app/(app)/properties/_lib/actions'
+import { ActionError } from '@/components/booking/action-error'
+import { useAsyncAction } from '@/components/ui/async-action'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Select, TextInput, Textarea } from '@/components/ui/input'
-
-import { Notice } from './notice'
+import type { SafeErrorBody } from '@/lib/errors'
 
 export type PropertyTypeChoice = {
   value: string
@@ -48,8 +64,61 @@ export function NewPropertyForm({
 }: {
   types: readonly PropertyTypeChoice[]
 }) {
+  const router = useRouter()
+  const create = useAsyncAction<void>()
+  const [failure, setFailure] = useState<SafeErrorBody | null>(null)
+
+  /**
+   * One key for this form, kept across retries.
+   *
+   * The retry after a dropped connection is the case that matters: the person
+   * cannot know whether the first attempt reached the database, and pressing
+   * again must not create a second property. So it survives a failure on
+   * purpose, and is replaced only once something was actually created.
+   */
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  )
+
   return (
-    <form className="flex flex-col gap-6">
+    <form
+      className="flex flex-col gap-6"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (create.pending) return
+
+        // Read straight off the form. These inputs are uncontrolled and always
+        // were — nothing here changes in response to anything else here, so
+        // mirroring nine fields into React state would buy nothing except a
+        // second place for them to disagree.
+        const data = new FormData(event.currentTarget)
+        const text = (field: string) => String(data.get(field) ?? '')
+
+        setFailure(null)
+        void create.run(async () => {
+          const result = await createPropertyAction({
+            name: text('name'),
+            slug: text('slug'),
+            propertyType: text('propertyType'),
+            city: text('city'),
+            description: text('description'),
+            defaultCheckInTime: text('checkIn'),
+            defaultCheckOutTime: text('checkOut'),
+            minNights: text('minNights'),
+            taxRateBps: text('taxRateBps'),
+            idempotencyKey,
+          })
+
+          if (!result.ok) {
+            setFailure(result.error)
+            return
+          }
+
+          setIdempotencyKey(crypto.randomUUID())
+          router.push(`/properties/${result.data.id}`)
+        })
+      }}
+    >
       <div className="grid gap-5 sm:grid-cols-2">
         <Field
           label="שם הנכס"
@@ -138,30 +207,15 @@ export function NewPropertyForm({
         <Textarea name="description" rows={3} />
       </Field>
 
-      <Notice title="הפעולה הזאת אינה קיימת עדיין במוצר" tone="strong">
-        אין ב-<code dir="ltr">src/lib</code> פעולה שיוצרת נכס. כל כתיבה במוצר
-        עוברת דרך <code dir="ltr">defineOperation</code> — הרשאה, ולידציה, נעילה
-        אופטימית, כלל תחומי, טרנזקציה, רישום ביומן הביקורת ומניעת כפילות, בסדר
-        הזה. שאילתת <code dir="ltr">insert</code> ישירה מהמסך הזה הייתה נראית
-        זהה ומדלגת על כל השבעה, והחמור שבהם הוא הרישום: נכס שנוצר בלי שורה ב-
-        <code dir="ltr">audit_events</code> הוא שינוי שאי אפשר להתחקות אחריו, על
-        אותה רשומה שהמסך שלידו מציג כראיה.
-      </Notice>
+      {failure ? <ActionError error={failure} /> : null}
 
       <div className="flex items-center gap-3">
-        <Button
-          type="submit"
-          disabled
-          aria-describedby="property-disabled-reason"
-        >
-          יצירת הנכס
+        <Button type="submit" disabled={create.pending}>
+          {create.pending ? 'יוצר…' : 'יצירת הנכס'}
         </Button>
-        <p
-          id="property-disabled-reason"
-          className="text-sm text-muted-foreground"
-        >
-          מושבת עד שתיווצר פעולת יצירת נכס בשכבת השירות.
-        </p>
+        <span aria-live="polite" className="sr-only">
+          {create.pending ? 'יוצר את הנכס' : ''}
+        </span>
       </div>
     </form>
   )
