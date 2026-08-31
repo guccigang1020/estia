@@ -128,3 +128,23 @@ export {
   type RecomputeResult,
   type SectionResult,
 } from './operations'
+
+export {
+  assemblePlan,
+  previewPlan,
+  type AssembleInput,
+  type AssembledPlan,
+  type PreparationPreview,
+  type PreviewInput,
+} from './preview'
+
+export {
+  catalogueFrom,
+  catalogueProblems,
+  configureInput,
+  createCatalogueOperations,
+  type CatalogueOperations,
+  type ConfigureInput,
+  type ConfigureResult,
+  type PreparationCataloguePorts,
+} from './catalogue'

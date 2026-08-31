@@ -275,7 +275,18 @@ export interface QuantityExpression {
 export type RequirementBuffer =
   { kind: 'percent'; percent: number } | { kind: 'flat'; amount: number }
 
-export type ConditionComparator = 'lt' | 'lte' | 'eq' | 'gte' | 'gt'
+/**
+ * The comparisons a condition may make, as a value rather than only a type.
+ *
+ * A screen that lets somebody write a rule has to offer these as choices, and
+ * a service boundary has to refuse anything else. Both need the list at
+ * runtime, and a second copy typed out beside the union is the copy that
+ * drifts — so the union is derived from the list, exactly as `EVENT_TYPES`
+ * and `REQUIREMENT_UNITS` already are.
+ */
+export const CONDITION_COMPARATORS = ['lt', 'lte', 'eq', 'gte', 'gt'] as const
+
+export type ConditionComparator = (typeof CONDITION_COMPARATORS)[number]
 
 /**
  * When a rule applies at all.

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 
+import Link from 'next/link'
+
 import type { SearchParams } from '@/app/(auth)/_lib/search-params'
 import { ActionError } from '@/components/booking/action-error'
 import { HorizonBar } from '@/components/preparation/horizon-bar'
@@ -106,6 +108,17 @@ export default async function PreparationPage({
     organizationId: actor.organizationId,
   })
 
+  // Setting the policy behind these plans is a different act from doing the
+  // work, and a different grant: `checklist.manage`, which the cleaner preset
+  // deliberately does not carry. Asked before the link is rendered rather than
+  // discovered after it is clicked — an entry that leads to a refusal is worse
+  // than no entry.
+  const mayEditPolicy = can(actor, 'checklist.manage', {
+    organizationId: actor.organizationId,
+    ...(propertyId !== null ? { propertyId } : {}),
+    family: 'operations',
+  })
+
   let tasks: readonly PreparationTask[] = []
   let stays: readonly PlannedStay[] = []
   let undated = 0
@@ -166,9 +179,20 @@ export default async function PreparationPage({
       <HorizonBar horizon={horizon} issue={horizonIssue(params)} />
 
       <section className="flex flex-col gap-3">
-        <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
-          תוכניות הכנה
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
+            תוכניות הכנה
+          </h2>
+
+          {mayEditPolicy && (
+            <Link
+              href="/preparation/policy"
+              className="text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              מדיניות ההכנה של הנכס ←
+            </Link>
+          )}
+        </div>
 
         {/* "No plan has been built" and "the plan table could not be read"
             are opposite messages, and this is the branch that keeps them

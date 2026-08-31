@@ -55,9 +55,10 @@ import type {
   StockLevel,
   WorkPlan,
 } from '../preparation/types'
+import type { PreparationCataloguePorts } from '../preparation/catalogue'
 import type { PreparationPorts } from '../preparation/operations'
 import type { TransactionHandle } from '../service'
-import { NotFoundError } from '../errors'
+import { ConflictError, NotFoundError } from '../errors'
 import type { Db, Row } from './client'
 import { SchemaNotProvisionedError } from './errors'
 import {
@@ -95,7 +96,9 @@ const PLAN_COLUMNS =
   'snapshot_hash, sections, critical_path_minutes, recommended_staff, ' +
   'created_at'
 
-export class SupabasePreparationPorts implements PreparationPorts {
+export class SupabasePreparationPorts
+  implements PreparationPorts, PreparationCataloguePorts
+{
   constructor(private readonly db: Db) {}
 
   /**
@@ -180,6 +183,108 @@ export class SupabasePreparationPorts implements PreparationPorts {
 
     if (error) throw error
     return data ? toCatalogue(toRow(data)) : null
+  }
+
+  /**
+   * The row's revision, or `null` where there is no row.
+   *
+   * Asked separately from `loadCatalogue` because `PreparationCatalogue` has
+   * no version field and must not grow one: `captureSnapshot` hashes exactly
+   * that object, and a bookkeeping column inside it would change the hash
+   * every time somebody re-saved an unchanged policy — which would make "did
+   * the rules move between these two bookings" answer yes when nothing had.
+   */
+  async catalogueVersion(
+    organizationId: string,
+    propertyId: string,
+  ): Promise<number | null> {
+    const { data, error } = await this.db
+      .from('preparation_catalogues')
+      .select('version')
+      .eq('organization_id', organizationId)
+      .eq('property_id', propertyId)
+      .maybeSingle()
+
+    if (error) throw error
+    return data ? asNumber(toRow(data), 'version') : null
+  }
+
+  /**
+   * Write the live configuration for one property.
+   *
+   * Insert or update, chosen by `expectedVersion` rather than by an upsert —
+   * the same argument `savePlan` makes above. PostgREST compiles an upsert
+   * into `insert … on conflict do update`, which needs both policies, and 0021
+   * gates the two on the same permission but as separate policies; more to the
+   * point, an upsert has nowhere to put the version predicate, so two people
+   * editing the same policy would silently take turns overwriting each other.
+   *
+   * `version` is never sent. `tg_touch_row` owns it, and the `.eq('version')`
+   * on the update is the whole optimistic lock: an update that matches no row
+   * is a revision that moved underneath the caller, and it is reported as a
+   * conflict rather than retried — the person has a form full of edits and
+   * needs to be told, not to have them silently applied on top of somebody
+   * else's.
+   */
+  async saveCatalogue(
+    input: {
+      organizationId: string
+      propertyId: string
+      catalogue: PreparationCatalogue
+      expectedVersion: number | null
+    },
+    tx: TransactionHandle,
+  ): Promise<void> {
+    const db = clientFor(tx, this.db)
+    const { catalogue } = input
+
+    const parts = {
+      bed_types: catalogue.bedTypes,
+      rules: catalogue.rules,
+      event_templates: catalogue.eventTemplates,
+      property_configuration: catalogue.propertyConfiguration,
+      variable_costs: catalogue.variableCosts,
+      fixed_costs: catalogue.fixedCosts,
+      commission_rules: catalogue.commissionRules,
+      complexity: catalogue.complexity,
+      readiness_policy: catalogue.readinessPolicy,
+      section_labels: catalogue.sectionLabels,
+    }
+
+    if (input.expectedVersion === null) {
+      const { error } = await db.from('preparation_catalogues').insert({
+        organization_id: input.organizationId,
+        property_id: input.propertyId,
+        ...parts,
+      })
+      if (error) throw error
+    } else {
+      const { data, error } = await db
+        .from('preparation_catalogues')
+        .update(parts)
+        .eq('organization_id', input.organizationId)
+        .eq('property_id', input.propertyId)
+        .eq('version', input.expectedVersion)
+        .select('id')
+
+      if (error) throw error
+
+      if (toRows(data).length === 0) {
+        throw new ConflictError({
+          resourceType: 'preparation_catalogue',
+          resourceId: input.propertyId,
+          expectedVersion: input.expectedVersion,
+          actualVersion: await this.catalogueVersion(
+            input.organizationId,
+            input.propertyId,
+          ),
+          userMessage:
+            'מדיניות ההכנה של הנכס שונתה בינתיים על ידי מישהו אחר. רענן את המסך כדי לראות את הגרסה הנוכחית לפני שתשמור שוב.',
+        })
+      }
+    }
+
+    recordWrite(tx, `preparation_catalogues(${input.propertyId})`)
   }
 
   /**

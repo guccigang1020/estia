@@ -40,9 +40,10 @@ import { estimateStaffing } from './complexity'
 import { computeEventPnL, type FixedAllocationInput } from './costing'
 import { describeDelta, versionPlan } from './delta'
 import { checkInventory } from './inventory'
-import { computeRequirements, templateSections } from './requirements'
+import { assemblePlan } from './preview'
+import { computeRequirements } from './requirements'
 import { captureSnapshot } from './snapshot'
-import { buildWorkPlan, completeSection } from './work-plan'
+import { completeSection } from './work-plan'
 import {
   PLAN_SECTIONS,
   type EventPnL,
@@ -231,9 +232,11 @@ export function createPreparationOperations(
   /**
    * Build the plan from the snapshot, whichever snapshot that is.
    *
-   * Used by both the first build and every recomputation, so the two cannot
-   * produce structurally different plans and make the delta report phantom
-   * changes.
+   * Used by both the first build and every recomputation — and, through
+   * `previewPlan`, by the configuration screen — so none of the three can
+   * produce a structurally different plan and make the delta report phantom
+   * changes. The assembly itself lives in `preview.ts`; this closure only
+   * spells the arguments out.
    */
   const assemble = (
     booking: PreparationBooking,
@@ -241,28 +244,7 @@ export function createPreparationOperations(
     planId: string,
     version: number,
     createdAt: string,
-  ) => {
-    const { facts, requirements } = computeRequirements(booking, snapshot)
-
-    const staffing = estimateStaffing({
-      facts,
-      configuration: snapshot.complexity,
-      extraItems: booking.extras.length,
-    })
-
-    const plan = buildWorkPlan({
-      id: planId,
-      booking,
-      snapshot,
-      requirements,
-      staffing,
-      extraSections: templateSections(snapshot, booking.eventType),
-      version,
-      createdAt,
-    })
-
-    return { plan, requirements }
-  }
+  ) => assemblePlan({ booking, snapshot, planId, version, createdAt })
 
   const buildPlan = defineOperation<
     { bookingId: string },
