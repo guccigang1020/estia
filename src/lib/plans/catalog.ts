@@ -70,6 +70,17 @@ export const SEED_PLANS: readonly SeedPlan[] = [
       // agents are a growth channel rather than an enterprise feature.
       // Basic buys it as an add-on through `subscription.entitlementGrants`.
       'agent_network',
+      // Laundry and the store both start here rather than with `operations`,
+      // and that is a deliberate split. `operations` is the tasks board, a
+      // crew and a housekeeping hierarchy — genuinely a larger operator's
+      // problem. Laundry in its `simple` mode is a list of what must be clean
+      // by Friday, which is exactly what one cabin owner needs and needs no
+      // crew to act on; the specification's own small-business example is
+      // "Preparation ON, Laundry SIMPLE, Inventory OFF". Selling a שולחן שוק
+      // or pool heating is likewise how a small villa makes its margin, not an
+      // enterprise feature.
+      'laundry',
+      'commerce',
     ],
     isPublic: true,
     sortOrder: 2,
@@ -94,6 +105,8 @@ export const SEED_PLANS: readonly SeedPlan[] = [
       'channels',
       'dynamic_pricing',
       'agent_network',
+      'laundry',
+      'commerce',
     ],
     isPublic: true,
     sortOrder: 3,
@@ -123,6 +136,8 @@ export const SEED_PLANS: readonly SeedPlan[] = [
       'automation',
       'custom_roles',
       'multi_brand',
+      'laundry',
+      'commerce',
     ],
     isPublic: true,
     sortOrder: 4,

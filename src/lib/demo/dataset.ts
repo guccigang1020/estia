@@ -39,6 +39,18 @@
 
 import type { DemoDataset, DemoPersona, DemoPlan, DemoTables } from './types'
 import { SEED_PLANS } from '../plans/catalog'
+// `day` rather than a local date helper: every relative date in the demo is
+// computed from one frozen `TODAY`, so a dataset whose today moved mid-render
+// cannot produce a reservation that straddles a different day than the
+// forecast drawn beside it.
+import { day } from './dataset-support'
+import {
+  LAUNDRY_ITEM_PROFILE_ROWS,
+  LAUNDRY_ORDER_LINE_ROWS,
+  LAUNDRY_ORDER_ROWS,
+  LAUNDRY_PROVIDER_ROWS,
+  LAUNDRY_SETTINGS_ROWS,
+} from './dataset-laundry'
 
 import {
   INVOICE_SEQUENCE_ROWS,
@@ -240,6 +252,124 @@ const TABLES: DemoTables = {
   // would put an act in the demo that nobody performed.
   payment_collection_overrides: [],
   payment_proofs: [],
+
+  // ── Stock, the forward half ─────────────────────────────────────────────
+  //
+  // The settings row is not optional decoration. `/inventory` and every screen
+  // under it is gated on the module, and an organization with items and no
+  // settings row correctly reads as "inventory is off" — so without this row
+  // the entire module renders its off state and the forecast cannot be seen at
+  // all. `advanced`, because the demo's job is to show what the product does.
+  inventory_settings: [
+    {
+      // No `id`: `organization_id` is the primary key, one settings row per
+      // tenant. `dataset.test.ts` cross-checks every demo row against the
+      // migrations and caught the invented column, which is exactly what it
+      // is for — a fabricated key reads as a real one until something joins
+      // on it.
+      organization_id: ORGANIZATION_ID,
+      mode: 'advanced',
+      safety_buffer_units: 0,
+      safety_buffer_percent: 10,
+      shortage_warning_horizon_days: 7,
+      forecast_horizon_days: 30,
+      // Two days, which is what makes the timeline bite: linen sent on Friday
+      // is not back on Saturday.
+      linen_turnaround_days: 2,
+      shared_stock: false,
+      reservations_enabled: true,
+      warehouse_enabled: false,
+      discrepancy_tracking: true,
+      transfers_enabled: true,
+      version: 1,
+    },
+  ],
+
+  // Two claims on the same towels, three days apart, sized so the second
+  // cannot be met while the first is still in the wash.
+  //
+  // This is the specification's canonical failure reproduced on the demo's own
+  // numbers rather than on invented ones: 61 body towels exist at אחוזת
+  // רימונים and 12 are already spoken for, so 49 are free. Twenty-five leave
+  // on day +2 and thirty are wanted on day +4, and with a two-day turnaround
+  // the first twenty-five are not back yet. A forecast that subtracts totals
+  // says 49 ≥ 30 and reports nothing. A forecast that walks the timeline
+  // reports the shortage before anybody is standing in an unmade bedroom.
+  //
+  // The item is found by SKU rather than by index, so a seed added above this
+  // one moves nothing.
+  inventory_reservations: (() => {
+    const towels = INVENTORY_ITEM_ROWS.find(
+      (row) => row.sku === 'LIN-TOWEL-L' && row.state === 'available',
+    )
+    const linen = INVENTORY_ITEM_ROWS.find((row) => row.sku === 'LIN-SHEET-K')
+
+    // Declared-and-empty rather than absent if the seeds ever change shape:
+    // `DemoDatabase.rows` throws for a key it has never heard of, and a
+    // screen cannot render an honest empty state against a table that does
+    // not exist.
+    if (!towels || !linen) return []
+
+    return [
+      {
+        id: 'd1f0b284-3a5c-4e79-9b02-1c3d5e7f9a0b',
+        organization_id: ORGANIZATION_ID,
+        property_id: towels.property_id,
+        item_id: towels.id,
+        booking_id: null,
+        quantity: 25,
+        status: 'reserved',
+        needed_from: day(2),
+        needed_to: day(4),
+        note: 'שבת משפחתית — 25 אורחים',
+        version: 1,
+      },
+      {
+        id: 'e2a1c395-4b6d-4f80-8c13-2d4e6f8a0b1c',
+        organization_id: ORGANIZATION_ID,
+        property_id: towels.property_id,
+        item_id: towels.id,
+        booking_id: null,
+        quantity: 30,
+        status: 'reserved',
+        needed_from: day(4),
+        needed_to: day(6),
+        note: 'אירוע יום הולדת — 30 אורחים',
+        version: 1,
+      },
+      {
+        id: 'f3b2d406-5c7e-4a91-9d24-3e5f7a9b0c1d',
+        organization_id: ORGANIZATION_ID,
+        property_id: linen.property_id,
+        item_id: linen.id,
+        booking_id: null,
+        quantity: 8,
+        status: 'reserved',
+        needed_from: day(3),
+        needed_to: day(5),
+        note: 'סטים לווילה כחול ים',
+        version: 1,
+      },
+    ]
+  })(),
+
+  // Empty, and honestly so. A discrepancy is something a person counted and a
+  // transfer is something a manager approved; seeding either would put an act
+  // in the demo that nobody performed.
+  inventory_discrepancies: [],
+  inventory_transfers: [],
+
+  // ── Laundry ─────────────────────────────────────────────────────────────
+  //
+  // A hybrid organization: some items washed in-house, some sent out. That is
+  // the mode most likely to be misread as two half-built features, so it is
+  // the one the demo shows — including a consolidated run across properties,
+  // an order somebody adjusted with a stated reason, and one that is overdue.
+  laundry_settings: LAUNDRY_SETTINGS_ROWS,
+  laundry_providers: LAUNDRY_PROVIDER_ROWS,
+  laundry_item_profiles: LAUNDRY_ITEM_PROFILE_ROWS,
+  laundry_orders: LAUNDRY_ORDER_ROWS,
+  laundry_order_lines: LAUNDRY_ORDER_LINE_ROWS,
 }
 
 export const DEMO_DATASET: DemoDataset = {

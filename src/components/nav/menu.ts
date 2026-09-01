@@ -272,6 +272,73 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/preparation' },
       },
       {
+        id: 'laundry',
+        label: 'מכבסה',
+        requires: { kind: 'grant', anyOf: ['laundry.view'] },
+        destination: {
+          status: 'ready',
+          href: '/laundry',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'laundry-requirements',
+        label: 'דרישות כביסה',
+        requires: { kind: 'grant', anyOf: ['laundry.view'] },
+        destination: { status: 'ready', href: '/laundry/requirements' },
+      },
+      {
+        id: 'laundry-orders',
+        label: 'הזמנות כביסה',
+        requires: { kind: 'grant', anyOf: ['laundry.view'] },
+        destination: { status: 'ready', href: '/laundry/orders' },
+      },
+      {
+        id: 'laundry-tasks',
+        label: 'כביסה פנימית',
+        requires: { kind: 'grant', anyOf: ['laundry.view'] },
+        destination: { status: 'ready', href: '/laundry/tasks' },
+      },
+      {
+        id: 'laundry-providers',
+        label: 'ספקי כביסה',
+        requires: { kind: 'grant', anyOf: ['laundry.provider_manage'] },
+        destination: { status: 'ready', href: '/laundry/providers' },
+      },
+      {
+        id: 'laundry-forecast',
+        label: 'תחזית כביסה',
+        requires: { kind: 'grant', anyOf: ['laundry.view'] },
+        destination: { status: 'ready', href: '/laundry/forecast' },
+      },
+      {
+        id: 'inventory-forecast',
+        label: 'תחזית מלאי',
+        requires: { kind: 'grant', anyOf: ['inventory.view'] },
+        destination: { status: 'ready', href: '/inventory/forecast' },
+      },
+      {
+        id: 'inventory-shortages',
+        label: 'מחסורים',
+        requires: { kind: 'grant', anyOf: ['inventory.view'] },
+        destination: { status: 'ready', href: '/inventory/shortages' },
+      },
+      {
+        id: 'inventory-items',
+        label: 'פריטי מלאי',
+        requires: { kind: 'grant', anyOf: ['inventory.view'] },
+        destination: { status: 'ready', href: '/inventory/items' },
+      },
+      {
+        id: 'inventory-settings',
+        // Deliberately listed even though every other stock screen refuses
+        // when the module is off, because this is the screen that turns it on.
+        // A door that is only visible from inside the room is not a door.
+        label: 'הגדרות מלאי',
+        requires: { kind: 'grant', anyOf: ['inventory.edit'] },
+        destination: { status: 'ready', href: '/inventory/settings' },
+      },
+      {
         id: 'preparation-policy',
         label: 'מדיניות הכנה',
         // `checklist.manage` alone, and deliberately narrower than the board
