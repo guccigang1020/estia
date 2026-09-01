@@ -249,13 +249,21 @@ function sourcesFor(
 export const LINEN_TRANSITIONS: Readonly<
   Record<InventoryState, readonly InventoryState[]>
 > = {
-  available: ['reserved', 'damaged'],
+  available: ['reserved', 'damaged', 'lost'],
   reserved: ['in_use', 'available'],
-  in_use: ['dirty', 'damaged'],
-  dirty: ['laundry', 'damaged'],
-  laundry: ['available', 'damaged'],
+  in_use: ['dirty', 'damaged', 'lost'],
+  dirty: ['laundry', 'damaged', 'lost'],
+  // Two ways home, and both are real. A business that tracks the van marks
+  // the batch 'returning' when it leaves the laundry, which is what lets a
+  // forecast answer "will these be here by Friday afternoon". One that does
+  // not simply marks them available when they land on the shelf.
+  laundry: ['returning', 'available', 'damaged', 'lost'],
+  returning: ['available', 'damaged', 'lost'],
   damaged: ['out_of_service'],
   out_of_service: [],
+  // Terminal. An item that turns up again is a receipt, counted in, with a
+  // movement row saying so — not a state machine quietly reversing itself.
+  lost: [],
 }
 
 export function canTransitionLinen(

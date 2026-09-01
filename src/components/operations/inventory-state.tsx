@@ -34,8 +34,10 @@ export const INVENTORY_STATE_LABEL: Readonly<Record<InventoryState, string>> = {
   in_use: 'בשימוש',
   dirty: 'מלוכלך',
   laundry: 'בכביסה',
+  returning: 'בדרך חזרה',
   damaged: 'פגום',
   out_of_service: 'הוצא משימוש',
+  lost: 'אבד',
 }
 
 /** `public.inventory_movement_kind`, 0011. Total over the tuple beside it. */
@@ -52,10 +54,16 @@ export const MOVEMENT_KIND_LABEL: Readonly<
 }
 
 /** Stock that exists and cannot be used. Not the same as being short of it. */
-const UNUSABLE = new Set<InventoryState>(['damaged', 'out_of_service'])
+const UNUSABLE = new Set<InventoryState>([
+  'damaged',
+  'out_of_service',
+  // Lost stock is stock the cupboard does not have. Counting it as usable is
+  // how a forecast promises towels that nobody can find.
+  'lost',
+])
 
 /** Stock that is out of the cupboard and coming back. */
-const IN_TRANSIT = new Set<InventoryState>(['dirty', 'laundry'])
+const IN_TRANSIT = new Set<InventoryState>(['dirty', 'laundry', 'returning'])
 
 export function isUnusable(state: InventoryState): boolean {
   return UNUSABLE.has(state)

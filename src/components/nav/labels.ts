@@ -30,6 +30,7 @@ export const ENTITLEMENT_LABELS: Record<Entitlement, string> = {
   custom_domain: 'דומיין אישי',
   team: 'צוות',
   operations: 'תפעול',
+  laundry: 'מכבסה',
   channels: 'ערוצי הפצה',
   dynamic_pricing: 'תמחור דינמי',
   owner_portal: 'פורטל בעלים',

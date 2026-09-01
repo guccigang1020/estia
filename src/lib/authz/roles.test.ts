@@ -1114,15 +1114,22 @@ describe('administrator', () => {
   /**
    * The derivation is what keeps this number right, so the number is pinned:
    * if a permission is added and this figure is not updated deliberately, the
-   * change was not thought about. 129 non-platform permissions plus 13 field
+   * change was not thought about. 138 non-platform permissions plus 13 field
    * permissions, less the four reserved to the owner.
    *
    * 137 → 138 when `agent.membership.manage` joined the catalogue, so that a
    * general manager could suspend an agent without being handed `user.edit`
    * over every membership in the business.
+   *
+   * 138 → 147 with the laundry and inventory upgrade: five laundry grants
+   * (`view`, `manage`, `order_create`, `order_send`, `provider_manage`), three
+   * inventory ones (`adjust`, `import`, `transfer`) and `payment.policy_manage`.
+   * Deliberately no `preparation.*` pair — `task.view` and `checklist.manage`
+   * already mean those two things, and a second name for a right somebody
+   * holds is a right that can be revoked in one place and kept in the other.
    */
-  it('holds exactly 138 grants', () => {
-    expect(grantsForSystemRole('administrator')).toHaveLength(138)
+  it('holds exactly 147 grants', () => {
+    expect(grantsForSystemRole('administrator')).toHaveLength(147)
   })
 })
 
@@ -1153,8 +1160,8 @@ describe('organization_owner', () => {
     expect(held, 'platform grants held by an organization owner').toEqual([])
   })
 
-  it('holds exactly 142 grants — every non-platform permission and every field permission', () => {
-    expect(grantsForSystemRole('organization_owner')).toHaveLength(142)
+  it('holds exactly 151 grants — every non-platform permission and every field permission', () => {
+    expect(grantsForSystemRole('organization_owner')).toHaveLength(151)
   })
 
   it('holds the agent network, because running the sellers is the owner’s business', () => {

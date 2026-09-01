@@ -96,6 +96,15 @@ export const PERMISSIONS = [
   // sells can get paid without being given the payment record.
   'payment.request_link',
   'payment.capture',
+  // Deciding what a guest must do before a booking is confirmed — nothing, a
+  // signature, a deposit, the whole amount. It is not a payment right and does
+  // not carry a plan entitlement: a business collecting by bank transfer on a
+  // package with no card processing still has to be able to say so.
+  //
+  // `payment.manual_record` and `payment.live_charge` from the specification
+  // are not added: `payment.create` already records money that arrived, and
+  // `payment.capture` already takes it through a provider.
+  'payment.policy_manage',
   'payment.refund',
   'payment.void',
   'deposit.hold',
@@ -127,8 +136,31 @@ export const PERMISSIONS = [
   'task.complete',
   'task.verify',
   'checklist.manage',
+  // Preparation deliberately has no grants of its own. The specification asks
+  // for `preparation.view` and `preparation.manage`; `task.view` already means
+  // the first and `checklist.manage` already means the second, and every
+  // preparation screen in the product is gated on them today. A second name
+  // for a right somebody already holds is a right that can be revoked in one
+  // place and kept in the other.
   'inventory.view',
   'inventory.edit',
+  // Correcting a count against what is actually on the shelf. Separate from
+  // `inventory.edit`, which renames an item or changes its par level: an
+  // adjustment rewrites history's arithmetic and is the one a supervisor signs
+  // for.
+  'inventory.adjust',
+  'inventory.import',
+  // Moving stock between properties. Its own right because it takes from one
+  // manager to give to another, and neither of them is the person pressing it.
+  'inventory.transfer',
+  'laundry.view',
+  'laundry.manage',
+  'laundry.order_create',
+  // Sending is not creating. This one talks to an outside company in the
+  // organization's name, which is exactly the boundary `payment.request_link`
+  // is drawn on a few lines above.
+  'laundry.order_send',
+  'laundry.provider_manage',
   'incident.view',
   'incident.create',
   'incident.update',

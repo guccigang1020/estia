@@ -187,8 +187,17 @@ export const INVENTORY_STATES = [
   'in_use',
   'dirty',
   'laundry',
+  // Washed and on its way back, but not yet on the shelf. Distinct from
+  // 'laundry' because a forecast has to know whether an item will be here by
+  // Friday afternoon, and 'somewhere between the van and the cupboard' is a
+  // different answer from 'still in the machine'.
+  'returning',
   'damaged',
   'out_of_service',
+  // Not damaged — gone. Kept apart from 'damaged' because the two lead to
+  // different conversations: one is repaired or written off, the other is
+  // investigated.
+  'lost',
 ] as const
 
 export type InventoryState = (typeof INVENTORY_STATES)[number]
@@ -197,6 +206,179 @@ export type InventoryState = (typeof INVENTORY_STATES)[number]
 export const ALLOCATABLE_INVENTORY_STATES: readonly InventoryState[] = [
   'available',
 ]
+
+// ── Laundry ───────────────────────────────────────────────────────────────
+
+/**
+ * How much of a laundry operation a business actually runs.
+ *
+ * The mode is the whole progressive-complexity story for this module in one
+ * value. A single villa owner picks `simple` and gets a list of what must be
+ * clean by Friday; a management company picks `external` and gets orders,
+ * providers and turnaround arithmetic. Nothing above `off` is ever required
+ * for a booking to be taken or a property to be prepared.
+ *
+ * `hybrid` is not a compromise between the two — it is the real shape of many
+ * businesses, which wash towels themselves and send linen out.
+ */
+export const LAUNDRY_MODES = [
+  'off',
+  'simple',
+  'internal',
+  'external',
+  'hybrid',
+] as const
+
+export type LaundryMode = (typeof LAUNDRY_MODES)[number]
+
+/**
+ * The life of one laundry order or internal batch.
+ *
+ * Deliberately longer than most businesses will use. A `simple` operation
+ * moves an order from `draft` to `completed` and never touches the middle; an
+ * internal laundry room uses every state. The vocabulary is frozen so that a
+ * dashboard, an automation rule and a provider's status update all mean the
+ * same thing by "washing" — but nothing forces a business through states it
+ * has no use for. See `LAUNDRY_STATUS_IS_TERMINAL`.
+ */
+export const LAUNDRY_STATUSES = [
+  'draft',
+  // Awaiting a human decision, because sending an order is talking to an
+  // outside party in the organization's name.
+  'awaiting_approval',
+  'to_collect',
+  'collected',
+  'sorting',
+  'washing',
+  'drying',
+  'folding',
+  'ready',
+  'delivered_to_property',
+  'completed',
+  'cancelled',
+] as const
+
+export type LaundryStatus = (typeof LAUNDRY_STATUSES)[number]
+
+/** Nothing further happens to an order in one of these. */
+export const TERMINAL_LAUNDRY_STATUSES: readonly LaundryStatus[] = [
+  'completed',
+  'cancelled',
+]
+
+/**
+ * When an order leaves the organization, and therefore when it stops being
+ * freely editable.
+ *
+ * Everything from `to_collect` onward has been acted on by somebody — a
+ * provider was told, a van came, a machine ran. Changing quantities after that
+ * point is a new order or an amendment, never a silent edit.
+ */
+export const COMMITTED_LAUNDRY_STATUSES: readonly LaundryStatus[] = [
+  'to_collect',
+  'collected',
+  'sorting',
+  'washing',
+  'drying',
+  'folding',
+  'ready',
+  'delivered_to_property',
+  'completed',
+]
+
+/**
+ * Who presses send, and whether anybody does.
+ *
+ * The default is `approval_required` and that is a safety decision rather
+ * than a taste one: an order sent automatically is a message in the
+ * organization's name to an outside company, and a business must opt into
+ * that rather than discover it.
+ */
+export const LAUNDRY_DISPATCH_MODES = [
+  'manual_send',
+  'approval_required',
+  'auto_send',
+] as const
+
+export type LaundryDispatchMode = (typeof LAUNDRY_DISPATCH_MODES)[number]
+
+/** How an order reaches a provider. Constrained by enabled integrations. */
+export const LAUNDRY_CHANNELS = [
+  'whatsapp',
+  'sms',
+  'email',
+  'print',
+  'export',
+  'copy',
+] as const
+
+export type LaundryChannel = (typeof LAUNDRY_CHANNELS)[number]
+
+// ── Inventory depth ───────────────────────────────────────────────────────
+
+/**
+ * How much stock arithmetic a business has asked for.
+ *
+ * `off` is a first-class answer and the default. Preparation, the cleaner's
+ * plan and the laundry list all work without a single counted item — what is
+ * skipped is validation against stock and the forward forecast, not the
+ * operation itself.
+ *
+ * `basic` counts things. `tracked` adds reservation against future bookings
+ * and the clean/dirty/laundry circulation. `advanced` adds transfers between
+ * properties, discrepancy reconciliation and procurement suggestions.
+ */
+export const INVENTORY_MODES = ['off', 'basic', 'tracked', 'advanced'] as const
+
+export type InventoryMode = (typeof INVENTORY_MODES)[number]
+
+// ── Payment collection ────────────────────────────────────────────────────
+
+/**
+ * What the business asks of a guest before a booking counts as confirmed.
+ *
+ * This is a policy, not a payment. `none` is a legitimate and common answer —
+ * a great many Israeli villas confirm by telephone and take the money on
+ * arrival — and the product must not treat that as an unfinished
+ * configuration. `manual` covers a bank transfer, Bit, PayBox, cash or a
+ * cheque: money that moves outside the product and is recorded inside it.
+ *
+ * Kept in the frozen contracts because the guest portal, the booking screen,
+ * the automation catalogue and the settings screen each have to mean exactly
+ * the same thing by "deposit".
+ */
+export const PAYMENT_COLLECTION_POLICIES = [
+  'none',
+  'manual',
+  'deposit',
+  'full',
+  'schedule',
+  'after_approval',
+  'custom',
+] as const
+
+export type PaymentCollectionPolicy =
+  (typeof PAYMENT_COLLECTION_POLICIES)[number]
+
+/**
+ * What has to be true before a booking is confirmed.
+ *
+ * A set rather than a single value, because the real answers are combinations:
+ * "contract signed **and** deposit recorded" is the common one, and hard-coding
+ * a single confirmation path is exactly what this replaces. An empty set means
+ * a manager's approval alone, which is the product's oldest behaviour and
+ * stays available.
+ */
+export const CONFIRMATION_REQUIREMENTS = [
+  'manager_approval',
+  'guest_confirmation',
+  'contract_signed',
+  'deposit_recorded',
+  'deposit_paid_live',
+  'full_payment',
+] as const
+
+export type ConfirmationRequirement = (typeof CONFIRMATION_REQUIREMENTS)[number]
 
 // ── Approval ──────────────────────────────────────────────────────────────
 

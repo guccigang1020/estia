@@ -297,6 +297,16 @@ const OPERATIONS_CORE: Grant[] = [
   'incident.resolve',
   'inventory.view',
   'inventory.edit',
+  'inventory.adjust',
+  'inventory.import',
+  'inventory.transfer',
+  // The whole laundry operation, including sending an order out. Somebody who
+  // runs operations is exactly who talks to the provider.
+  'laundry.view',
+  'laundry.manage',
+  'laundry.order_create',
+  'laundry.order_send',
+  'laundry.provider_manage',
 ]
 
 const FINANCE_CORE: Grant[] = [
@@ -602,6 +612,16 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'incident.update',
     'inventory.view',
     'inventory.edit',
+    // Counts what is on the shelf, because they are the one holding it.
+    'inventory.adjust',
+    // Prepares the laundry and raises the order. Deliberately not
+    // `laundry.order_send` or `laundry.provider_manage`: sending is a message
+    // to an outside company in the organization's name, and choosing the
+    // company is a commercial decision. Both belong a level up, and the order
+    // this role raises is waiting there for approval.
+    'laundry.view',
+    'laundry.manage',
+    'laundry.order_create',
     'user.view',
     'property.view',
     'booking.view',
@@ -610,6 +630,12 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   /**
    * Mobile, task-first, and the sharpest test of the privacy model: a cleaner
    * sees which unit and when, and never a phone number or a price.
+   *
+   * No laundry grant, and that is the right reading of "assigned laundry tasks
+   * only": internal laundry work reaches a cleaner as a task, which these four
+   * grants already cover. `laundry.view` would additionally show them provider
+   * orders and the forward demand curve — somebody else's job, and somebody
+   * else's commercial information.
    */
   cleaner: ['task.view', 'task.update', 'task.complete', 'incident.create'],
 

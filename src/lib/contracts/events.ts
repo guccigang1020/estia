@@ -81,6 +81,13 @@ export const DOMAIN_EVENTS = [
    */
   'payment.outcome_unknown',
   'payment.refunded',
+  // The collection policy's own events. `payment.received` is money arriving
+  // through a provider; `payment.recorded` is a human writing down that a bank
+  // transfer landed, which is the majority of Israeli guesthouse income and
+  // must not be second-class.
+  'payment.instructions_sent',
+  'payment.proof_uploaded',
+  'payment.recorded',
   'deposit.authorized',
   'deposit.captured',
   'deposit.released',
@@ -118,8 +125,29 @@ export const DOMAIN_EVENTS = [
   'task.overdue',
   'incident.opened',
   'incident.resolved',
+  // The shortage somebody is standing in front of, now.
   'inventory.shortage_detected',
+  // The shortage that has not happened yet, and is the point of the forecast:
+  // fifty towels, twenty-five needed on Friday and thirty on Saturday, and
+  // Friday's will still be in the machine. Kept apart from the line above
+  // because they call for different actions and arrive at different times.
+  'inventory.projected_shortage',
+  'inventory.discrepancy_detected',
   'inventory.transferred',
+
+  // Laundry
+  //
+  // `preparation.calculated` above is what the specification calls
+  // `preparation.generated`; it already existed and is not duplicated here.
+  'laundry.requirements_generated',
+  'laundry.order_ready',
+  'laundry.order_sent',
+  'laundry.shortage_detected',
+  'laundry.ready',
+  'laundry.overdue',
+  // The turnaround does not reach the arrival. Raised before anybody is
+  // standing in an unmade bedroom.
+  'laundry.deadline_risk',
 
   // Approvals
   'approval.requested',

@@ -21,6 +21,11 @@ export const ENTITLEMENTS = [
   'custom_domain',
   'team', // roles, invitations, assignments
   'operations', // tasks, housekeeping, maintenance, inventory
+  // Laundry is its own line because it is its own operation: providers,
+  // orders, turnaround and a forward demand curve. A business can run
+  // housekeeping without ever sending a sheet out, and one that sends
+  // everything out is buying something the tasks board does not give it.
+  'laundry',
   'channels', // Airbnb / Booking.com synchronisation
   'dynamic_pricing',
   'owner_portal', // external property owners and their statements
@@ -72,6 +77,22 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   'task.complete': 'operations',
   'task.verify': 'operations',
   'checklist.manage': 'operations',
+  'inventory.adjust': 'operations',
+  'inventory.import': 'operations',
+  'inventory.transfer': 'operations',
+
+  // Laundry
+  'laundry.view': 'laundry',
+  'laundry.manage': 'laundry',
+  'laundry.order_create': 'laundry',
+  'laundry.order_send': 'laundry',
+  'laundry.provider_manage': 'laundry',
+
+  // `payment.policy_manage` is deliberately absent from this map. Deciding
+  // that a booking is confirmed by a manager's approval and paid by bank
+  // transfer is core hospitality, not a paid feature — gating it behind
+  // `payments` would mean a customer who never takes a card cannot say how
+  // they take money.
   'inventory.view': 'operations',
   'inventory.edit': 'operations',
   'incident.view': 'operations',
