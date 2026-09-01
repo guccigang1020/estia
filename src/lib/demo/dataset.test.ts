@@ -332,7 +332,17 @@ describe('every persona is a real member', () => {
   const membershipRoles = rows('membership_roles')
   const roles = rows('roles')
 
-  it('offers the eight the tour walks', () => {
+  it('offers the nine the tour walks, in order', () => {
+    // Pinned as a list rather than counted, because the order is what the
+    // switcher shows and what resolvePersona falls back to when no cookie
+    // names one. The first entry is the owner, and that is deliberate: it is
+    // the demo front door.
+    //
+    // housekeeping_supervisor joined ninth. Without it the laundry module
+    // central distinction — the supervisor raises an order and a manager sends
+    // it, because sending is a message to an outside company in the
+    // organization name — had no identity that could see it, and was proved
+    // only by unit test.
     expect(DEMO_PERSONAS.map((persona) => persona.role)).toEqual([
       'organization_owner',
       'administrator',
@@ -342,6 +352,7 @@ describe('every persona is a real member', () => {
       'cleaner',
       'accountant',
       'sales_agent',
+      'housekeeping_supervisor',
     ])
   })
 

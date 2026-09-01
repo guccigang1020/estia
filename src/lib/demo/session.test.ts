@@ -25,6 +25,7 @@ import {
   DEFAULT_DEMO_PLAN,
   DemoActorSource,
   demoUser,
+  UnknownDemoPersona,
   resolvePersona,
   resolvePlan,
 } from './session'
@@ -71,12 +72,31 @@ describe('resolvePersona', () => {
     expect(resolvePersona([OWNER, CLEANER], 'cleaner')).toBe(CLEANER)
   })
 
-  it('falls back to the first persona for an unknown or absent cookie', () => {
-    // Same rule `chooseWorkspace` applies to `estia.workspace`: a stored value
-    // that no longer names anything real is not trusted, and is not an error
-    // page either.
-    expect(resolvePersona([OWNER, CLEANER], 'nobody')).toBe(OWNER)
+  it('takes the first persona when no cookie names one', () => {
+    // Not a substitution — somebody arriving for the first time has to be
+    // somebody, and the first persona is who.
     expect(resolvePersona([OWNER, CLEANER], undefined)).toBe(OWNER)
+    expect(resolvePersona([OWNER, CLEANER], '')).toBe(OWNER)
+  })
+
+  it('refuses a named persona the dataset does not define', () => {
+    // This used to fall through to `personas[0]`, and `personas[0]` is the
+    // *owner* — so a mistyped or stale name silently promoted the request to
+    // the most privileged identity in the demo.
+    //
+    // It cost real evidence: a verification sweep swept two ids that are not
+    // personas at all and got the owner's screens back under somebody else's
+    // label. Eight rows of proof that were secretly the same person.
+    //
+    // `currentDemoPersona` still keeps the demo working for a visitor whose
+    // cookie outlived a dataset change — it catches this and warns. What it no
+    // longer does is pretend.
+    expect(() => resolvePersona([OWNER, CLEANER], 'nobody')).toThrow(
+      UnknownDemoPersona,
+    )
+    expect(() => resolvePersona([OWNER, CLEANER], 'nobody')).toThrow(
+      /owner, cleaner/,
+    )
   })
 
   it('throws when the dataset names nobody at all', () => {

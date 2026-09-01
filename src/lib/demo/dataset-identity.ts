@@ -158,6 +158,18 @@ export const PEOPLE: readonly DemoPerson[] = [
     personaSummary:
       'מוכר שהות באחוזת רימונים בלבד: זמינות, החזקות והזמנות — ורואה רק את העמלות שלו.',
   },
+  {
+    key: 'housekeeping-supervisor',
+    userId: userIds(11),
+    fullName: 'סיגל אוחיון',
+    email: 'sigal@ahuzat-hagalil.co.il',
+    phone: '+972 54-771-2295',
+    role: 'housekeeping_supervisor',
+    employmentType: 'employee',
+    personaLabel: 'אחראית משק בית',
+    personaSummary:
+      'מרימה הזמנת כביסה ואינה שולחת אותה. רואה את המסר המלא לספק ולא את פרטי הספק — ההפרדה בין מי שמכין למי שמדבר החוצה, על המסך.',
+  },
   // Two members who are not personas. They exist so assignments, teams and
   // approvals point at real people rather than at the same eight ids, and so
   // the team screens are not a list of one.

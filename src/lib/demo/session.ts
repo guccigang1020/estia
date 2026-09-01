@@ -68,6 +68,27 @@ export const DEFAULT_DEMO_PLAN = 'pro'
  * and it throws rather than returning `undefined` for the shell to trip over
  * three frames later.
  */
+/**
+ * A persona the dataset does not define.
+ *
+ * Its own class so `currentDemoPersona` can tell a stale cookie — which is
+ * recoverable and ordinary — from a caller asking for somebody who was never
+ * there, which is a mistake worth seeing.
+ */
+export class UnknownDemoPersona extends Error {
+  constructor(
+    readonly requested: string,
+    personas: readonly DemoPersona[],
+  ) {
+    super(
+      `No demo persona is called ''. The dataset defines: ` +
+        personas.map((persona) => persona.id).join(', ') +
+        '.',
+    )
+    this.name = 'UnknownDemoPersona'
+  }
+}
+
 export function resolvePersona(
   personas: readonly DemoPersona[],
   requested: string | undefined,
@@ -78,7 +99,24 @@ export function resolvePersona(
         'DEMO_PERSONAS in src/lib/demo/dataset.ts must list at least one.',
     )
   }
-  return personas.find((persona) => persona.id === requested) ?? personas[0]
+  // No cookie at all is the front door, not a substitution: somebody arriving
+  // for the first time has to be *somebody*, and the first persona is who.
+  if (requested === undefined || requested === '') return personas[0]
+
+  const found = personas.find((persona) => persona.id === requested)
+  if (found) return found
+
+  // A named persona that does not exist is a different thing entirely, and
+  // falling through to `personas[0]` was quietly dangerous: the first persona
+  // is the *owner*, so a mistyped or stale name silently promoted the request
+  // to the most privileged identity in the demo.
+  //
+  // That is not a theoretical concern. A verification sweep swept two ids that
+  // are not personas at all and got the owner's screens back under somebody
+  // else's label — eight rows of evidence that were all secretly the same
+  // person. A demo that answers the wrong question convincingly is worse than
+  // one that refuses.
+  throw new UnknownDemoPersona(requested, personas)
 }
 
 /**
@@ -125,7 +163,24 @@ async function catalogue() {
 export async function currentDemoPersona(): Promise<DemoPersona> {
   const { DEMO_PERSONAS } = await catalogue()
   const store = await cookies()
-  return resolvePersona(DEMO_PERSONAS, store.get(DEMO_PERSONA_COOKIE)?.value)
+  const requested = store.get(DEMO_PERSONA_COOKIE)?.value
+
+  try {
+    return resolvePersona(DEMO_PERSONAS, requested)
+  } catch (cause) {
+    if (!(cause instanceof UnknownDemoPersona)) throw cause
+
+    // A cookie that outlived a dataset change must not break the demo for the
+    // person holding it — but it must not be silent either, because the same
+    // path is how a verification sweep ends up testing the owner while
+    // labelled somebody else. Loud in the log, working on the screen.
+    console.warn(
+      '[demo] %s Falling back to %s.',
+      cause.message,
+      DEMO_PERSONAS[0]?.id,
+    )
+    return DEMO_PERSONAS[0]
+  }
 }
 
 /** The package this request sees the organization on. */

@@ -60,6 +60,15 @@ const SCOPES: Readonly<Record<string, ScopeShape>> = {
   housekeeping: { kind: 'team', teamIds: [TEAM_IDS.housekeeping] },
   accountant: { kind: 'all_organization' },
   'sales-agent': { kind: 'properties', propertyIds: [PROPERTY_IDS.rimonim] },
+  // Properties, deliberately not `team`. `withinScope` returns false for a
+  // team scope against any resource carrying no `teamId`, and no laundry row
+  // carries one — so a team-scoped supervisor would meet an empty screen on
+  // every laundry route and read as broken rather than as scoped. Both
+  // properties, so the consolidated run across them is fully visible.
+  'housekeeping-supervisor': {
+    kind: 'properties',
+    propertyIds: [PROPERTY_IDS.rimonim, PROPERTY_IDS.kacholYam],
+  },
   'second-cleaner': { kind: 'team', teamIds: [TEAM_IDS.housekeeping] },
   maintenance: { kind: 'team', teamIds: [TEAM_IDS.maintenance] },
 }
