@@ -168,6 +168,13 @@ src/components/store/**                       store                write
 src/app/g/[token]/store/**                    store                write
 src/lib/guest-portal/**                       coordinator          write
 supabase/migrations/0033_guest_link.sql       coordinator          write
+supabase/migrations/0034_guest_journey.sql    guest-journey        write
+# The permission catalogue repair. Fourteen grants were added to the code and
+# to nobody's database; four workers were writing policies against them. One
+# mistake, one hand, one migration — splitting the repair across their four
+# migrations would have made each carry a fragment of somebody else's
+# oversight.
+supabase/migrations/0035_permission_catalogue_wave_two.sql  coordinator  write
 # The frame, and only the frame. Two workers build inside this portal and both
 # need the same answer to "whose booking is this"; resolving the token twice is
 # how one section eventually shows a guest somebody else's stay.
