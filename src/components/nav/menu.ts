@@ -503,6 +503,18 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/settings/organization' },
       },
       {
+        id: 'payment-collection',
+        label: 'גבייה ותשלומים',
+        // No plan entitlement, and that is the point of the screen rather than
+        // an omission: a business that confirms by telephone and takes a bank
+        // transfer must be able to say so on a package with no card
+        // processing at all. `payment.policy_manage` is the one grant in the
+        // finance family that `ENTITLEMENT_FOR_GRANT` deliberately does not
+        // map.
+        requires: { kind: 'grant', anyOf: ['payment.policy_manage'] },
+        destination: { status: 'ready', href: '/settings/payments' },
+      },
+      {
         id: 'billing',
         label: 'חבילה וחיוב',
         requires: { kind: 'grant', anyOf: ['organization.billing.manage'] },

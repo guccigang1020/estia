@@ -187,6 +187,59 @@ const TABLES: DemoTables = {
   // `payment_attempts` and `audit_events` above, so it is seeded empty rather
   // than filled: an applied event nobody delivered is fabricated evidence.
   payment_provider_events: [],
+
+  // ── Payment collection ──────────────────────────────────────────────────
+  //
+  // Four tables from 0031. The first two are seeded rather than left empty,
+  // deliberately: an empty settings table is not a neutral demo, it is a
+  // business that has said nothing about how it takes money, and the screen
+  // would honestly render "not configured" for the one case that is not the
+  // point of the feature.
+  //
+  // The point is the Israeli guesthouse that confirms by telephone, asks for a
+  // thirty-percent deposit by bank transfer, and has no card processing at
+  // all — so `live_payments_enabled` is false and everything still works.
+  //
+  // Column names taken from `channelFromRow` and `settingsFromRow` in
+  // `src/lib/payments/repository.ts` rather than from memory: the channel's
+  // flag is `enabled`, not `is_enabled`, and a row shaped from the wrong name
+  // reads as a disabled channel instead of failing.
+  payment_collection_settings: [
+    {
+      id: '9f2a4c10-6d3b-4e58-9a71-2c4e6f8a0b12',
+      organization_id: ORGANIZATION_ID,
+      policy: 'deposit',
+      requirements: [],
+      deposit_percent_bps: 3000,
+      deposit_fixed_agorot: null,
+      balance_due_days_before: 14,
+      live_payments_enabled: false,
+      live_provider: null,
+      guest_instructions:
+        'לאישור ההזמנה יש להעביר מקדמה. אפשר להעביר בהעברה בנקאית ולשלוח אסמכתא, ואנחנו נאשר תוך יום עסקים.',
+      version: 1,
+    },
+  ],
+
+  payment_manual_channels: [
+    {
+      id: 'b7c1d3e5-4f60-4a29-8b3d-1e5f7a9c0d24',
+      organization_id: ORGANIZATION_ID,
+      channel: 'bank_transfer',
+      enabled: true,
+      display_name: 'העברה בנקאית',
+      instructions:
+        'בנק הפועלים · סניף 613 · חשבון 123456 · על שם אחוזת רימונים בע״מ. נא לציין את מספר ההזמנה בהעברה.',
+      sort_order: 10,
+      version: 1,
+    },
+  ],
+
+  // Empty, and honestly so. An override is something a manager did to one
+  // booking and a proof is something a guest uploaded; fabricating either
+  // would put an act in the demo that nobody performed.
+  payment_collection_overrides: [],
+  payment_proofs: [],
 }
 
 export const DEMO_DATASET: DemoDataset = {
