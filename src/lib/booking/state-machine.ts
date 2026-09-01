@@ -71,6 +71,8 @@ import type { Grant } from '../authz/permissions'
 import { BusinessRuleError } from '../errors'
 import type { DomainEventName } from '../service'
 import { localDate } from './dates'
+import type { BookingParty, SleepingRequest } from './party'
+import type { EventType } from '../preparation/types'
 import {
   TERMINAL_STATUSES,
   type Agorot,
@@ -102,7 +104,30 @@ export interface BookingSnapshot {
   /** Exclusive — bookable by the next guest. */
   checkOut: string
   guestName: string
+  /**
+   * Heads under the roof — adults, children and infants together.
+   *
+   * Kept alongside `party` rather than replaced by it, because it is the
+   * figure every existing screen and report already reads and it round-trips
+   * correctly as the sum. `party` is the split those screens could not show.
+   */
   guestCount: number
+  /**
+   * The party as the desk actually recorded it.
+   *
+   * Optional so that a caller written before 0028 still compiles. Every path
+   * through `booking.create` supplies all four.
+   */
+  party?: BookingParty
+  /** Couples, extra beds and cots as *asked for* — not as the plan decided. */
+  sleeping?: SleepingRequest
+  eventType?: EventType
+  /**
+   * The guest's own words. Readable wherever `guestNotes` is, and deliberately
+   * not behind `booking.note.internal`: a cleaner has to be able to read
+   * "שתי מיטות תינוק".
+   */
+  specialRequests?: string | null
   version: number
   /** What the business asked for up front. Zero when it takes nothing. */
   depositRequiredAgorot: Agorot

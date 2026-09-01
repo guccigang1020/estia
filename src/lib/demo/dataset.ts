@@ -51,6 +51,27 @@ import {
   LAUNDRY_PROVIDER_ROWS,
   LAUNDRY_SETTINGS_ROWS,
 } from './dataset-laundry'
+import {
+  STORE_AVAILABILITY_RULE_ROWS,
+  STORE_CATEGORY_ROWS,
+  STORE_ITEM_ADDON_ROWS,
+  STORE_ITEM_OPTION_ROWS,
+  STORE_ITEM_OPTION_VALUE_ROWS,
+  STORE_ITEM_PROPERTY_OVERRIDE_ROWS,
+  STORE_ITEM_ROWS,
+  STORE_ORDER_AMENDMENT_ROWS,
+  STORE_ORDER_LINE_OPTION_ROWS,
+  STORE_ORDER_LINE_ROWS,
+  STORE_ORDER_PAYMENT_ROWS,
+  STORE_ORDER_ROWS,
+  STORE_PACKAGE_ITEM_ROWS,
+  STORE_PACKAGE_ROWS,
+  STORE_PRICE_HISTORY_ROWS,
+  STORE_PROMO_CODE_ROWS,
+  STORE_PROVIDER_REQUEST_ROWS,
+  STORE_PROVIDER_ROWS,
+  STORE_SETTINGS_ROWS,
+} from './dataset-store'
 
 import {
   INVOICE_SEQUENCE_ROWS,
@@ -380,6 +401,37 @@ const TABLES: DemoTables = {
   laundry_item_profiles: LAUNDRY_ITEM_PROFILE_ROWS,
   laundry_orders: LAUNDRY_ORDER_ROWS,
   laundry_order_lines: LAUNDRY_ORDER_LINE_ROWS,
+
+  // ── The store ───────────────────────────────────────────────────────────
+  //
+  // An organization on `simple` — a catalogue and orders handled by hand, with
+  // no payment provider anywhere. That is the villa owner selling a שולחן שוק
+  // and pool heating, and it is the mode most likely to be dismissed as an
+  // unfinished version of the other two.
+  store_settings: STORE_SETTINGS_ROWS,
+  store_categories: STORE_CATEGORY_ROWS,
+  store_providers: STORE_PROVIDER_ROWS,
+  store_items: STORE_ITEM_ROWS,
+  store_item_options: STORE_ITEM_OPTION_ROWS,
+  store_item_option_values: STORE_ITEM_OPTION_VALUE_ROWS,
+  store_item_addons: STORE_ITEM_ADDON_ROWS,
+  store_packages: STORE_PACKAGE_ROWS,
+  store_package_items: STORE_PACKAGE_ITEM_ROWS,
+  store_item_property_overrides: STORE_ITEM_PROPERTY_OVERRIDE_ROWS,
+  store_availability_rules: STORE_AVAILABILITY_RULE_ROWS,
+  store_promo_codes: STORE_PROMO_CODE_ROWS,
+  store_orders: STORE_ORDER_ROWS,
+  store_order_lines: STORE_ORDER_LINE_ROWS,
+  store_order_line_options: STORE_ORDER_LINE_OPTION_ROWS,
+
+  // Empty on purpose, and declared rather than absent: these four are written
+  // by the product — a price change somebody made, a payment somebody took, an
+  // amendment somebody approved, a request somebody sent a supplier. Seeding
+  // any of them would put an act in the demo that nobody performed.
+  store_price_history: STORE_PRICE_HISTORY_ROWS,
+  store_order_payments: STORE_ORDER_PAYMENT_ROWS,
+  store_order_amendments: STORE_ORDER_AMENDMENT_ROWS,
+  store_provider_requests: STORE_PROVIDER_REQUEST_ROWS,
 }
 
 export const DEMO_DATASET: DemoDataset = {

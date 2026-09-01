@@ -181,6 +181,14 @@ supabase/migrations/0035_permission_catalogue_wave_two.sql  coordinator  write
 src/app/g/[token]/layout.tsx                  coordinator          write
 src/lib/supabase/proxy.ts                     coordinator          write
 src/app/g/**                                  guest-journey        write
+src/lib/guest-journey/**                      guest-journey        write
+src/components/guest/**                       guest-journey        write
+# The demo's guest-journey functions. Its own file rather than a block inside
+# `client.ts`, because each one mirrors a SECURITY DEFINER function in 0034 and
+# getting a refusal's order subtly wrong produces a demo that teaches the wrong
+# behaviour. That is knowledge, not typing, and it belongs with whoever wrote
+# the migration.
+src/lib/demo/functions-guest.ts               guest-journey        write
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
 src/lib/agents/**                             authz                write

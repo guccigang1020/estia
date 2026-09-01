@@ -54,6 +54,10 @@ import {
   type FilterOp,
 } from '../persistence/postgrest-sql'
 import type { DemoDataset, DemoRow, DemoTables } from './types'
+// The guest journey's own functions, written by the worker that wrote the
+// migration they mirror. Imported rather than declared here so there is one
+// writer per file; see that module's header.
+import { GUEST_JOURNEY_FUNCTIONS } from './functions-guest'
 
 /* ---------------------------------------------------------------- errors -- */
 
@@ -1181,10 +1185,126 @@ class DemoQueryBuilder implements PromiseLike<DemoResponse> {
  * throws — an unimplemented function silently returning null would surface as a
  * missing invoice number rather than as a missing function.
  */
-const FUNCTIONS: Record<
-  string,
-  (db: DemoDatabase, args: Record<string, unknown>) => unknown
-> = {
+/**
+ * A refusal a demo function raises, shaped the way PostgREST delivers one.
+ *
+ * `guest_portal_session` and its neighbours do not return a flag when a link
+ * is revoked — they `raise`, and PostgREST turns that into an error body whose
+ * `message` is the machine-readable code and whose `hint` is the Hebrew
+ * sentence. `src/lib/guest-portal/session.ts` reads exactly those two fields.
+ *
+ * So the demo has to be able to refuse the same way. Without this a demo
+ * function could only ever succeed, and every refusal path in the portal —
+ * the wrong token, the revoked link, the expired one — would be unreachable
+ * in the one place somebody is most likely to look at them.
+ */
+export class DemoRpcError extends Error {
+  constructor(
+    readonly code: string,
+    readonly hint: string,
+  ) {
+    // `message` carries the machine code, as a raised exception's does.
+    super(code)
+    this.name = 'DemoRpcError'
+  }
+}
+
+/** The projection 0033 returns, and nothing wider. */
+function guestPortalProjection(db: DemoDatabase, token: string): unknown {
+  if (token.trim().length < 32) {
+    throw new DemoRpcError(
+      'guest_link_not_found',
+      'הקישור אינו תקין. בקש מבית האירוח לשלוח קישור חדש.',
+    )
+  }
+
+  const booking = db.has('bookings')
+    ? db.rows('bookings').find((row) => looseEquals(row.guest_token, token))
+    : undefined
+
+  if (!booking || booking.deleted_at != null) {
+    throw new DemoRpcError(
+      'guest_link_not_found',
+      'לא מצאנו את ההזמנה. ייתכן שהקישור הועתק חלקית.',
+    )
+  }
+
+  if (booking.guest_link_revoked_at != null) {
+    throw new DemoRpcError(
+      'guest_link_revoked',
+      'הקישור בוטל. פנה לבית האירוח לקבלת קישור חדש.',
+    )
+  }
+
+  const expiresAt = booking.guest_link_expires_at
+  if (typeof expiresAt === 'string' && Date.parse(expiresAt) <= Date.now()) {
+    throw new DemoRpcError(
+      'guest_link_expired',
+      'תוקף הקישור פג. פנה לבית האירוח לקבלת קישור חדש.',
+    )
+  }
+
+  const first = <T extends DemoRow>(
+    table: string,
+    id: unknown,
+  ): T | undefined =>
+    db.has(table)
+      ? (db.rows(table).find((row) => looseEquals(row.id, id)) as T | undefined)
+      : undefined
+
+  const organization = first('organizations', booking.organization_id)
+  const property = first('properties', booking.property_id)
+  const unit = first('units', booking.unit_id)
+  const guest = first('guests', booking.guest_id)
+
+  if (!organization) {
+    throw new DemoRpcError(
+      'guest_link_unavailable',
+      'ההזמנה אינה זמינה כרגע. נסה שוב מאוחר יותר.',
+    )
+  }
+
+  // Every key here is one 0033 returns, and the omissions are the point:
+  // no internal notes, no attribution, no tax treatment, no status reason.
+  // A demo that disclosed more than production would be teaching the wrong
+  // shape to whoever reads it next.
+  return {
+    bookingId: booking.id,
+    organizationId: booking.organization_id,
+    organizationName: organization.name ?? null,
+    reference: booking.reference,
+    status: booking.status,
+    checkIn: booking.check_in,
+    checkOut: booking.check_out,
+    arrivalTime: booking.arrival_time ?? null,
+    adults: Number(booking.adults ?? 0),
+    children: Number(booking.children ?? 0),
+    infants: Number(booking.infants ?? 0),
+    couples: Number(booking.couples ?? 0),
+    cotsRequested: Number(booking.cots_requested ?? 0),
+    eventType: booking.event_type ?? 'accommodation',
+    specialRequests: booking.special_requests ?? null,
+    guestNotes: booking.guest_notes ?? null,
+    currency: booking.currency ?? 'ILS',
+    totalAgorot: Number(booking.total_agorot ?? 0),
+    propertyId: property?.id ?? null,
+    propertyName: property?.name ?? null,
+    propertyCity: property?.city ?? null,
+    unitName: unit?.name ?? null,
+    // First name only, exactly as `split_part(full_name, ' ', 1)` does.
+    guestFirstName: String(guest?.full_name ?? '').split(' ')[0] ?? '',
+    linkExpiresAt: booking.guest_link_expires_at ?? null,
+    firstOpenedAt: booking.guest_link_first_opened_at ?? null,
+  }
+}
+
+/** What a demo database function is. Exported for `functions-guest.ts`. */
+export type DemoRpcFunction = (
+  db: DemoDatabase,
+  args: Record<string, unknown>,
+) => unknown
+
+const CORE_FUNCTIONS: Record<string, DemoRpcFunction> = {
   next_invoice_number(_db, args) {
     const key = [
       String(args.target_organization_id ?? ''),
@@ -1215,6 +1335,61 @@ const FUNCTIONS: Record<
       )
     return match ? (match.user_id ?? match.id ?? null) : null
   },
+
+  /**
+   * The guest portal's one door, reproduced.
+   *
+   * In production this is SECURITY DEFINER and the only function `anon` may
+   * execute against tenant data; the demo has no RLS, so what it reproduces is
+   * not the privilege but the *projection* and the refusals. Those are the
+   * parts a screen depends on, and a demo that answered with a whole booking
+   * row would let a portal read fields production withholds and nobody would
+   * find out until it was live.
+   */
+  guest_portal_session(db, args) {
+    return guestPortalProjection(db, String(args.p_token ?? ''))
+  },
+
+  /**
+   * Deliberately silent when the token matches nothing, exactly as 0033 is:
+   * reporting a bad link is the read's job, and a telemetry write must never
+   * be the reason a page fails to render.
+   */
+  guest_portal_opened(db, args) {
+    const token = String(args.p_token ?? '')
+    if (token === '' || !db.has('bookings')) return null
+
+    const booking = db
+      .rows('bookings')
+      .find((row) => looseEquals(row.guest_token, token))
+
+    if (
+      !booking ||
+      booking.deleted_at != null ||
+      booking.guest_link_revoked_at != null
+    ) {
+      return null
+    }
+
+    const now = new Date().toISOString()
+    booking.guest_link_first_opened_at =
+      booking.guest_link_first_opened_at ?? now
+    booking.guest_link_last_opened_at = now
+    return null
+  },
+}
+
+/**
+ * Everything the demo can answer, core plus the guest journey's own.
+ *
+ * Merged rather than declared in one place so that each module's functions are
+ * written by whoever wrote the migration they mirror. A function getting a
+ * refusal's order subtly wrong produces a demo that teaches the wrong
+ * behaviour, and that is knowledge, not typing.
+ */
+const FUNCTIONS: Record<string, DemoRpcFunction> = {
+  ...CORE_FUNCTIONS,
+  ...GUEST_JOURNEY_FUNCTIONS,
 }
 
 /** Per-process, like the rows. Reset when the dev server restarts. */
@@ -1263,7 +1438,23 @@ export class DemoClient {
           `client (FUNCTIONS in src/lib/demo/client.ts)`,
       )
     }
-    return { data: fn(this.database, args), error: null }
+
+    try {
+      return { data: fn(this.database, args), error: null }
+    } catch (cause) {
+      // A raised refusal, delivered the way PostgREST delivers one: `message`
+      // carries the machine code and `hint` the Hebrew sentence. Anything else
+      // thrown is a fault in the demo client itself and is left to propagate —
+      // turning a real bug into a tidy error body is how a broken fixture ends
+      // up looking like a working refusal.
+      if (cause instanceof DemoRpcError) {
+        return {
+          data: null,
+          error: { code: 'P0001', message: cause.code, hint: cause.hint },
+        }
+      }
+      throw cause
+    }
   }
 }
 
