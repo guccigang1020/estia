@@ -140,7 +140,27 @@ export default async function GuestPortalPage({
             ) : null
           }
         />
-      ) : view.reconfirmation.required ? null : (
+      ) : view.reconfirmation.required ? null : view.next.id === 'confirm' ? (
+        // The journey wants a confirmation the collection policy never asked
+        // for — a business that takes no money in advance but still wants the
+        // guest to agree. The card carries the control itself rather than
+        // linking somewhere, because this page IS where confirming happens.
+        <section
+          aria-labelledby="next-action-heading"
+          className="flex flex-col gap-3 rounded-2xl border-2 border-primary bg-surface-raised px-4 py-5 shadow-lift sm:px-5"
+        >
+          <h2
+            id="next-action-heading"
+            className="font-display text-lg font-bold text-foreground"
+          >
+            {view.next.label}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {view.next.description}
+          </p>
+          {confirmControl}
+        </section>
+      ) : (
         <NextActionCard action={view.next} token={token} />
       )}
 

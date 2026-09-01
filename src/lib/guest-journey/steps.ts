@@ -101,6 +101,18 @@ export const GUEST_ACTION_IDS = [
    * panel rendered directly underneath it.
    */
   'collection',
+  /**
+   * The journey's own confirm and sign, for the case the collection policy
+   * does not cover.
+   *
+   * A business can want the guest to confirm — `require_guest_confirmation`,
+   * which is the shipped default — while collecting no money at all, and a
+   * `none` policy names no requirements. Without these two the dominant action
+   * would step straight over a confirmation the progress list is still showing
+   * as outstanding, which is exactly what an end-to-end walk found it doing.
+   */
+  'confirm',
+  'sign',
   'details',
   'arrival',
   'stay',
@@ -341,10 +353,36 @@ export function nextAction(
     }
   }
 
-  const details = steps.find(
-    (step) => step.id === 'details' && step.status !== 'done',
+  // The policy is satisfied, but the journey may still be asking for
+  // something the policy never mentioned. Walked in step order so the first
+  // outstanding one wins — the same order the progress list shows, because a
+  // list saying "confirm" above a button saying "fill in your details" is two
+  // answers to one question.
+  const outstanding = steps.find(
+    (step) => step.required && step.status !== 'done',
   )
-  if (details) {
+
+  if (outstanding?.id === 'confirm') {
+    return {
+      id: 'confirm',
+      label: 'אישור ההזמנה',
+      description: 'בדוק את הפרטים ואשר שהכול נכון.',
+      path: '',
+      tone: 'urgent',
+    }
+  }
+
+  if (outstanding?.id === 'contract') {
+    return {
+      id: 'sign',
+      label: 'חתימה על החוזה',
+      description: 'קרא את תנאי השהות וחתום עליהם.',
+      path: 'contract',
+      tone: 'urgent',
+    }
+  }
+
+  if (outstanding?.id === 'details') {
     return {
       id: 'details',
       label: 'מילוי פרטי האורחים',

@@ -45,7 +45,7 @@ import {
   type Db,
 } from '../persistence'
 import { defineOperation, s, type Operation } from '../service'
-import { assertTransition, initialStatusFor } from './orders'
+import { assertTransition, draftOrderTotals, initialStatusFor } from './orders'
 import { manualPaymentPort, paymentStatusFor } from './payment'
 import { StoreRepository } from './repository'
 import { snapshotLine, type LineSnapshotDraft } from './snapshot'
@@ -602,6 +602,15 @@ export function defineStoreOperations(options: { db: Db }): StoreOperations {
           provider_id: draft.providerId,
           notes: input.lines[index]?.notes ?? null,
           sort_order: index,
+
+          // `line_total_agorot` is deliberately ABSENT. It is GENERATED
+          // ALWAYS in 0032, and Postgres refuses an explicit write to a
+          // generated column — that refusal is precisely the guarantee that a
+          // line total is always its own parts, so sending the value "to be
+          // helpful" would fail the insert outright.
+          package_id: draft.packageId,
+          line_status: 'pending',
+          version: 1,
           created_by: context.actor.userId,
           updated_by: context.actor.userId,
         })),
@@ -815,6 +824,8 @@ export function defineStoreOperations(options: { db: Db }): StoreOperations {
         amount_agorot: recorded.amountAgorot,
         status: recorded.status,
         reference: recorded.reference,
+        notes: recorded.notes,
+        version: 1,
         recorded_at: now.toISOString(),
         recorded_by: context.actor.userId,
         created_by: context.actor.userId,

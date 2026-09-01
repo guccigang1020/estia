@@ -254,6 +254,40 @@ describe('one dominant action', () => {
     expect(view.reconfirmation.required).toBe(true)
   })
 
+  it('asks for confirmation the policy never mentioned', () => {
+    // The defect an end-to-end walk found. A business that takes no money in
+    // advance has a `none` policy naming no requirements, so the collection
+    // module correctly says nothing is required — but the journey's own
+    // `require_guest_confirmation` is on by default. The dominant action used
+    // to step straight over it to "פרטי ההגעה" while the progress list still
+    // showed אישור ההזמנה as outstanding: two answers to one question.
+    const view = buildJourneyView(
+      journeyFixture({
+        settings: { requireGuestConfirmation: true },
+        arrival: {
+          released: true,
+          checkInTime: '15:00:00',
+          addressNote: null,
+          addressLine1: 'הגליל 4',
+          addressLine2: null,
+          city: 'רמת הגולן',
+          directions: null,
+          mapUrl: null,
+          parking: null,
+          accessInstructions: null,
+          accessCode: '4821',
+        },
+      }),
+      collectionFixture(),
+    )
+
+    expect(view.next.id).toBe('confirm')
+    expect(view.steps.find((step) => step.id === 'confirm')?.status).toBe(
+      'current',
+    )
+    expect(view.complete).toBe(false)
+  })
+
   it('asks for details once the policy is satisfied', () => {
     const view = buildJourneyView(
       journeyFixture({

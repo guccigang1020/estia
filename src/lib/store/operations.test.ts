@@ -345,14 +345,26 @@ describe('STEP 2 — an order is placed, and the price is SNAPSHOTTED onto the l
   })
 
   /**
-   * NO TOTAL IS SENT WITH THE ORDER.
+   * THE ORDER'S TOTAL IS THE SUM OF THE LINES IT WAS WRITTEN WITH.
    *
-   * `tg_store_order_totals` rewrites subtotal, discount and total from the
-   * lines on every line write, and a caller-supplied figure is discarded. An
-   * insert that carried one would be a second source for the same number, so
-   * the test asserts the columns are absent rather than merely correct.
+   * This originally asserted the money columns were ABSENT, on the reasoning
+   * that `tg_store_order_totals` owns them. The trigger does own them — it
+   * rewrites all four from the persisted lines and discards whatever was sent
+   * — but "absent" turned out to be the wrong way to state it, and the demo
+   * found out: with no defaults and no triggers, an order created through this
+   * operation read back with no `total_agorot` at all and the money mapper
+   * threw.
+   *
+   * So the operation writes them, from `draftOrderTotals(drafts)` — the same
+   * drafts the lines are built from, one computation feeding both. The
+   * invariant worth asserting was never "no total is sent"; it is that the
+   * total AGREES with the lines. That is what this now checks, and it is the
+   * property that would actually be violated by a bug.
+   *
+   * `line_total_agorot` stays absent, and for a different and harder reason:
+   * it is GENERATED ALWAYS, and Postgres rejects an explicit write to it.
    */
-  it('sends no money columns on the order itself — the lines are the source', async () => {
+  it('writes a total equal to the sum of its lines, and never the generated column', async () => {
     const db = orderDb()
     await defineStoreOperations({ db: db.asDb() }).createOrder.run({
       request: {
@@ -379,8 +391,31 @@ describe('STEP 2 — an order is placed, and the price is SNAPSHOTTED onto the l
       .find((q) => q.verb === 'insert')
     const payload = insert?.payload as Record<string, unknown>
 
-    expect(payload).not.toHaveProperty('total_agorot')
-    expect(payload).not.toHaveProperty('subtotal_agorot')
+    const written = db.queriesFor('store_order_lines')[0].payload as Record<
+      string,
+      unknown
+    >[]
+
+    // The same arithmetic 0032 declares for the generated column.
+    const sum = written.reduce(
+      (total, line) =>
+        total +
+        ((line.unit_price_agorot as number) +
+          (line.options_agorot as number) +
+          (line.addons_agorot as number)) *
+          (line.quantity as number) -
+        (line.line_discount_agorot as number),
+      0,
+    )
+
+    expect(sum).toBe(FIFTEEN_HUNDRED)
+    expect(payload.subtotal_agorot).toBe(sum)
+    expect(payload.total_agorot).toBe(sum)
+    expect(payload.discount_agorot).toBe(0)
+
+    // Never sent: Postgres refuses an explicit write to a generated column,
+    // and that refusal is what makes a line total unfakeable.
+    expect(written[0]).not.toHaveProperty('line_total_agorot')
   })
 
   /**
