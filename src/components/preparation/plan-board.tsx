@@ -78,8 +78,8 @@ export type PlanBoardProps = {
   version: number
   explanations: readonly ItemExplanation[]
   grants: PlanGrants
-  /** False when row level security refused the booking row to this reader. */
-  bookingReadable: boolean
+  /** False only for a plan stored before its facts were frozen onto it. */
+  factsAvailable: boolean
 }
 
 type Submit = (call: () => Promise<PlanActionResult>) => Promise<void>
@@ -90,7 +90,7 @@ export function PlanBoard({
   version,
   explanations,
   grants,
-  bookingReadable,
+  factsAvailable,
 }: PlanBoardProps) {
   const router = useRouter()
   const action = useAsyncAction<PlanActionResult>()
@@ -112,7 +112,7 @@ export function PlanBoard({
 
   return (
     <div className="flex flex-col gap-6">
-      <PlanHeader view={view} version={version} readable={bookingReadable} />
+      <PlanHeader view={view} version={version} known={factsAvailable} />
 
       {view.changeNotice && (
         <p
@@ -223,11 +223,11 @@ export function BuildPlanPanel({
 function PlanHeader({
   view,
   version,
-  readable,
+  known,
 }: {
   view: CleanerPlanView
   version: number
-  readable: boolean
+  known: boolean
 }) {
   const where = [view.propertyLabel, view.unitLabel].filter(Boolean).join(' · ')
 
@@ -266,14 +266,16 @@ function PlanHeader({
         </div>
       )}
 
-      {/* Said out loud rather than rendered as a blank. `bookings_select`
-          wants `booking.view`, which a cleaner does not hold, so the stay's own
-          facts are genuinely unavailable to them — a different thing from a
-          booking with nothing written on it. */}
-      {!readable && (
+      {/* Said out loud rather than rendered as a blank. A plan built before
+          its facts were frozen onto it cannot be given them now without
+          reading the booking, which is the read those columns exist to
+          remove — so the honest answer is that the next update will fill them
+          in, not that something is broken. */}
+      {!known && (
         <p className="text-xs text-muted-foreground">
-          פרטי השהייה עצמה — מועד ההגעה, סוג האירוח והבקשות המיוחדות — אינם
-          פתוחים להרשאה שלך ולכן אינם מוצגים כאן. רשימת העבודה עצמה מלאה.
+          התוכנית הזו נבנתה לפני שפרטי השהייה נשמרו יחד איתה, ולכן מועד ההגעה,
+          סוג האירוח והבקשות המיוחדות אינם מוצגים כאן. עדכון התוכנית ישלים אותם.
+          רשימת העבודה עצמה מלאה.
         </p>
       )}
     </section>

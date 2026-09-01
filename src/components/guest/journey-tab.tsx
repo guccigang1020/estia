@@ -99,8 +99,6 @@ export function GuestJourneyTab({
   propertyName,
   checkIn,
   checkOut,
-  /** Which steps this business actually requires. Omit a step, omit its line. */
-  requires,
 }: {
   view: AdminJourneyView
   actor: Actor
@@ -109,13 +107,13 @@ export function GuestJourneyTab({
   propertyName: string | null
   checkIn: string
   checkOut: string
-  requires: {
-    confirmation: boolean
-    contract: boolean
-    details: boolean
-  }
 }) {
   const opened = view.firstOpenedAt !== null
+  // Which steps this business actually requires, resolved by the loader from
+  // `guest_journey_settings`. Read from the view rather than passed in, so a
+  // caller cannot mount the tab with the wrong answer and produce a permanent
+  // false alarm on somebody's booking screen.
+  const { requires } = view
 
   // The headline distinction. Everything else on the card is detail.
   const headline = view.revokedAt

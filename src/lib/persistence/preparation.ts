@@ -52,6 +52,7 @@ import type { FixedAllocationInput } from '../preparation/costing'
 import { sleepingExtras } from '../preparation/intake'
 import {
   EVENT_TYPES,
+  type PlanFacts,
   type PreparationBooking,
   type PreparationCatalogue,
   type PreparationSnapshot,
@@ -60,7 +61,7 @@ import {
   type WorkPlan,
 } from '../preparation/types'
 import type { PreparationCataloguePorts } from '../preparation/catalogue'
-import type { PreparationPorts } from '../preparation/operations'
+import type { PlanRevision, PreparationPorts } from '../preparation/operations'
 import type { TransactionHandle } from '../service'
 import { ConflictError, NotFoundError } from '../errors'
 import type { Db, Row } from './client'
@@ -71,10 +72,12 @@ import {
   asIsoDate,
   asJsonRecord,
   asNumber,
+  asEnumOrNull,
   asNumberOrNull,
   asString,
   asStringOrNull,
   asTimestamp,
+  asTimestampOrNull,
   toRow,
   toRows,
 } from './mapping'
@@ -99,7 +102,8 @@ const SNAPSHOT_COLUMNS =
 const PLAN_COLUMNS =
   'id, organization_id, property_id, unit_id, booking_id, version, ' +
   'snapshot_hash, sections, critical_path_minutes, recommended_staff, ' +
-  'created_at'
+  'created_at, arrival_at, event_type, special_requests, guests, adults, ' +
+  'children'
 
 /**
  * The slice of a booking preparation reads. Deliberately not `*`.
@@ -114,18 +118,17 @@ const PREPARATION_BOOKING_COLUMNS =
   'arrival_time, adults, children, infants, couples, extra_beds_requested, ' +
   'cots_requested, event_type, special_requests'
 
-export interface PreparationPlanContext {
-  /** The number a person quotes on the telephone. */
-  reference: string | null
+/**
+ * Where the work is, by name.
+ *
+ * Read from `properties` and `units` and never from the booking, so the one
+ * reader who most needs it — somebody holding `task.view` and nothing else —
+ * can have it. Either name is `null` when row level security refuses that row:
+ * a truncated uuid under a heading that says "יחידה" is worse than nothing.
+ */
+export interface PreparationPlaceNames {
   propertyName: string | null
   unitName: string | null
-}
-
-/** A booking that is not there, or not readable. Never a half-filled object. */
-const EMPTY_PLAN_CONTEXT: PreparationPlanContext = {
-  reference: null,
-  propertyName: null,
-  unitName: null,
 }
 
 /** The earliest a guest could arrive. The safe deadline when nothing is set. */
@@ -408,18 +411,26 @@ export class SupabasePreparationPorts
    * backwards, which is the failure that actually matters here: silently
    * discarding a revision.
    */
-  async savePlan(plan: WorkPlan, tx: TransactionHandle): Promise<void> {
+  async savePlan(
+    plan: WorkPlan,
+    tx: TransactionHandle,
+    revision?: PlanRevision,
+  ): Promise<void> {
     const db = clientFor(tx, this.db)
+
+    const columns = {
+      version: plan.version,
+      snapshot_hash: plan.snapshotHash,
+      sections: plan.sections,
+      critical_path_minutes: plan.criticalPathMinutes,
+      recommended_staff: plan.recommendedStaff,
+      ...planFactColumns(plan),
+      ...revisionColumns(revision),
+    }
 
     const { data, error } = await db
       .from('work_plans')
-      .update({
-        version: plan.version,
-        snapshot_hash: plan.snapshotHash,
-        sections: plan.sections,
-        critical_path_minutes: plan.criticalPathMinutes,
-        recommended_staff: plan.recommendedStaff,
-      })
+      .update(columns)
       .eq('id', plan.id)
       .eq('organization_id', plan.organizationId)
       .select('id')
@@ -433,12 +444,8 @@ export class SupabasePreparationPorts
         property_id: plan.propertyId,
         unit_id: plan.unitId,
         booking_id: plan.bookingId,
-        version: plan.version,
-        snapshot_hash: plan.snapshotHash,
-        sections: plan.sections,
-        critical_path_minutes: plan.criticalPathMinutes,
-        recommended_staff: plan.recommendedStaff,
         created_at: plan.createdAt,
+        ...columns,
       })
       if (inserted.error) throw inserted.error
     }
@@ -581,6 +588,8 @@ export class SupabasePreparationPorts
       guests: adults + children + infants,
       adults,
       children,
+      // Recorded rather than left to be derived. See `sleepingGuestsOf`.
+      infants,
       eventType: asEnum(row, 'event_type', EVENT_TYPES),
       extras: sleepingExtras({
         sleeping,
@@ -596,40 +605,45 @@ export class SupabasePreparationPorts
   }
 
   /**
-   * What the plan screen needs and the engine has no business carrying.
+   * Where the work is, taken from the plan's own property and unit.
    *
-   * The property's and the unit's Hebrew names and the booking's own
-   * reference. `PreparationBooking` deliberately holds none of them — its own
-   * header says a type that could carry a guest's phone number eventually
-   * does — so they are fetched beside it rather than smuggled onto it.
-   *
-   * Every field is nullable and a name that does not come back stays `null`.
-   * Row level security may refuse the unit or the property to this reader, and
-   * a truncated uuid under a heading that says "יחידה" is worse than nothing.
+   * The plan carries `propertyId` and `unitId`, so naming the place costs no
+   * look at `bookings` — which matters, because the person most likely to be
+   * reading this screen may not look at `bookings` at all. The ids come from
+   * the plan rather than from a booking lookup for exactly that reason.
    */
-  async loadPlanContext(bookingId: string): Promise<PreparationPlanContext> {
+  async loadPlaceNames(
+    propertyId: string,
+    unitId: string,
+  ): Promise<PreparationPlaceNames> {
+    const [propertyName, unitName] = await Promise.all([
+      this.nameOf('properties', propertyId),
+      this.nameOf('units', unitId),
+    ])
+
+    return { propertyName, unitName }
+  }
+
+  /**
+   * The booking's own number, for a reader entitled to the booking.
+   *
+   * Kept separate from `loadPlaceNames` above rather than folded into one
+   * "context" read, because the two have different permissions behind them and
+   * a single call would have to either take the stricter one — costing a
+   * cleaner the property name they are entitled to — or hide a `bookings` read
+   * inside something that reads like a lookup of place names. The split is the
+   * permission boundary, written where it can be seen.
+   */
+  async loadBookingReference(bookingId: string): Promise<string | null> {
     const { data, error } = await this.db
       .from('bookings')
-      .select('id, reference, property_id, unit_id')
+      .select('id, reference')
       .eq('id', bookingId)
       .is('deleted_at', null)
       .maybeSingle()
 
     if (error) throw error
-    if (!data) return EMPTY_PLAN_CONTEXT
-
-    const row = toRow(data)
-
-    const [propertyName, unitName] = await Promise.all([
-      this.nameOf('properties', asStringOrNull(row, 'property_id')),
-      this.nameOf('units', asStringOrNull(row, 'unit_id')),
-    ])
-
-    return {
-      reference: asStringOrNull(row, 'reference'),
-      propertyName,
-      unitName,
-    }
+    return data ? asStringOrNull(toRow(data), 'reference') : null
   }
 
   /** One row's `name`, or `null` where this reader may not see it. */
@@ -896,6 +910,85 @@ function toPlan(row: Row): WorkPlan {
     sections: jsonArray(row, 'sections'),
     criticalPathMinutes: asNumber(row, 'critical_path_minutes'),
     recommendedStaff: asNumber(row, 'recommended_staff'),
+    facts: toPlanFacts(row),
+  }
+}
+
+/**
+ * The booking facts frozen onto the plan, or `null` where there are none.
+ *
+ * All-or-nothing, and the database says the same thing:
+ * `work_plans_facts_together` in 0036 refuses a row carrying some of them.
+ * So one absent column means a plan stored before that migration, and half a
+ * set of facts is not a state this mapper has to represent. `special_requests`
+ * is excluded from the test on purpose — a guest who asked for nothing is an
+ * ordinary guest, not a plan with no facts.
+ */
+function toPlanFacts(row: Row): PlanFacts | null {
+  const arrivalAt = asTimestampOrNull(row, 'arrival_at')
+  const eventType = asEnumOrNull(row, 'event_type', EVENT_TYPES)
+  const guests = asNumberOrNull(row, 'guests')
+  const adults = asNumberOrNull(row, 'adults')
+  const children = asNumberOrNull(row, 'children')
+
+  if (
+    arrivalAt === null ||
+    eventType === null ||
+    guests === null ||
+    adults === null ||
+    children === null
+  ) {
+    return null
+  }
+
+  return {
+    arrivalAt,
+    eventType,
+    specialRequests: asStringOrNull(row, 'special_requests'),
+    guests,
+    adults,
+    children,
+  }
+}
+
+/**
+ * The facts, as columns. Absent entirely when the plan carries none.
+ *
+ * Spread rather than written as nulls, so re-saving a pre-0036 plan — a
+ * cleaner ticking a section off one, which is the common case — leaves the
+ * columns untouched instead of writing five explicit nulls over them.
+ */
+function planFactColumns(plan: WorkPlan): Record<string, unknown> {
+  const facts = plan.facts
+  if (!facts) return {}
+
+  return {
+    arrival_at: facts.arrivalAt,
+    event_type: facts.eventType,
+    special_requests: facts.specialRequests,
+    guests: facts.guests,
+    adults: facts.adults,
+    children: facts.children,
+  }
+}
+
+/**
+ * The account of what moved, as columns.
+ *
+ * Absent when the caller names no revision, which is every write that is not a
+ * new version of the plan — ticking a section off does not supersede anything
+ * and must not overwrite the delta that explains the last real change.
+ */
+function revisionColumns(
+  revision: PlanRevision | undefined,
+): Record<string, unknown> {
+  if (!revision) return {}
+
+  return {
+    delta: revision.delta,
+    supersedes_version: revision.supersedesVersion,
+    change_reason: revision.reason,
+    changed_by: revision.changedByUserId,
   }
 }
 

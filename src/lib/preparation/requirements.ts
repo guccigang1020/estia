@@ -134,6 +134,27 @@ interface Draft {
   source: RequirementSource
 }
 
+/**
+ * Who among the party actually needs laying down.
+ *
+ * Every head except the infants, because a baby sleeps in a cot that somebody
+ * has to fetch and not in a bed that somebody has to make. Handing the whole
+ * head count to `allocateSleeping` buys a bed nobody lies in, dresses it with
+ * two sheets and a pillow, and sends that linen to the laundry — every time a
+ * family travels with a baby.
+ *
+ * Read from `infants` rather than derived as `guests - adults - children`.
+ * The derivation looks equivalent and is not: nothing enforces that invariant,
+ * so a caller that grew a party by moving `guests` alone would have had the
+ * new arrivals silently reclassified as babies and left without beds. An
+ * unrecorded infant count means the question was not asked, and an unasked
+ * question changes nothing.
+ */
+export function sleepingGuestsOf(booking: PreparationBooking): number {
+  const infants = Math.max(0, booking.infants ?? 0)
+  return Math.max(0, booking.guests - infants)
+}
+
 export function computeRequirements(
   booking: PreparationBooking,
   snapshot: PreparationSnapshot,
@@ -146,6 +167,8 @@ export function computeRequirements(
 
   const allocation = allocateSleeping({
     guests: booking.guests,
+    sleepingGuests: sleepingGuestsOf(booking),
+    couples: booking.sleeping?.couples,
     configuration,
     bedTypes: snapshot.bedTypes,
   })

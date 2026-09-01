@@ -85,7 +85,11 @@ export interface PreparationPorts {
     propertyId: string,
     on: string,
   ): Promise<FixedAllocationInput['contexts']>
-  savePlan(plan: WorkPlan, tx: TransactionHandle): Promise<void>
+  savePlan(
+    plan: WorkPlan,
+    tx: TransactionHandle,
+    revision?: PlanRevision,
+  ): Promise<void>
   saveSnapshot(
     bookingId: string,
     snapshot: PreparationSnapshot,
@@ -93,6 +97,36 @@ export interface PreparationPorts {
   ): Promise<void>
   /** Ids for freshly built plans, injected so a plan id is deterministic in tests. */
   nextPlanId(bookingId: string): string
+}
+
+/**
+ * The account of what moved, written beside the revision that moved it.
+ *
+ * `work_plans` has carried `delta`, `supersedes_version`, `change_reason` and
+ * `changed_by` since 0021 and nothing wrote them, so every revision was
+ * recorded — `tg_work_plans_record_version` copies each one into
+ * `work_plan_versions` — with no account of *why*. The version history said a
+ * plan went from one to two and could not say that five mattresses appeared.
+ *
+ * Passed only by the operations that genuinely supersede a revision. Ticking a
+ * section off does not: it advances no version, supersedes nothing, and must
+ * not overwrite the delta that explains the last real change.
+ */
+export interface PlanRevision {
+  /**
+   * What changed, item by item. `null` where the question does not apply —
+   * a first build supersedes nothing, and a manual adjustment moves a figure
+   * the delta cannot see, because `computeDelta` compares the *calculated*
+   * counts and an adjustment deliberately leaves those alone. In both cases
+   * the reason below is the account, and inventing an empty delta would be
+   * worse than none: it would read as "nothing changed".
+   */
+  delta: PlanDelta | null
+  /** The revision this one replaces. `null` on a first build. */
+  supersedesVersion: number | null
+  /** The stated justification, where the operation required one. */
+  reason: string | null
+  changedByUserId: string | null
 }
 
 interface BookingEntity {
@@ -312,7 +346,7 @@ export function createPreparationOperations(
       }
     },
 
-    execute: async ({ entity, now, tx }) => {
+    execute: async ({ entity, context, now, tx }) => {
       const catalogue = await ports.loadCatalogue(
         entity.booking.organizationId,
         entity.booking.propertyId,
@@ -343,7 +377,14 @@ export function createPreparationOperations(
       const inventory = await inventoryFor(entity.booking, requirements)
 
       await ports.saveSnapshot(entity.booking.id, snapshot, tx)
-      await ports.savePlan(plan, tx)
+      await ports.savePlan(plan, tx, {
+        // Nothing moved, because nothing came before. The row still records
+        // who built it, which is the question asked of a first revision.
+        delta: null,
+        supersedesVersion: null,
+        reason: context.reason ?? null,
+        changedByUserId: context.actor.userId,
+      })
 
       return { plan, snapshot, inventory }
     },
@@ -420,7 +461,12 @@ export function createPreparationOperations(
 
       const inventory = await inventoryFor(entity.booking, requirements)
 
-      await ports.savePlan(versioned.plan, tx)
+      await ports.savePlan(versioned.plan, tx, {
+        delta: versioned.delta,
+        supersedesVersion: versioned.supersedesVersion,
+        reason: versioned.reason,
+        changedByUserId: versioned.changedByUserId,
+      })
 
       return { plan: versioned.plan, delta: versioned.delta, inventory }
     },
@@ -619,7 +665,13 @@ export function createPreparationOperations(
       })
 
       const plan: WorkPlan = { ...adjusted, version: previous.version + 1 }
-      await ports.savePlan(plan, tx)
+      await ports.savePlan(plan, tx, {
+        // No delta: see `PlanRevision.delta`. The reason is the account.
+        delta: null,
+        supersedesVersion: previous.version,
+        reason: context.reason ?? null,
+        changedByUserId: context.actor.userId,
+      })
 
       const item = plan.sections
         .find((section) => section.key === input.section)
@@ -749,7 +801,7 @@ export function createPreparationOperations(
 
     rule: ({ entity }) => assertPlan(entity),
 
-    execute: async ({ entity, tx }) => {
+    execute: async ({ entity, context, tx }) => {
       const previous = entity.plan as WorkPlan
       const stopped: PlanSectionKey[] = []
       const kept: PlanSectionKey[] = []
@@ -768,7 +820,12 @@ export function createPreparationOperations(
         sections,
         version: previous.version + 1,
       }
-      await ports.savePlan(plan, tx)
+      await ports.savePlan(plan, tx, {
+        delta: null,
+        supersedesVersion: previous.version,
+        reason: context.reason ?? null,
+        changedByUserId: context.actor.userId,
+      })
 
       return { plan, cancelledSections: stopped, keptSections: kept }
     },

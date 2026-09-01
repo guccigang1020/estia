@@ -430,6 +430,15 @@ export interface SleepingAllocation {
   sleepingPlaces: number
   extraBeds: number
   unplacedGuests: number
+  /**
+   * Separate mattresses laid out, as against places slept in.
+   *
+   * The two differ exactly where a bed sleeps more than one person on one
+   * mattress, and the difference is what decides a double sheet against two
+   * single ones. Reported so the laundry forecast reads the beds rather than
+   * inferring them from the head count.
+   */
+  positions: number
 }
 
 /** The complete answer to "what does this booking need". */
@@ -631,6 +640,46 @@ export interface SectionOverride {
   outstanding: readonly { itemId: string; missing: number }[]
 }
 
+/**
+ * The booking facts this revision was computed for, carried on the plan.
+ *
+ * ── Why these live here and not on the booking ────────────────────────────
+ *
+ * A cleaner holds `task.view` and nothing else. `work_plans_select` asks for
+ * exactly that; `bookings_select` asks for `booking.view`, which they do not
+ * have and must not be given — handing it over to let somebody read "two baby
+ * cots" would hand them the guest, the price and the source in the same
+ * motion, which is the privacy inversion the whole role model exists to
+ * prevent.
+ *
+ * So the four facts a person doing the work actually needs are captured when
+ * the plan is computed and stored beside it, in the same spirit as
+ * `snapshotHash`: the plan already refuses to re-read the catalogue, and now
+ * it refuses to re-read the booking too. What is deliberately absent is
+ * everything else on that row — no guest, no price, no deposit, no source, no
+ * channel. A field cannot leak from a type that has nowhere to put it.
+ *
+ * ── These move; the snapshot does not ─────────────────────────────────────
+ *
+ * The distinction is worth stating because the two look alike. The *rules* are
+ * frozen for ever, so a plan built in March still costs what it cost in March.
+ * The *facts* are measurements of a booking that is still alive: a stay that
+ * slides a week has a new arrival, and a party that grows has new counts. Both
+ * are rewritten on every recomputation, which is exactly what makes the
+ * deadline on a cleaner's screen the real one.
+ */
+export interface PlanFacts {
+  /** ISO instant. The deadline every readiness figure is measured against. */
+  arrivalAt: string
+  eventType: EventType
+  /** The guest's own words. Hebrew, and null when they said nothing. */
+  specialRequests: string | null
+  /** Every head, infants included. */
+  guests: number
+  adults: number
+  children: number
+}
+
 export interface WorkPlan {
   id: string
   organizationId: string
@@ -646,6 +695,15 @@ export interface WorkPlan {
   criticalPathMinutes: number
   /** Recommended crew, from the complexity score. */
   recommendedStaff: number
+  /**
+   * What the plan was computed for, readable without the booking row.
+   *
+   * `null` for a plan stored before `0036_work_plan_facts.sql` added the
+   * columns. That is not a defect to paper over: the facts cannot be
+   * back-filled without reading the booking, which is the read this field
+   * exists to avoid. A plan with no facts renders without them and says so.
+   */
+  facts: PlanFacts | null
 }
 
 // ── Delta ─────────────────────────────────────────────────────────────────
@@ -998,6 +1056,21 @@ export interface PreparationBooking {
   guests: number
   adults: number
   children: number
+  /**
+   * Of the guests, the ones who sleep in a cot rather than a bed.
+   *
+   * Optional, and absent means *unrecorded* rather than none — the same
+   * distinction `SleepingAllocationInput.couples` draws, for the same reason.
+   * Deriving it as `guests - adults - children` was the obvious alternative
+   * and is a trap: nothing enforces that invariant, so any caller that grew
+   * the party by moving `guests` alone would have had five extra people
+   * silently reclassified as babies and left without beds.
+   *
+   * The engine reads it in exactly one place — `sleepingGuestsOf` — because an
+   * infant is a head everywhere else: they are on the fire count, they eat,
+   * and they generate laundry.
+   */
+  infants?: number
   eventType: EventType
   extras: readonly BookingExtra[]
   /** ISO instant. Drives the readiness countdown. */

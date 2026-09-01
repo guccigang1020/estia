@@ -149,6 +149,17 @@ export function buildWorkPlan(input: WorkPlanInput): WorkPlan {
     sections: withDependencies,
     criticalPathMinutes: criticalPathMinutes(withDependencies),
     recommendedStaff: staffing.recommendedStaff,
+    // Captured here rather than read later, for the same reason the snapshot
+    // hash is: the person who has to work from these numbers holds
+    // `task.view` and cannot read the booking they came from. See `PlanFacts`.
+    facts: {
+      arrivalAt: booking.arrivalAt,
+      eventType: booking.eventType,
+      specialRequests: booking.specialRequests ?? null,
+      guests: booking.guests,
+      adults: booking.adults,
+      children: booking.children,
+    },
   }
 }
 

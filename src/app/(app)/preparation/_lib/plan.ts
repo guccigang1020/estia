@@ -25,16 +25,20 @@
  * snapshot is the guarantee — a plan built in March explains itself with
  * March's rules for ever, because the rules are in the row beside it.
  *
- * ── What a cleaner cannot read today, said plainly ────────────────────────
+ * ── What a cleaner reads, and what they still cannot ──────────────────────
  *
- * `bookings_select` requires `booking.view`, which the cleaner preset does not
- * carry. So `loadBooking` returns `null` for them under row level security,
- * and with it go the arrival instant, the event type and the special request.
- * The plan itself still renders — `work_plans_select` is a `task` grant — so
- * the sections, the items and the counts are all there, and the page says
- * which facts are missing rather than showing a blank where a deadline goes.
- * Closing that is a policy change on `bookings`, which belongs to `authz`, and
- * it is named in this work's report rather than worked around here.
+ * `bookings_select` requires `booking.view` and the cleaner preset does not
+ * carry it, so this file never asks for the booking on their behalf. It does
+ * not need to: `0036_work_plan_facts.sql` put the arrival instant, the event
+ * type, the party and the guest's own request onto `work_plans`, whose select
+ * policy asks for `task.view` — the grant they hold. The alternative was to
+ * widen `booking.view`, which would have handed housekeeping the guest, the
+ * total and the source in order to let them read one sentence about a cot.
+ *
+ * What is still behind `booking.view` is the *arithmetic*: recovering how a
+ * quantity was derived needs the extras and the stay, which the plan does not
+ * store. A cleaner gets every number and no algebra, which is the right way
+ * round.
  */
 
 import { can, type Actor } from '@/lib/authz/can'
@@ -66,10 +70,12 @@ export type PlanScreen = {
   /** The stored revision, for the optimistic lock on every write. */
   version: number | null
   /**
-   * False when this reader may not read the booking row — a cleaner under row
-   * level security. The plan still renders; the stay's facts do not.
+   * Whether this plan carries the stay's own facts — the arrival, the party,
+   * the request. False only for a plan stored before `0036_work_plan_facts`,
+   * which cannot be back-filled without the booking read the column exists to
+   * remove. The screen says so rather than rendering a blank deadline.
    */
-  bookingReadable: boolean
+  factsAvailable: boolean
   /** True when a plan exists but its frozen ruleset does not. Should not happen. */
   snapshotMissing: boolean
   explanations: readonly ItemExplanation[]
@@ -125,29 +131,48 @@ export type LoadPlanArgs = {
 }
 
 /**
- * Everything the screen needs, in one pass.
+ * Everything the screen needs, and for a cleaner not one row more.
  *
- * The three reads are issued together because they are independent rows and a
- * screen that waits for them in sequence waits three times for no reason. What
- * is *not* parallelised is the explanation: it needs both the booking and the
- * snapshot, and asking for it before either has arrived would be asking a pure
- * function to run on undefined.
+ * ── The booking is read only by somebody entitled to read bookings ────────
+ *
+ * `can(actor, 'booking.view')` decides whether `loadBooking` is called at all.
+ * Leaving the call in and letting row level security return nothing would look
+ * equivalent and is not: it issues a query on the caller's behalf that they
+ * have no business issuing, it costs a round trip on the screen a cleaner
+ * opens most often, and the day `bookings_select` raises instead of returning
+ * empty, their morning disappears behind an error about a table they never
+ * asked for. The permission decides here, in the open.
+ *
+ * The facts they need instead come off the plan — see `PlanFacts` and
+ * `0036_work_plan_facts.sql`. `work_plans_select` asks for `task.view`, which
+ * is exactly what they hold.
+ *
+ * ── What the booking is still needed for ──────────────────────────────────
+ *
+ * The arithmetic, and only that. `explanationIndex` runs
+ * `computeRequirements(booking, snapshot)` to recover each quantity's
+ * derivation, which needs the extras and the stay the plan does not store. A
+ * cleaner is given the counts and not the algebra; a manager arguing with a
+ * number gets both. That is a real difference in what the two see and it is
+ * the right way round — the derivation is a management question, and every
+ * fact a person needs in order to do the work is on the plan.
  */
 export async function loadPlanScreen(args: LoadPlanArgs): Promise<PlanScreen> {
   const { ports, actor, bookingId } = args
 
-  const [booking, plan, context] = await Promise.all([
-    ports.loadBooking(bookingId),
-    ports.loadPlan(bookingId),
-    ports.loadPlanContext(bookingId),
-  ])
+  const mayReadBooking = can(actor, 'booking.view', {
+    organizationId: actor.organizationId,
+  })
 
-  const snapshot = plan === null ? null : await ports.loadSnapshot(bookingId)
+  const [plan, booking] = await Promise.all([
+    ports.loadPlan(bookingId),
+    mayReadBooking ? ports.loadBooking(bookingId) : Promise.resolve(null),
+  ])
 
   const grants = planGrants(
     actor,
-    booking?.propertyId ?? plan?.propertyId ?? null,
-    booking?.unitId ?? plan?.unitId ?? null,
+    plan?.propertyId ?? booking?.propertyId ?? null,
+    plan?.unitId ?? booking?.unitId ?? null,
   )
 
   if (plan === null) {
@@ -155,7 +180,7 @@ export async function loadPlanScreen(args: LoadPlanArgs): Promise<PlanScreen> {
       bookingId,
       view: null,
       version: null,
-      bookingReadable: booking !== null,
+      factsAvailable: false,
       snapshotMissing: false,
       explanations: [],
       needsAcknowledgement: [],
@@ -163,26 +188,41 @@ export async function loadPlanScreen(args: LoadPlanArgs): Promise<PlanScreen> {
     }
   }
 
+  const [names, reference, snapshot] = await Promise.all([
+    ports.loadPlaceNames(plan.propertyId, plan.unitId),
+    mayReadBooking
+      ? ports.loadBookingReference(bookingId)
+      : Promise.resolve(null),
+    ports.loadSnapshot(bookingId),
+  ])
+
+  // The plan's own frozen facts first, always. The booking is the fallback for
+  // a plan stored before 0036, and it is only ever present for a reader who
+  // was entitled to it anyway.
+  const facts = plan.facts
+  const arrivalAt = facts?.arrivalAt ?? booking?.arrivalAt ?? null
+  const eventType = facts?.eventType ?? booking?.eventType ?? null
+
   const view = toCleanerView({
     plan,
-    propertyLabel: context.propertyName ?? '',
-    unitLabel: context.unitName ?? '',
-    bookingReference: context.reference,
+    propertyLabel: names.propertyName ?? '',
+    unitLabel: names.unitName ?? '',
+    bookingReference: reference,
     // The arrival is the deadline. A business that later sets a distinct
     // ready-by time has `deadlineAt` waiting for it; until then the two are
     // the same instant and the screen says so rather than showing a blank.
-    arrivalAt: booking?.arrivalAt ?? plan.createdAt,
-    deadlineAt: booking?.arrivalAt ?? null,
-    guestCount: booking?.guests ?? UNKNOWN_GUESTS,
-    eventTypeLabel: booking ? EVENT_TYPE_LABEL[booking.eventType] : null,
-    specialRequests: booking?.specialRequests ?? null,
+    arrivalAt: arrivalAt ?? plan.createdAt,
+    deadlineAt: arrivalAt,
+    guestCount: facts?.guests ?? booking?.guests ?? UNKNOWN_GUESTS,
+    eventTypeLabel: eventType === null ? null : EVENT_TYPE_LABEL[eventType],
+    specialRequests: facts?.specialRequests ?? booking?.specialRequests ?? null,
   })
 
   return {
     bookingId,
     view,
     version: plan.version,
-    bookingReadable: booking !== null,
+    factsAvailable: arrivalAt !== null,
     snapshotMissing: snapshot === null,
     explanations:
       booking === null || snapshot === null

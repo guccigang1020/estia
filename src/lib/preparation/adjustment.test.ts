@@ -66,6 +66,14 @@ function plan(overrides: Partial<WorkPlan> = {}): WorkPlan {
     sections: [section()],
     criticalPathMinutes: 90,
     recommendedStaff: 2,
+    facts: {
+      arrivalAt: '2026-05-10T12:00:00.000Z',
+      eventType: 'accommodation',
+      specialRequests: null,
+      guests: 2,
+      adults: 2,
+      children: 0,
+    },
     ...overrides,
   }
 }

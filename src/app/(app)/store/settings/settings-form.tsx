@@ -32,15 +32,25 @@ import { Checkbox, Select, TextInput, Textarea } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
 import { STORE_MODES, STORE_PAYMENT_MODES } from '@/lib/contracts/states'
 import type { SafeErrorBody } from '@/lib/errors'
+// ── Leaf modules, never the `@/lib/store` barrel ────────────────────────
+//
+// The barrel re-exports `StoreRepository` and `defineStoreOperations`, which
+// reach `src/lib/persistence` and from there the `postgres` driver. A CLIENT
+// component importing it makes the bundler try to resolve `node:fs` for the
+// browser — which is a build failure, not a warning, and it takes down every
+// route that renders this form. Server components may use the barrel freely;
+// anything under `"use client"` imports the leaf it actually needs.
+import {
+  STORE_PAYMENT_MODE_LABEL,
+  STORE_PAYMENT_MODE_SUMMARY,
+} from '@/lib/store/labels'
 import {
   STORE_MODE_LABEL,
   STORE_MODE_SUMMARY,
-  STORE_PAYMENT_MODE_LABEL,
-  STORE_PAYMENT_MODE_SUMMARY,
   offerablePaymentModes,
   storeCapabilities,
-  type StoreSettings,
-} from '@/lib/store'
+} from '@/lib/store/mode'
+import type { StoreSettings } from '@/lib/store/types'
 
 import { updateStoreSettingsAction } from '../_lib/actions'
 

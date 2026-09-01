@@ -13,12 +13,26 @@
  */
 
 import { cn } from '@/components/ui/cn'
+// From the LEAF module, not from the `@/lib/laundry` barrel.
+//
+// The barrel re-exports `operations.ts`, which imports `@/lib/persistence`,
+// which imports the `postgres` driver, which imports `fs`. A Server Component
+// swallows that happily. The moment anybody adds `"use client"` to this file —
+// and a nav with an active-state hook is exactly the file somebody eventually
+// does that to — the bundler follows the same chain into the browser graph and
+// every page in the application 500s with `Can't resolve 'fs'`.
+//
+// That is not hypothetical. It happened to another module while this one was
+// being verified and took the whole dev server down for every worker.
+// `mode.ts` imports only types and the frozen contracts, so this import cannot
+// reach a driver however this component is later rendered.
+// `client-safety.test.ts` enforces it for the whole directory.
 import {
   sectionsFor,
   vocabularyFor,
-  type LaundryMode,
   type LaundrySection,
-} from '@/lib/laundry'
+} from '@/lib/laundry/mode'
+import type { LaundryMode } from '@/lib/laundry/types'
 
 const HREF: Readonly<Record<LaundrySection, string>> = {
   dashboard: '/laundry',

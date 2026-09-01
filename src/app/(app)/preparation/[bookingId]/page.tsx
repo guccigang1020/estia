@@ -110,7 +110,7 @@ export default async function BookingPreparationPage({
             version={screen.version ?? screen.view.version}
             explanations={screen.explanations}
             grants={screen.grants}
-            bookingReadable={screen.bookingReadable}
+            factsAvailable={screen.factsAvailable}
           />
         </>
       )}

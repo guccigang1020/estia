@@ -42,17 +42,32 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { formatAgorot } from '@/lib/plans/plan'
-import {
-  ELIGIBILITY_CAVEAT_LABEL,
-  cartCount,
-  paymentInstructionFor,
-  priceCaption,
-  type Cart,
-  type CartLine,
-  type GuestStoreCard,
-  type StoreSection,
-  type StoreSettings,
-} from '@/lib/store'
+// ── Leaf modules, never the `@/lib/store` barrel ────────────────────────
+//
+// The barrel reaches `StoreRepository`, `src/lib/persistence` and the
+// `postgres` driver, and a client component importing it asks the bundler to
+// resolve `node:fs` for the browser — a build failure that takes the route
+// down. `GuestStoreCard` in particular lives in `portal.ts`, which imports the
+// repository as a VALUE, so its shape is restated below rather than imported.
+import { cartCount, type Cart, type CartLine } from '@/lib/store/cart'
+import type { EligibilityVerdict } from '@/lib/store/eligibility'
+import { ELIGIBILITY_CAVEAT_LABEL, priceCaption } from '@/lib/store/labels'
+import { paymentInstructionFor } from '@/lib/store/payment'
+import type { StoreSection } from '@/lib/store/personalization'
+import type { CatalogueItem, StoreSettings } from '@/lib/store/types'
+
+/**
+ * One card, structurally identical to `GuestStoreCard` in `portal.ts`.
+ *
+ * Restated rather than imported for the reason above: `portal.ts` is a server
+ * module. Structural typing means the server hands its own value straight in
+ * and the compiler checks the two agree, so this cannot drift silently.
+ */
+type StoreCardView = {
+  item: CatalogueItem
+  verdict: EligibilityVerdict
+  unitPriceAgorot: number | null
+}
 
 /* ────────────────────────────────────────────────────────── the basket ── */
 
@@ -150,7 +165,7 @@ export function GuestStore({
   bookingId: string
   settings: StoreSettings
   sections: readonly StoreSection[]
-  cards: Readonly<Record<string, GuestStoreCard>>
+  cards: Readonly<Record<string, StoreCardView>>
   readOnly?: boolean
 }) {
   const cart = useSyncExternalStore(
@@ -159,7 +174,7 @@ export function GuestStore({
     serverSnapshot,
   )
 
-  function add(card: GuestStoreCard) {
+  function add(card: StoreCardView) {
     if (readOnly) return
 
     const line: CartLine = {

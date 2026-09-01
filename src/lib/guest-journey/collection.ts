@@ -149,7 +149,14 @@ function channelsFrom(value: unknown): ManualChannel[] {
 function isMissingFunction(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false
   const code = (error as { code?: unknown }).code
-  return code === 'PGRST202' || code === '42883'
+  if (code === 'PGRST202' || code === '42883') return true
+
+  // The demo's equivalent, raised by `DemoClient.rpc` for a function nobody
+  // has written yet. Matched on the constructor's name rather than with
+  // `instanceof`, because importing from `src/lib/demo` here would trace the
+  // whole in-memory dataset into every bundle that touches the guest portal —
+  // and the demo is meant to be reached by one branch in one file.
+  return (error as { name?: unknown }).name === 'UnsupportedQuery'
 }
 
 let warnedAboutCollection = false
@@ -213,24 +220,36 @@ export async function guestCollection(
   token: string,
   journey: GuestJourney,
 ): Promise<GuestCollection> {
-  const { data, error } = await db.rpc('guest_collection_context', {
-    p_guest_token: token.trim(),
-  })
-
-  if (error) {
-    // `guest_collection_context` lives in migration 0031, which is written and
-    // NOT applied to this database. Its absence is reported once and treated as
-    // "this organization collects nothing" — which is what
-    // `resolveCollectionPolicy` returns for a null settings row anyway, and is
-    // the most common real configuration in this market.
-    //
-    // This is a deliberate, narrow fallback and not a general catch: only "the
-    // function is not in the schema" is swallowed, and every other failure —
-    // a refused token, a broken tenant, a timeout — propagates. The alternative
-    // was a 500 on every guest page in the product until somebody applies a
-    // migration this module does not own, and a dark portal is the one failure
-    // a guest cannot route around: they have no account and no support screen.
-    if (!isMissingFunction(error)) throw error
+  // `guest_collection_context` lives in migration 0031, which is written and
+  // NOT applied to this database, and has no demo implementation either. Its
+  // absence is reported once and treated as "this organization collects
+  // nothing" — which is what `resolveCollectionPolicy` returns for a null
+  // settings row anyway, and is the most common real configuration in this
+  // market.
+  //
+  // This is a deliberate, narrow fallback and not a general catch: only "the
+  // function is not there" is swallowed, and every other failure — a refused
+  // token, a broken tenant, a timeout — propagates. The alternative was a 500
+  // on every guest page in the product until somebody else's migration lands,
+  // and a dark portal is the one failure a guest cannot route around: they
+  // have no account and no support screen.
+  //
+  // Both shapes are handled because the two clients differ: PostgREST RETURNS
+  // `{ error }`, and the demo client THROWS `UnsupportedQuery`. Checking only
+  // the returned error is how this silently stopped working in the demo.
+  let data: unknown
+  try {
+    const result = await db.rpc('guest_collection_context', {
+      p_guest_token: token.trim(),
+    })
+    if (result.error) {
+      if (!isMissingFunction(result.error)) throw result.error
+      warnCollectionUnavailable()
+      return unconfiguredCollection(journey)
+    }
+    data = result.data
+  } catch (cause) {
+    if (!isMissingFunction(cause)) throw cause
     warnCollectionUnavailable()
     return unconfiguredCollection(journey)
   }

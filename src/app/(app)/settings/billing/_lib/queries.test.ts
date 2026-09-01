@@ -155,11 +155,17 @@ describe('a quota that blocks and a quota that warns', () => {
     expect(switched.plan.entitlements).not.toContain('operations')
     // The limits, however, are still the seeded subscription's package.
     expect(effectiveLimits(switched)).not.toEqual(catalogued?.limits)
-    expect(effectiveLimits(switched).members).toBe(10)
+    // Eleven, not Pro ten: the demo subscription carries a negotiated seat
+    // override, which is what makes this assertion meaningful — the limits did
+    // not follow the package down to Basic.
+    expect(effectiveLimits(switched).members).toBe(11)
   })
 
   it('warns before the line on Pro, where the member seat count is exactly full', async () => {
-    // Pro allows ten members and the demo has ten. Within the limit, and at it.
+    // Pro allows ten members; the demo subscription buys an eleventh, and the
+    // organization has exactly eleven people. Within the limit, and at it —
+    // the state worth demonstrating, because the warning that matters is the
+    // one that arrives before somebody crosses.
     const plan = await planOn('pro')
     const usage = await loadUsage(client(), ORGANIZATION)
     const lines = quotaLines(usage, effectiveLimits(plan))

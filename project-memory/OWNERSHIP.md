@@ -175,6 +175,10 @@ supabase/migrations/0034_guest_journey.sql    guest-journey        write
 # migrations would have made each carry a fragment of somebody else's
 # oversight.
 supabase/migrations/0035_permission_catalogue_wave_two.sql  coordinator  write
+# Asked for by name after the cleaner could not read "two baby cots". Claimed
+# because the worker that wrote it reported it falling through to `authz` for
+# whoever ran the checker next.
+supabase/migrations/0036_work_plan_facts.sql  preparation-chain    write
 # The frame, and only the frame. Two workers build inside this portal and both
 # need the same answer to "whose booking is this"; resolving the token twice is
 # how one section eventually shows a guest somebody else's stay.

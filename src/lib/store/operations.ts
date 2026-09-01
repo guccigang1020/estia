@@ -290,6 +290,50 @@ export function defineStoreOperations(options: { db: Db }): StoreOperations {
           base_price_agorot: input.basePriceAgorot,
           lead_time_hours: input.leadTimeHours,
           requires_approval: input.requiresApproval,
+
+          // ── Every remaining NOT NULL column, stated ────────────────────
+          //
+          // All of these carry a DEFAULT in 0032, so against Postgres omitting
+          // them works. It was still wrong to omit them, and the demo is what
+          // proved it: `DemoDatabase` stores exactly the object it is handed
+          // and applies no defaults, so a product created through this
+          // operation read back with `min_quantity` absent and the mapper
+          // threw on the very next render — the catalogue screen went from
+          // three items to an error card.
+          //
+          // The general rule this is an instance of: an operation that leans
+          // on a default writes a row whose shape depends on WHICH database
+          // answered. Stating the columns costs nothing and makes the insert
+          // readable as the row it actually produces.
+          min_quantity: 1,
+          max_quantity: null,
+          max_per_booking: null,
+          unit_label: null,
+          capacity_per_day: null,
+          requires_capability: null,
+          min_guests: null,
+          max_guests: null,
+          cost_agorot: null,
+          supplier_reference: null,
+          tax_rate_bps: null,
+          description: null,
+          provider_id: null,
+          visibility_rule: 'always',
+          visibility_days_before: null,
+          payment_mode: null,
+          fulfilment_kind: 'none',
+          fulfilment_recipe: {},
+          customization_questions: [],
+          cancellation_policy: {},
+          media: [],
+          tags: [],
+          audience: {},
+          is_featured: false,
+          sort_order: 0,
+          metadata: {},
+          version: 1,
+          deleted_at: null,
+
           created_by: context.actor.userId,
           updated_by: context.actor.userId,
         })
@@ -434,16 +478,17 @@ export function defineStoreOperations(options: { db: Db }): StoreOperations {
         )
       }
 
+      // The one computation. Feeds the guest's instruction, the order's money
+      // columns and — through `drafts` — the lines the database then sums.
+      const totals = draftOrderTotals(drafts)
+
       const paymentMode = input.paymentMode ?? settings.defaultPaymentMode
       const instruction = await manualPaymentPort.prepare({
         organizationId,
         orderId: 'pending',
         bookingId: input.bookingId,
         mode: paymentMode,
-        amountAgorot: drafts.reduce(
-          (sum, draft) => sum + draft.lineTotalAgorot,
-          0,
-        ),
+        amountAgorot: totals.totalAgorot,
         currency: settings.currency,
       })
 
@@ -469,8 +514,48 @@ export function defineStoreOperations(options: { db: Db }): StoreOperations {
           payment_mode: paymentMode,
           currency: settings.currency,
           requested_for_date: input.requestedForDate,
+          requested_for_time: null,
           guest_notes: input.guestNotes,
+          internal_notes: null,
           submission_key: input.submissionKey,
+
+          // ── The money, from the SAME computation as the lines ──────────
+          //
+          // `tg_store_order_totals` rewrites these from the persisted lines
+          // after every line write, so against Postgres whatever is written
+          // here is immediately replaced. That is the guarantee, and it is
+          // unchanged.
+          //
+          // They are written anyway, and from `draftOrderTotals(drafts)` —
+          // the very drafts the lines below are built from, so this is ONE
+          // computation feeding both and not a second opinion. Two reasons.
+          // The row has to be readable the instant it exists, and a NOT NULL
+          // money column left to a default is a column the demo (which has
+          // neither defaults nor triggers) returns as absent. And an insert
+          // that states a total the reader can check against the lines is one
+          // somebody can audit; an insert that quietly relies on a trigger
+          // reads as if the total were unknown at write time, which it is not.
+          //
+          // If these ever disagreed with the trigger's figure, THE DATABASE IS
+          // RIGHT — it summed the rows that actually landed.
+          subtotal_agorot: totals.subtotalAgorot,
+          discount_agorot: totals.discountAgorot,
+          tax_agorot: totals.taxAgorot,
+          total_agorot: totals.totalAgorot,
+
+          promo_code_id: null,
+          promo_code_snapshot: null,
+          approved_at: null,
+          approved_by: null,
+          confirmed_at: null,
+          fulfilled_at: null,
+          cancelled_at: null,
+          cancellation_reason: null,
+          refunded_at: null,
+          amendment_count: 0,
+          metadata: {},
+          version: 1,
+
           created_by: context.actor.userId,
           updated_by: context.actor.userId,
         })

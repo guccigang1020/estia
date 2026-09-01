@@ -200,12 +200,20 @@ export interface LaundryOperationPorts {
   messageContext(order: LaundryOrder): Promise<Omit<MessageViewInput, 'order'>>
 }
 
-export type LaundryOperations = {
-  createOrder: Operation<
-    CreateOrderInput,
-    null,
-    { id: string; reference: string }
-  >
+/**
+ * The three operations that act on an order that already exists.
+ *
+ * Split from creation deliberately. Creating needs a `ConsolidatedRun` — the
+ * requirements, the properties, the deadline — and the pipeline gives
+ * `execute` no way to receive one, so it has to be closed over at
+ * construction. Sending and adjusting need none of that; they need an id.
+ *
+ * Before the split, a screen that only wanted to send an order had to
+ * manufacture a run it was not going to use. That is the kind of argument
+ * somebody fills with an empty object, and an empty run is a silent
+ * zero-line order.
+ */
+export type LaundryOrderOperations = {
   adjustLine: Operation<
     AdjustLineInput,
     LaundryOrder,
@@ -223,18 +231,29 @@ export type LaundryOperations = {
   >
 }
 
+/** Creating one. Needs the run, which is why it is its own factory. */
+export type LaundryCreationOperations = {
+  createOrder: Operation<
+    CreateOrderInput,
+    null,
+    { id: string; reference: string }
+  >
+}
+
+export type LaundryOperations = LaundryOrderOperations &
+  LaundryCreationOperations
+
 /* ------------------------------------------------------------ the build -- */
 
-export function defineLaundryOperations(options: {
+export function defineLaundryCreation(options: {
   db: Db
-  ports: LaundryOperationPorts
-  /** The run being ordered. Held here because `execute` gets no extra args. */
+  /** The run being ordered. Closed over because execute gets no extra args. */
   run: ConsolidatedRun
   settings: LaundrySettings
   orderId: string
   lineIds: readonly string[]
-}): LaundryOperations {
-  const { ports, run, settings } = options
+}): LaundryCreationOperations {
+  const { run, settings } = options
 
   /* ------------------------------------------------------------ create -- */
 
@@ -420,6 +439,15 @@ export function defineLaundryOperations(options: {
       ]
     },
   })
+
+  return { createOrder }
+}
+
+export function defineLaundryOrderOperations(options: {
+  db: Db
+  ports: LaundryOperationPorts
+}): LaundryOrderOperations {
+  const { ports } = options
 
   /* ------------------------------------------------------------ adjust -- */
 
@@ -747,7 +775,28 @@ export function defineLaundryOperations(options: {
     },
   })
 
-  return { createOrder, adjustLine, sendOrder, advanceOrder }
+  return { adjustLine, sendOrder, advanceOrder }
+}
+
+/**
+ * Both halves at once, for a caller that genuinely creates and then sends.
+ *
+ * Kept so the split above is an addition rather than a breaking change, and
+ * because "build the run, create the order, send it" is one honest workflow
+ * even though it is not the one the screens use.
+ */
+export function defineLaundryOperations(options: {
+  db: Db
+  ports: LaundryOperationPorts
+  run: ConsolidatedRun
+  settings: LaundrySettings
+  orderId: string
+  lineIds: readonly string[]
+}): LaundryOperations {
+  return {
+    ...defineLaundryCreation(options),
+    ...defineLaundryOrderOperations(options),
+  }
 }
 
 /**

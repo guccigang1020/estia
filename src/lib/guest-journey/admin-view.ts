@@ -47,6 +47,21 @@ export type GuestLinkSend = {
   afterRotation: boolean
 }
 
+/**
+ * Which steps this business actually requires of this guest.
+ *
+ * Resolved here rather than passed in by the caller, for the same reason the
+ * guest's own progress list omits rather than disables: a booking screen
+ * showing "חוזה: לא נחתם" for a business that has no contract is a permanent
+ * false alarm, and the third time somebody chases it they stop reading the
+ * card. Making the mount one line also means the caller cannot get it wrong.
+ */
+export type AdminJourneyRequires = {
+  confirmation: boolean
+  contract: boolean
+  details: boolean
+}
+
 export type AdminJourneyView = {
   bookingId: string
   /** Present so the panel can build a copyable link. Never logged. */
@@ -55,6 +70,8 @@ export type AdminJourneyView = {
   guestName: string | null
   guestPhone: string | null
   guestEmail: string | null
+
+  requires: AdminJourneyRequires
 
   sentAt: string | null
   sendCount: number
@@ -85,7 +102,12 @@ function isMissingRelation(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false
   const code = (error as { code?: unknown }).code
   // Postgres `undefined_table`, and PostgREST's "not in the schema cache".
-  return code === '42P01' || code === 'PGRST205'
+  if (code === '42P01' || code === 'PGRST205') return true
+
+  // The demo's equivalent, for a table `dataset.ts` does not carry yet.
+  // Matched on the name rather than with `instanceof` — see the note on the
+  // same check in `collection.ts`.
+  return (error as { name?: unknown }).name === 'MissingDemoTable'
 }
 
 let warnedAboutTables = false
@@ -115,7 +137,8 @@ export async function loadAdminJourneyView(
   const { data, error } = await db
     .from('bookings')
     .select(
-      'id, reference, guest_token, guest_link_sent_at, guest_link_send_count, ' +
+      'id, reference, organization_id, property_id, guest_token, ' +
+        'guest_link_sent_at, guest_link_send_count, ' +
         'guest_link_first_opened_at, guest_link_last_opened_at, ' +
         'guest_link_revoked_at, guest_link_rotated_at, guest_link_expires_at, ' +
         'guests ( full_name, phone, phone_e164, email )',
@@ -138,6 +161,11 @@ export async function loadAdminJourneyView(
     guestPhone:
       asStringOrNull(guest, 'phone_e164') ?? asStringOrNull(guest, 'phone'),
     guestEmail: asStringOrNull(guest, 'email'),
+
+    // The shipped defaults, matching `guest_journey_effective_settings`'s own
+    // fallback in §7 of the migration: confirmation only, no contract, no
+    // details. Replaced below when a settings row exists.
+    requires: { confirmation: true, contract: false, details: false },
 
     sentAt: asTimestampOrNull(row, 'guest_link_sent_at'),
     sendCount:
@@ -164,43 +192,60 @@ export async function loadAdminJourneyView(
   }
 
   try {
-    const [sends, confirmation, signature, details, journey, requests] =
-      await Promise.all([
-        db
-          .from('guest_link_sends')
-          .select('id, channel, recipient_masked, sent_at, after_rotation')
-          .eq('booking_id', bookingId)
-          .order('sent_at', { ascending: false })
-          .limit(20),
-        db
-          .from('booking_guest_confirmations')
-          .select('confirmed_at, booking_version')
-          .eq('booking_id', bookingId)
-          .is('superseded_at', null)
-          .order('confirmed_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        db
-          .from('booking_contract_signatures')
-          .select('signed_at, signer_name')
-          .eq('booking_id', bookingId)
-          .is('superseded_at', null)
-          .maybeSingle(),
-        db
-          .from('booking_guest_details')
-          .select('submitted_at')
-          .eq('booking_id', bookingId)
-          .maybeSingle(),
-        db
-          .from('booking_guest_journey')
-          .select('checkout_declared_at, manual_released_at')
-          .eq('booking_id', bookingId)
-          .maybeSingle(),
-        db
-          .from('guest_requests')
-          .select('id, state')
-          .eq('booking_id', bookingId),
-      ])
+    const [
+      sends,
+      confirmation,
+      signature,
+      details,
+      journey,
+      requests,
+      settings,
+    ] = await Promise.all([
+      db
+        .from('guest_link_sends')
+        .select('id, channel, recipient_masked, sent_at, after_rotation')
+        .eq('booking_id', bookingId)
+        .order('sent_at', { ascending: false })
+        .limit(20),
+      db
+        .from('booking_guest_confirmations')
+        .select('confirmed_at, booking_version')
+        .eq('booking_id', bookingId)
+        .is('superseded_at', null)
+        .order('confirmed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('booking_contract_signatures')
+        .select('signed_at, signer_name')
+        .eq('booking_id', bookingId)
+        .is('superseded_at', null)
+        .maybeSingle(),
+      db
+        .from('booking_guest_details')
+        .select('submitted_at')
+        .eq('booking_id', bookingId)
+        .maybeSingle(),
+      db
+        .from('booking_guest_journey')
+        .select('checkout_declared_at, manual_released_at')
+        .eq('booking_id', bookingId)
+        .maybeSingle(),
+      db.from('guest_requests').select('id, state').eq('booking_id', bookingId),
+      // Both scopes in one read. The property row wins where it exists and
+      // the organization default is the fallback — the same precedence
+      // `guest_journey_effective_settings` applies in SQL, resolved here in
+      // one round trip rather than two sequential ones.
+      db
+        .from('guest_journey_settings')
+        .select(
+          'property_id, contract_mode, require_guest_confirmation, required_detail_fields',
+        )
+        .eq('organization_id', asString(row, 'organization_id'))
+        .or(
+          `property_id.eq.${asString(row, 'property_id')},property_id.is.null`,
+        ),
+    ])
 
     for (const result of [
       sends,
@@ -209,8 +254,24 @@ export async function loadAdminJourneyView(
       details,
       journey,
       requests,
+      settings,
     ]) {
       if (result.error) throw result.error
+    }
+
+    const settingsRows = toRows(settings.data ?? [])
+    // Property-specific first, organization default second.
+    const effective =
+      settingsRows.find((entry) => entry.property_id !== null) ??
+      settingsRows.find((entry) => entry.property_id === null)
+
+    if (effective) {
+      const fields = effective.required_detail_fields
+      base.requires = {
+        confirmation: effective.require_guest_confirmation === true,
+        contract: asString(effective, 'contract_mode') !== 'disabled',
+        details: Array.isArray(fields) && fields.length > 0,
+      }
     }
 
     base.sends = toRows(sends.data ?? []).map((send) => ({

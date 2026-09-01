@@ -72,6 +72,14 @@ function plan(overrides: Partial<WorkPlan> = {}): WorkPlan {
     sections: [],
     criticalPathMinutes: 120,
     recommendedStaff: 2,
+    facts: {
+      arrivalAt: '2026-05-10T12:00:00.000Z',
+      eventType: 'accommodation',
+      specialRequests: null,
+      guests: 2,
+      adults: 2,
+      children: 0,
+    },
     ...overrides,
   }
 }
@@ -292,6 +300,128 @@ describe('the catalogue, the snapshot and the plan', () => {
         undefined,
       ),
     ).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+describe('the facts and the revision on a plan', () => {
+  const FACTS = {
+    arrivalAt: '2026-05-10T12:00:00.000Z',
+    eventType: 'shabbat' as const,
+    specialRequests: 'שתי מיטות תינוק',
+    guests: 7,
+    adults: 4,
+    children: 2,
+  }
+
+  it('writes the frozen booking facts, so a cleaner never needs the booking', async () => {
+    const client = new FakeSupabaseClient({
+      responses: { work_plans: { data: [{ id: 'plan-1' }] } },
+    })
+
+    await new SupabasePreparationPorts(client.asDb()).savePlan(
+      plan({ facts: FACTS }),
+      undefined,
+    )
+
+    const write = client.queriesFor('work_plans')[0]
+    expect(write.payload).toMatchObject({
+      arrival_at: '2026-05-10T12:00:00.000Z',
+      event_type: 'shabbat',
+      special_requests: 'שתי מיטות תינוק',
+      guests: 7,
+      adults: 4,
+      children: 2,
+    })
+  })
+
+  it('leaves the columns alone for a plan that carries no facts', async () => {
+    // A plan stored before 0036. Writing five explicit nulls over its columns
+    // would be this adapter deciding that "not computed yet" means "none",
+    // and the common write here is a cleaner ticking a section off.
+    const client = new FakeSupabaseClient({
+      responses: { work_plans: { data: [{ id: 'plan-1' }] } },
+    })
+
+    await new SupabasePreparationPorts(client.asDb()).savePlan(
+      plan({ facts: null }),
+      undefined,
+    )
+
+    const write = client.queriesFor('work_plans')[0]
+    expect(write.payload).not.toHaveProperty('arrival_at')
+    expect(write.payload).not.toHaveProperty('guests')
+  })
+
+  it('writes the account of what moved when the caller names a revision', async () => {
+    // `delta`, `supersedes_version`, `change_reason` and `changed_by` have
+    // existed since 0021 and nothing wrote them, so every revision reached
+    // `work_plan_versions` with no account of why.
+    const client = new FakeSupabaseClient({
+      responses: { work_plans: { data: [{ id: 'plan-1' }] } },
+    })
+
+    await new SupabasePreparationPorts(client.asDb()).savePlan(
+      plan({ version: 2 }),
+      undefined,
+      {
+        delta: { fromVersion: 1, toVersion: 2 } as never,
+        supersedesVersion: 1,
+        reason: 'ההזמנה גדלה',
+        changedByUserId: 'user-1',
+      },
+    )
+
+    const write = client.queriesFor('work_plans')[0]
+    expect(write.payload).toMatchObject({
+      supersedes_version: 1,
+      change_reason: 'ההזמנה גדלה',
+      changed_by: 'user-1',
+    })
+  })
+
+  it('does not touch the revision columns when no revision is named', async () => {
+    // Ticking a section off supersedes nothing and must not overwrite the
+    // delta that explains the last real change.
+    const client = new FakeSupabaseClient({
+      responses: { work_plans: { data: [{ id: 'plan-1' }] } },
+    })
+
+    await new SupabasePreparationPorts(client.asDb()).savePlan(
+      plan(),
+      undefined,
+    )
+
+    const write = client.queriesFor('work_plans')[0]
+    expect(write.payload).not.toHaveProperty('delta')
+    expect(write.payload).not.toHaveProperty('change_reason')
+  })
+
+  it('reads a pre-0036 row back as a plan with no facts, not half a set', async () => {
+    const client = new FakeSupabaseClient({
+      responses: {
+        work_plans: {
+          data: {
+            id: 'plan-1',
+            organization_id: 'org-a',
+            booking_id: 'book-1',
+            property_id: 'prop-a',
+            unit_id: 'unit-a',
+            version: 1,
+            snapshot_hash: 'sha256:abc',
+            created_at: '2026-05-01T09:00:00+00:00',
+            sections: [],
+            critical_path_minutes: 120,
+            recommended_staff: 2,
+          },
+        },
+      },
+    })
+
+    const stored = await new SupabasePreparationPorts(client.asDb()).loadPlan(
+      'book-1',
+    )
+
+    expect(stored?.facts).toBeNull()
   })
 })
 

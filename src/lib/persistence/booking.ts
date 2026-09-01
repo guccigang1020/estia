@@ -106,6 +106,7 @@ import type {
   UnitAvailabilityRules,
 } from '../booking/availability'
 import type { HoldDraft } from '../booking/holds'
+import { EVENT_TYPES } from '../preparation/types'
 import {
   DEFAULT_EVENT_TYPE,
   SPECIAL_REQUESTS_MAX,
@@ -726,10 +727,32 @@ export class SupabaseBookingRepository implements BookingRepository {
       guestName: readGuestName(row),
       // Read back as the sum, so a booking created through a UI that fills all
       // three columns still reports the whole party rather than the adults.
+      // This stays the answer to "how many people", which is what every screen
+      // asks. What it cannot answer is "how many beds": an infant in a cot is
+      // a head and not a sleeping place, which is what `party` below is for.
       guestCount:
         asNumber(row, 'adults') +
         asNumber(row, 'children') +
         asNumber(row, 'infants'),
+      // The same three numbers unsummed, plus the two 0028 added beside them.
+      // Optional on `BookingSnapshot` so every caller written before the split
+      // still compiles, and filled unconditionally here because the columns
+      // are `NOT NULL DEFAULT` — an absent one is a row this adapter did not
+      // write and should be named, not defaulted.
+      party: {
+        adults: asNumber(row, 'adults'),
+        children: asNumber(row, 'children'),
+        infants: asNumber(row, 'infants'),
+      },
+      sleeping: {
+        couples: asNumber(row, 'couples'),
+        extraBedsRequested: asNumber(row, 'extra_beds_requested'),
+        cotsRequested: asNumber(row, 'cots_requested'),
+      },
+      eventType: asEnum(row, 'event_type', EVENT_TYPES),
+      // Readable wherever `guest_notes` is, and deliberately not behind
+      // `booking.note.internal`. See the header.
+      specialRequests: asStringOrNull(row, 'special_requests'),
       version: asNumber(row, 'version'),
       // `depositRequiredAgorot` is not a column. `priceStay` emits the
       // refundable deposit as a `deposit` price line and includes it in the

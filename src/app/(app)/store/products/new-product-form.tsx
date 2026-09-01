@@ -28,7 +28,14 @@ import { Field } from '@/components/ui/field'
 import { Select, TextInput } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { SafeErrorBody } from '@/lib/errors'
-import { STORE_ITEM_TYPE_LABEL, STORE_PRICING_MODEL_LABEL } from '@/lib/store'
+// A leaf module, never the `@/lib/store` barrel: the barrel reaches the
+// repository and from there the `postgres` driver, and a client component
+// importing it asks the bundler for `node:fs` in the browser. See the longer
+// note in `settings/settings-form.tsx`.
+import {
+  STORE_ITEM_TYPE_LABEL,
+  STORE_PRICING_MODEL_LABEL,
+} from '@/lib/store/labels'
 import { STORE_ITEM_TYPES, STORE_PRICING_MODELS } from '@/lib/contracts/states'
 
 import { createProductAction } from '../_lib/actions'

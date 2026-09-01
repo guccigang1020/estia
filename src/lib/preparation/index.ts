@@ -157,6 +157,7 @@ export {
   type AdjustmentResult,
   type BuildPlanResult,
   type CancellationResult,
+  type PlanRevision,
   type PreparationOperations,
   type PreparationPorts,
   type RecomputeResult,

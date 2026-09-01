@@ -519,7 +519,21 @@ export const SUBSCRIPTION_ROWS: DemoRow[] = [
     current_period_start: momentOn(-12),
     current_period_end: momentOn(18),
     cancelled_at: null,
-    limit_overrides: {},
+    // One negotiated seat above the package, which is what this column is for.
+    //
+    // Pro allows ten members and the demo organization has eleven people in
+    // it — nine personas plus two members who exist so the team screens are
+    // not a list of one. That eleventh arrived with the housekeeping
+    // supervisor, and the quota engine correctly reported the organization as
+    // over its limit.
+    //
+    // Raising Pro's limit to accommodate a fixture would have been changing
+    // the product's pricing to make a demo comfortable. An override is the
+    // honest instrument: this customer bought a seat. It also keeps the state
+    // somebody deliberately chose — exactly full, and warned *before* crossing
+    // — which is a better thing to demonstrate than an organization already
+    // in overage.
+    limit_overrides: { members: 11 },
     entitlement_grants: [],
     entitlement_revocations: [],
     metadata: {},

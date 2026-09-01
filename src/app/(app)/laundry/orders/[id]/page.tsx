@@ -2,10 +2,13 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { Explanation } from '@/components/laundry/explanation'
+import { AdjustLineForm } from '@/components/laundry/adjust-line-form'
+import { SendOrderPanel } from '@/components/laundry/send-order-panel'
 import { Quantity } from '@/components/laundry/quantity'
 import { LaundryShell } from '@/components/laundry/shell'
 import { LaundryDatasetGap, LaundryPlanLock } from '@/components/laundry/states'
 import { Badge } from '@/components/ui/badge'
+import { TERMINAL_LAUNDRY_STATUSES } from '@/lib/contracts/states'
 import {
   assessOne,
   latestPickupFor,
@@ -20,6 +23,11 @@ import {
   dateAndTime,
   statusLabel,
 } from '../../_lib/labels'
+import {
+  adjustLineAction,
+  sendOrderAction,
+  submitForApprovalAction,
+} from '../../_lib/actions'
 import { loadOrder, loadProviders } from '../../_lib/queries'
 import { laundryView, nameOf } from '../../_lib/view'
 
@@ -28,18 +36,26 @@ export const metadata: Metadata = { title: 'הזמנת כביסה' }
 /**
  * EXECUTION CONTEXT — SERVER COMPONENT. One run, in full.
  *
- * ── The message preview is behind `laundry.order_send` ────────────────────
+ * ── Who sees the message, and who may send it ─────────────────────────────
  *
  * Everything else on this page is `laundry.view`. The rendered provider
- * message is not, and the reason is that it contains the provider's own
- * contact details and the standing notes — commercial information a cleaner
- * has no business reading, on the one screen where it would otherwise appear
- * as ordinary page copy.
+ * message is not: it carries the provider's contact details and the standing
+ * notes, which are commercial information, on the one screen where they would
+ * otherwise read as ordinary page copy.
+ *
+ * It is shown to anybody holding `laundry.order_create` OR `laundry.order_send`
+ * — the supervisor preparing the run genuinely needs to see what the provider
+ * will read, and withholding it would mean raising an order sight-unseen. What
+ * the supervisor does not get is the send button, and `SendOrderPanel` renders
+ * a sentence naming who does rather than a disabled control, because a disabled
+ * button reads as a fault with your own account.
  *
  * It is rendered from `toMessageView`, which is the same function the send
  * operation uses, so what is previewed is what would be sent. A preview built
  * by a second renderer is a preview that eventually differs from the message,
- * and the difference is discovered by the provider.
+ * and the difference is discovered by the provider. The action re-renders it
+ * server-side at the moment of sending rather than accepting the body from the
+ * form — see `actions.ts` for why that is a security decision.
  *
  * ── Turnaround is computed here rather than read ──────────────────────────
  *
@@ -136,19 +152,30 @@ export default async function LaundryOrderPage({
 
   const atRisk = risks.filter((entry) => entry.assessment.atRisk)
 
-  const preview = view.maySend
-    ? renderOrderMessage(
-        toMessageView({
-          order,
-          organizationName: 'ESTIA',
-          propertyNames: view.properties,
-          contactName: provider?.contactName ?? null,
-          contactPhone: provider?.phone ?? null,
-          standingNotes: view.context.settings.settings.standingNotes,
-        }),
-        order.channel,
-      )
-    : null
+  // `completed` and `cancelled` only. A COMMITTED order is still adjustable on
+  // purpose: the van arriving and finding four fewer sheets than the note said
+  // is exactly when somebody must be able to write down what really went, and
+  // refusing it would make the record stop matching reality at the moment it
+  // starts to matter. See `operations.ts`.
+  const closed = TERMINAL_LAUNDRY_STATUSES.includes(order.status)
+
+  // Rendered for anybody who may raise or send. A supervisor preparing the
+  // run needs to see what the provider will read; only the send button is
+  // withheld from them, not the truth about what is going out.
+  const preview =
+    view.maySend || view.mayCreateOrders
+      ? renderOrderMessage(
+          toMessageView({
+            order,
+            organizationName: 'ESTIA',
+            propertyNames: view.properties,
+            contactName: provider?.contactName ?? null,
+            contactPhone: provider?.phone ?? null,
+            standingNotes: view.context.settings.settings.standingNotes,
+          }),
+          order.channel,
+        )
+      : null
 
   return (
     <LaundryShell
@@ -259,6 +286,20 @@ export default async function LaundryOrderPage({
                 <div className="shrink-0">
                   <Quantity quantity={line.quantity} unit={line.unit} />
                 </div>
+                {view.mayCreateOrders && !closed && (
+                  <div className="w-full border-t border-border pt-3 sm:w-auto sm:basis-full">
+                    <AdjustLineForm
+                      orderId={order.id}
+                      lineId={line.id}
+                      label={line.label}
+                      calculated={line.quantity.calculated}
+                      adjustment={line.quantity.adjustment}
+                      reason={line.quantity.reason}
+                      version={order.version}
+                      action={adjustLineAction}
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -275,24 +316,24 @@ export default async function LaundryOrderPage({
       )}
 
       {preview !== null && (
-        <section
-          aria-labelledby="preview-title"
-          className="flex flex-col gap-3 rounded-xl border border-border bg-surface px-5 py-5 shadow-soft"
-        >
-          <h2
-            id="preview-title"
-            className="font-display text-base font-bold text-foreground"
-          >
-            ההודעה שתישלח
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            נוצרת מההזמנה עצמה. אין בה שם אורח, טלפון, מחיר, מצב תשלום או סוכן —
-            הנתונים האלה אינם קיימים על ההזמנה כלל.
-          </p>
-          <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted p-4 text-sm text-foreground">
-            {preview}
-          </pre>
-        </section>
+        <SendOrderPanel
+          orderId={order.id}
+          preview={preview}
+          channel={order.channel}
+          channelLabel={CHANNEL_LABEL[order.channel]}
+          dispatchLabel={DISPATCH_LABEL[order.dispatchMode]}
+          needsApproval={
+            order.dispatchMode === 'approval_required' &&
+            order.status === 'draft'
+          }
+          alreadySent={order.sentAt !== null}
+          mayRaise={view.mayCreateOrders}
+          maySend={view.maySend}
+          providerName={provider?.name ?? null}
+          sendAction={sendOrderAction}
+          raiseAction={submitForApprovalAction}
+          version={order.version}
+        />
       )}
 
       {order.sentBody !== null && (

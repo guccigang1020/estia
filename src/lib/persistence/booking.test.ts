@@ -38,6 +38,16 @@ function bookingRow(overrides: Record<string, unknown> = {}) {
     adults: 2,
     children: 1,
     infants: 0,
+    // The five 0028 added. Present here because `hydrate` reads them with
+    // `asNumber` and `asEnum` rather than defaulting an absent column: the
+    // schema says `NOT NULL DEFAULT`, so a row without them is a row this
+    // adapter did not write, and naming the missing column beats inventing a
+    // party of nobody.
+    couples: 1,
+    extra_beds_requested: 0,
+    cots_requested: 0,
+    event_type: 'accommodation',
+    special_requests: null,
     source: 'direct_manual',
     source_channel: null,
     agent_user_id: null,
