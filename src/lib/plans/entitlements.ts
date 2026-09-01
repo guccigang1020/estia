@@ -26,6 +26,10 @@ export const ENTITLEMENTS = [
   // housekeeping without ever sending a sheet out, and one that sends
   // everything out is buying something the tasks board does not give it.
   'laundry',
+  // Selling anything beyond the stay: products, services, packages, the guest
+  // store inside the booking portal. A business that only rents rooms never
+  // sees it.
+  'commerce',
   'channels', // Airbnb / Booking.com synchronisation
   'dynamic_pricing',
   'owner_portal', // external property owners and their statements
@@ -80,6 +84,17 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   'inventory.adjust': 'operations',
   'inventory.import': 'operations',
   'inventory.transfer': 'operations',
+
+  // The store
+  'product.view': 'commerce',
+  'product.manage': 'commerce',
+  'product.price_manage': 'commerce',
+  'order.view': 'commerce',
+  'order.manage': 'commerce',
+  'order.fulfil': 'commerce',
+  'order.discount_manage': 'commerce',
+  'order.refund': 'commerce',
+  'provider.manage': 'commerce',
 
   // Laundry
   'laundry.view': 'laundry',

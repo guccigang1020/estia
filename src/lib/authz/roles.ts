@@ -400,8 +400,12 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'pricing.manage',
     'product.view',
     'product.manage',
+    'product.price_manage',
     'order.view',
+    'order.manage',
     'order.fulfil',
+    'order.discount_manage',
+    'provider.manage',
     'review.view',
     'review.manage',
     'user.view',
@@ -467,6 +471,11 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'property.update',
     'product.view',
     'order.view',
+    // Approves, amends and assigns a provider for their own properties.
+    // Deliberately not `product.price_manage` or `provider.manage`: what a
+    // bottle of wine costs and who caters are decisions for the business, not
+    // for one house.
+    'order.manage',
     'order.fulfil',
     'review.view',
     'user.view',
@@ -519,7 +528,11 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'incident.create',
     'payment.view',
     'payment.create',
+    'product.view',
     'order.view',
+    // Creates an order for a guest who rang up asking for pool heating, and
+    // marks it done. Approving one, discounting it or refunding it are three
+    // other people's jobs.
     'order.fulfil',
   ],
 

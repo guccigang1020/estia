@@ -46,6 +46,15 @@ every screen must touch is a queue, and a queue needs one server.
 # path                                       owner                mode
 
 # ── Shared. One writer, always. ───────────────────────────────────────────
+#
+# The permission catalogue and the role presets belong to `authz`, and for
+# this wave they are claimed here instead. Five workers all need grants added
+# in the same two files; five workers editing them is five merge arguments,
+# and the whole point of landing the vocabulary before the wave started was
+# that nobody has to.
+src/lib/authz/permissions.ts                  coordinator          write
+src/lib/authz/roles.ts                        coordinator          write
+src/lib/authz/roles.test.ts                   coordinator          write
 src/components/nav/**                         coordinator          write
 src/lib/demo/dataset.ts                       coordinator          write
 src/lib/demo/types.ts                         coordinator          write
@@ -85,6 +94,74 @@ src/app/invite/**                             coordinator          write
 src/app/(app)/team/invite/**                  coordinator          write
 src/components/management/invite-member-form.tsx  coordinator      write
 
+# ── Wave: preparation · laundry · inventory forecast · payment policy ─────
+#
+# Four capabilities that share one calculation. The register is written so
+# that the *shared* pieces — the frozen contracts, the permission catalogue,
+# the entitlements, the menu — are already landed and belong to the
+# coordinator, and each worker below owns a disjoint set of new files plus one
+# migration nobody else may touch.
+#
+# Migrations are claimed by number rather than by directory, because
+# `supabase/migrations/**` belongs to `authz` and one act should not be split
+# across two owners. Nobody applies their own migration; they are handed to
+# the coordinator, who applies and verifies against the live catalogue.
+supabase/migrations/0028_booking_party.sql          coordinator      write
+supabase/migrations/0029_laundry.sql                laundry          write
+supabase/migrations/0030_inventory_forecast.sql     inventory        write
+supabase/migrations/0031_payment_collection.sql     payment-policy   write
+
+# The laundry domain: requirements from the canonical preparation output,
+# orders, providers, turnaround arithmetic, the forward demand curve.
+src/lib/laundry/**                            laundry              write
+src/lib/demo/dataset-laundry.ts               laundry              write
+
+# The laundry screens — same owner as the domain, deliberately. A screen that
+# imports a module a different worker has not written yet is the exact failure
+# this register was created after.
+src/app/(app)/laundry/**                      laundry              write
+src/components/laundry/**                     laundry              write
+
+# The stock engine: circulation, reservation against future bookings, and the
+# time-aware forecast that is the point of the whole module.
+src/lib/inventory/**                          inventory            write
+src/lib/persistence/inventory.ts              inventory            write
+
+# The stock screens, including the existing ones, which are an upgrade rather
+# than a rewrite. Same owner as the engine, for the reason above.
+src/app/(app)/inventory/**                    inventory            write
+src/components/operations/inventory-filter.tsx    inventory         write
+src/components/operations/inventory-state.tsx     inventory         write
+
+# What a guest must do before a booking is confirmed, and the screens that
+# say so.
+src/lib/payments/**                           payment-policy       write
+src/app/(app)/settings/payments/**            payment-policy       write
+src/components/payments/**                    payment-policy       write
+
+# The chain from a real booking to a real plan: the intake fields the schema
+# now stores, the delta when a booking changes, the cleaner's plan.
+src/lib/persistence/booking.ts                preparation-chain    write
+src/app/(app)/preparation/**                  preparation-chain    write
+src/components/preparation/**                 preparation-chain    write
+src/lib/preparation/**                        preparation-chain    write
+
+
+# The commerce layer of the guest journey: catalogue, orders, and the guest
+# store inside the booking portal. `product.*` and `order.*` grants already
+# existed with no tables, no domain and no screen behind them — this is the
+# thing they were declared for, so it is an ADD onto them rather than a
+# parallel `store.*` vocabulary.
+supabase/migrations/0032_store.sql            store                write
+src/lib/store/**                              store                write
+src/lib/demo/dataset-store.ts                 store                write
+src/app/(app)/store/**                        store                write
+src/components/store/**                       store                write
+
+# The guest portal. It does not exist yet — nothing in `src/app` serves a
+# guest holding a `bookings.guest_token`. Claimed here so the store worker
+# can build the shell it needs without a second owner appearing in it later.
+src/app/g/**                                  store                write
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
 src/lib/agents/**                             authz                write
@@ -132,10 +209,9 @@ src/app/(app)/bookings/**                     booking-intake       write
 src/components/booking/**                     booking-intake       write
 src/lib/booking/**                            booking-intake       write
 
-src/app/(app)/preparation/**                  preparation-config   write
-src/components/preparation/**                 preparation-config   write
-src/lib/preparation/**                        preparation-config   write
-src/lib/persistence/preparation.ts            preparation-config   write
+# preparation moved to preparation-chain for this wave — see the block at
+# the top. The policy screen it built is kept, not rewritten.
+src/lib/persistence/preparation.ts            preparation-chain    write
 
 # ── The home screen, rebuilt role by role. ────────────────────────────────
 src/app/(app)/dashboard/**                    dashboard            write
@@ -153,7 +229,7 @@ src/lib/demo/dataset-bookings.ts              guests               write
 src/app/(app)/tasks/**                        operations           write
 src/app/(app)/maintenance/**                  operations           write
 src/app/(app)/incidents/**                    operations           write
-src/app/(app)/inventory/**                    operations           write
+# inventory moved to inventory         for this wave — see the block above.
 src/components/operations/**                  operations           write
 src/lib/demo/dataset-operations.ts            operations           write
 

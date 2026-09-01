@@ -31,6 +31,7 @@ export const ENTITLEMENT_LABELS: Record<Entitlement, string> = {
   team: 'צוות',
   operations: 'תפעול',
   laundry: 'מכבסה',
+  commerce: 'חנות',
   channels: 'ערוצי הפצה',
   dynamic_pricing: 'תמחור דינמי',
   owner_portal: 'פורטל בעלים',

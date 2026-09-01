@@ -175,8 +175,22 @@ export const PERMISSIONS = [
   // ── Sales & marketing ───────────────────────────────────────────────────
   'product.view',
   'product.manage',
+  // Setting what a guest pays for a bottle of wine is not the same right as
+  // writing its description, and it is not `pricing.manage`, which is the
+  // accommodation rate card. Its own grant because it is its own money.
+  'product.price_manage',
   'order.view',
+  // Approving, amending, assigning a provider, cancelling. `order.fulfil`
+  // below stays what it always was — marking the work done — because a
+  // cleaner who completes a setup must not thereby be able to cancel it.
+  'order.manage',
   'order.fulfil',
+  'order.discount_manage',
+  'order.refund',
+  // The external supplier directory — caterers, DJs, photographers,
+  // decorators. `laundry.provider_manage` stays separate: one is a standing
+  // operational contract, the other is who to call for a birthday.
+  'provider.manage',
   'review.view',
   'review.manage',
   // Website Studio. Split finely because the roles genuinely differ: a

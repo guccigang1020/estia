@@ -380,6 +380,176 @@ export const CONFIRMATION_REQUIREMENTS = [
 
 export type ConfirmationRequirement = (typeof CONFIRMATION_REQUIREMENTS)[number]
 
+// ── Commerce ──────────────────────────────────────────────────────────────
+
+/**
+ * How much of a shop a business is actually running.
+ *
+ * `simple` is a catalogue and orders somebody handles by hand — which is what
+ * a villa owner selling a שולחן שוק and pool heating actually needs, and it
+ * requires no payment provider at all. `commerce` adds live payment.
+ * `advanced` adds stock, suppliers, operational recipes and margin.
+ */
+export const STORE_MODES = ['off', 'simple', 'commerce', 'advanced'] as const
+
+export type StoreMode = (typeof STORE_MODES)[number]
+
+/**
+ * What kind of thing is being sold.
+ *
+ * The type is not decoration: it decides what the product can be connected to.
+ * A `property_addon` such as late checkout has to be checked against the
+ * calendar and the cleaning schedule before it can be offered; a `service`
+ * such as a DJ has a provider and a lead time; a `physical` bottle of wine may
+ * draw on stock. `package` is a combination priced as one.
+ */
+export const STORE_ITEM_TYPES = [
+  'physical',
+  'service',
+  'experience',
+  'property_addon',
+  'package',
+  'custom',
+] as const
+
+export type StoreItemType = (typeof STORE_ITEM_TYPES)[number]
+
+/**
+ * How a price is arrived at.
+ *
+ * `quote` is a first-class answer, not a missing price: a caterer for thirty
+ * people is quoted, and a product that pretends to a fixed figure it cannot
+ * honour is worse than one that says "בקש הצעה".
+ */
+export const STORE_PRICING_MODELS = [
+  'fixed',
+  'per_guest',
+  'per_child',
+  'per_night',
+  'per_hour',
+  'per_unit',
+  'starting_from',
+  'quote',
+] as const
+
+export type StorePricingModel = (typeof STORE_PRICING_MODELS)[number]
+
+export const STORE_ITEM_STATUSES = [
+  'draft',
+  'active',
+  'paused',
+  // Never deleted: an archived product still has to be readable from the
+  // orders that bought it, at the price they paid.
+  'archived',
+] as const
+
+export type StoreItemStatus = (typeof STORE_ITEM_STATUSES)[number]
+
+/**
+ * The life of one store order.
+ *
+ * Longer than most businesses will use, and deliberately so — a wine bottle
+ * goes `pending → confirmed → completed` while a DJ goes through approval, a
+ * provider request and a fulfilment window. One vocabulary so that a
+ * dashboard, an automation rule and a provider update mean the same thing.
+ */
+export const STORE_ORDER_STATUSES = [
+  'draft',
+  'pending',
+  'awaiting_approval',
+  'awaiting_payment',
+  'confirmed',
+  'in_preparation',
+  'ready',
+  'fulfilled',
+  'completed',
+  'cancelled',
+  'refunded',
+] as const
+
+export type StoreOrderStatus = (typeof STORE_ORDER_STATUSES)[number]
+
+/** Nothing further happens to an order in one of these. */
+export const TERMINAL_STORE_ORDER_STATUSES: readonly StoreOrderStatus[] = [
+  'completed',
+  'cancelled',
+  'refunded',
+]
+
+/**
+ * Where an order stops being freely editable.
+ *
+ * From `confirmed` onward a guest has been told something and money may have
+ * moved. Changing quantities or prices after that is an amendment with its own
+ * audit trail and, where it costs more, its own consent — never a silent edit.
+ */
+export const COMMITTED_STORE_ORDER_STATUSES: readonly StoreOrderStatus[] = [
+  'confirmed',
+  'in_preparation',
+  'ready',
+  'fulfilled',
+  'completed',
+]
+
+/**
+ * How an order's money stands, separately from the order's own progress.
+ *
+ * The same separation the booking already makes between its state and its
+ * payment: an order can be `confirmed` and `unpaid` when the business has
+ * chosen to add it to the booking balance, and coupling the two would make
+ * that ordinary arrangement impossible to express.
+ */
+export const STORE_PAYMENT_STATUSES = [
+  'unpaid',
+  'pending_verification',
+  'partially_paid',
+  'paid',
+  'refunded',
+] as const
+
+export type StorePaymentStatus = (typeof STORE_PAYMENT_STATUSES)[number]
+
+/**
+ * How the guest pays for store items, chosen by the business.
+ *
+ * `with_booking` — the purchase joins the booking's remaining balance, which
+ * is how most Israeli guesthouses would actually handle pool heating added by
+ * telephone. Live payment is one option among several and is never required.
+ */
+export const STORE_PAYMENT_MODES = [
+  'with_booking',
+  'pay_now',
+  'manual',
+  'on_arrival',
+  'pay_later',
+  'approval_first',
+  'custom',
+] as const
+
+export type StorePaymentMode = (typeof STORE_PAYMENT_MODES)[number]
+
+/** What happens operationally when an item is bought. */
+export const STORE_FULFILMENT_KINDS = [
+  'none',
+  'staff_task',
+  'external_provider',
+  'inventory',
+  'custom',
+] as const
+
+export type StoreFulfilmentKind = (typeof STORE_FULFILMENT_KINDS)[number]
+
+/** When an item becomes visible to a guest inside their booking. */
+export const STORE_VISIBILITY_RULES = [
+  'always',
+  'after_confirmation',
+  'after_payment',
+  'days_before_arrival',
+  'during_stay',
+] as const
+
+export type StoreVisibilityRule = (typeof STORE_VISIBILITY_RULES)[number]
+
 // ── Approval ──────────────────────────────────────────────────────────────
 
 /**

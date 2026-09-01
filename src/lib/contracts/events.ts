@@ -149,6 +149,22 @@ export const DOMAIN_EVENTS = [
   // standing in an unmade bedroom.
   'laundry.deadline_risk',
 
+  // The store
+  'store.order_created',
+  'store.order_approved',
+  'store.order_paid',
+  'store.order_confirmed',
+  'store.order_changed',
+  'store.order_cancelled',
+  'store.order_refunded',
+  'store.order_overdue',
+  'store.provider_requested',
+  'store.provider_confirmed',
+  // The provider has not answered and the service is close. Raised before
+  // somebody discovers on the day that no DJ is coming.
+  'store.provider_unconfirmed',
+  'store.service_due',
+
   // Approvals
   'approval.requested',
   'approval.decided',

@@ -1127,9 +1127,14 @@ describe('administrator', () => {
    * Deliberately no `preparation.*` pair — `task.view` and `checklist.manage`
    * already mean those two things, and a second name for a right somebody
    * holds is a right that can be revoked in one place and kept in the other.
+   *
+   * 147 → 152 with the store: `product.price_manage`, `order.manage`,
+   * `order.discount_manage`, `order.refund` and `provider.manage`. The
+   * specification asked for ten `store.*` grants; six of them already existed
+   * as `product.*` and `order.*` and were reused rather than renamed.
    */
-  it('holds exactly 147 grants', () => {
-    expect(grantsForSystemRole('administrator')).toHaveLength(147)
+  it('holds exactly 152 grants', () => {
+    expect(grantsForSystemRole('administrator')).toHaveLength(152)
   })
 })
 
@@ -1160,8 +1165,8 @@ describe('organization_owner', () => {
     expect(held, 'platform grants held by an organization owner').toEqual([])
   })
 
-  it('holds exactly 151 grants — every non-platform permission and every field permission', () => {
-    expect(grantsForSystemRole('organization_owner')).toHaveLength(151)
+  it('holds exactly 156 grants — every non-platform permission and every field permission', () => {
+    expect(grantsForSystemRole('organization_owner')).toHaveLength(156)
   })
 
   it('holds the agent network, because running the sellers is the owner’s business', () => {
