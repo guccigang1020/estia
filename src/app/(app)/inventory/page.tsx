@@ -1,127 +1,93 @@
 import type { Metadata } from 'next'
 
-import type { SearchParams } from '@/app/(auth)/_lib/search-params'
-import { ActionError } from '@/components/booking/action-error'
-import { Money } from '@/components/finance/money'
-import { InventoryFilterBar } from '@/components/operations/inventory-filter'
 import { INVENTORY_STATE_LABEL } from '@/components/operations/inventory-state'
-import {
-  InventoryTable,
-  MovementList,
-} from '@/components/operations/inventory-table'
-import { EmptyState } from '@/components/states/empty-state'
-import { resolveEmptyReason } from '@/components/states/empty-presets'
 import { Button } from '@/components/ui/button'
 import { holdsGrant } from '@/lib/authz/can'
-import { INVENTORY_STATES } from '@/lib/contracts/states'
-import { toSafeResponse } from '@/lib/errors'
-import { sumAgorot } from '@/lib/finance'
-import { createClient } from '@/lib/supabase/server'
+import type { InventoryState } from '@/lib/contracts/states'
+import { significantRows } from '@/lib/inventory'
 
-import { ALL_PROPERTIES, shellContext } from '../_lib/context'
+import { shellContext } from '../_lib/context'
 import { requireGrant } from '../_lib/guard'
+import { ForecastTable } from './_components/forecast-table'
+import { ModuleOff } from './_components/module-state'
+import { ShortageList } from './_components/shortage-list'
 import {
-  describeInventoryFilter,
-  hasActiveInventoryFilter,
-  parseInventoryFilter,
-} from './_lib/filters'
-import {
-  INVENTORY_PAGE_SIZE,
-  countInventoryItems,
-  itemsBelowReorderPoint,
-  listInventoryItems,
-  listMovements,
-  type InventoryListItem,
-  type InventoryMovement,
-} from './_lib/queries'
+  belowReorderPoint,
+  loadInventoryModule,
+  totalInState,
+  totalOwned,
+} from './_lib/module'
 
 export const metadata: Metadata = { title: 'מלאי' }
 
 /**
- * EXECUTION CONTEXT — SERVER COMPONENT. Stock by item and location.
+ * EXECUTION CONTEXT — SERVER COMPONENT. The stock dashboard.
  *
- * WHAT IS ON THIS SCREEN. Rows from `public.inventory_items` for the
- * organization the shell resolved, narrowed to the selected property and to the
- * membership's scope, and under them the last movements from
- * `public.inventory_movements` for those same items. Every value is a column, a
- * subtraction of two columns on one row, or a Hebrew name for a state.
+ * WHAT CHANGED. This route used to be the item list. It is now the answer to
+ * "what should I do about stock today", and the list moved to
+ * `/inventory/items` — same columns, same redactions, same empty states, the
+ * route it links back to being the only edit. The reason is what a person
+ * opens the screen for: nobody opens a stock module to read forty rows of
+ * quantities, they open it because they are worried about Saturday.
  *
- * THE QUANTITY IS NOT TYPED. 0011 derives `inventory_items.quantity` from the
- * movements by trigger, because a count somebody can overwrite is a count that
- * silently disagrees with the ledger that produced it. So this screen shows the
- * item's quantity and the ledger beside it and never adds up a balance of its
- * own.
+ * SIX PANELS, IN THE ORDER SOMEBODY WOULD ASK. Shortages now, shortages
+ * projected, stock below its reorder point, what is in the wash and on its way
+ * back, what is damaged or lost, and the upcoming demand. The first two come
+ * from the forecast; the middle three are present-tense readings of
+ * `inventory_items`; the last is the timeline itself.
  *
- * GATING. `requireGrant('inventory.view')` refuses the route — a cleaner holds
- * no inventory grant at all and lands on the dashboard with the missing grant
- * named. The membership's scope is pushed into the query, `can()` narrows again
- * per row, and `redact()` removes the unit cost and the stock value without
- * `expense.view`: a housekeeping supervisor counts the linen and orders more,
- * and what the business paid per set is not her screen.
+ * NEVER AN INVENTORY WIDGET WHEN THE MODULE IS OFF. `capabilities.enabled` is
+ * checked before anything renders — the summary tiles included, because those
+ * are the ones most likely to be left in by accident. An organization in `off`
+ * gets `ModuleOff`, which is a real page saying that bookings, preparation, the
+ * cleaner's plan, the laundry calculation and finance are untouched.
  *
- * THE TEAM-SCOPED READER SEES NOTHING, HONESTLY. `inventory_items` has no
- * `team_id`, so a team-scoped membership — the handyman, who does hold
- * `inventory.view` — reaches no row, exactly as `can()` would say. That is not
- * the same statement as "this business has no stock", and the empty state says
- * which of the two it is.
+ * A FAILURE HERE IS NOT A FAILURE OF THE PRODUCT. If the stock read fails the
+ * page still renders, with a sentence saying so and saying what is unaffected.
+ * A stack trace on the inventory screen must not read as "the system is down".
+ *
+ * GATING. `requireGrant('inventory.view')` refuses the route; a cleaner holds
+ * no inventory grant at all and lands on the dashboard with the grant named.
+ * The membership's property scope is pushed into every read below it.
  */
-export default async function InventoryPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  const [actor, context, params] = await Promise.all([
+export default async function InventoryDashboard() {
+  const [actor, context] = await Promise.all([
     requireGrant('inventory.view'),
     shellContext(),
-    searchParams,
   ])
 
   if (!context || context.status !== 'ready') return null
 
-  const filter = parseInventoryFilter(params)
-  const propertyId =
-    context.selectedPropertyId === ALL_PROPERTIES
-      ? null
-      : context.selectedPropertyId
-  const propertyName =
-    propertyId === null
-      ? null
-      : (context.properties.find((property) => property.id === propertyId)
-          ?.name ?? null)
+  const stock = await loadInventoryModule({ actor, context, horizonDays: 14 })
 
-  const maySeeMoney = holdsGrant(actor, 'expense.view')
-
-  let items: readonly InventoryListItem[] = []
-  let movements: readonly InventoryMovement[] = []
-  let reachable = 0
-  let failure: ReturnType<typeof toSafeResponse> | null = null
-
-  try {
-    const db = await createClient()
-    ;[items, reachable] = await Promise.all([
-      listInventoryItems({ db, actor, propertyId, filter }),
-      countInventoryItems({ db, actor, propertyId }),
-    ])
-    // Read for the items already on screen, so a reader whose scope reaches
-    // four items sees four items' worth of history and not somebody else's.
-    movements = await listMovements(db, actor.organizationId, items)
-  } catch (cause) {
-    failure = toSafeResponse(cause, crypto.randomUUID())
+  if (!stock.capabilities.enabled) {
+    return (
+      <ModuleOff
+        provisioned={stock.provisioned}
+        mayConfigure={holdsGrant(actor, 'inventory.edit')}
+      />
+    )
   }
 
-  const short = itemsBelowReorderPoint(items)
-  // `undefined` rather than zero when the values were redacted: a reader who
-  // may not see one item's cost may certainly not see the sum of ten. A single
-  // withheld row withholds the total, because a partial sum presented as a
-  // total is worse than no total.
-  const totalValue = items.some((item) => item.valueAgorot === undefined)
-    ? undefined
-    : sumAgorot(items.map((item) => item.valueAgorot ?? 0))
-  const emptyReason = resolveEmptyReason({
-    visibleCount: items.length,
-    totalCount: reachable,
-    hasActiveFilters: hasActiveInventoryFilter(filter, propertyId),
-  })
+  const { forecast, items } = stock
+  const critical = forecast.alerts.filter(
+    (alert) => alert.severity === 'critical' && alert.daysAhead <= 0,
+  )
+  const projected = forecast.alerts.filter(
+    (alert) => alert.severity === 'critical' && alert.daysAhead > 0,
+  )
+  const warnings = forecast.alerts.filter(
+    (alert) => alert.severity === 'warning',
+  )
+  const low = belowReorderPoint(items)
+  const inLaundry =
+    totalInState(items, 'laundry') + totalInState(items, 'dirty')
+  const returning = totalInState(items, 'returning')
+  const damaged = totalInState(items, 'damaged') + totalInState(items, 'lost')
+  const owned = items.reduce((sum, item) => sum + totalOwned(item), 0)
+  const upcoming = significantRows(forecast.rows, { today: stock.today })
+    .filter((row) => row.required > 0)
+    .slice(0, 12)
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
@@ -130,132 +96,207 @@ export default async function InventoryPage({
           מלאי
         </h1>
         <p className="max-w-prose text-muted-foreground">
-          {propertyName
-            ? `הפריטים והכמויות ב״${propertyName}״.`
-            : 'הפריטים והכמויות בכל הנכסים שבטווח שלך.'}{' '}
-          הכמות נגזרת מתנועות המלאי ואינה נכתבת ידנית, כך שהיא תמיד מסתדרת עם מה
-          שנרשם.
+          המצב היום ומה צפוי בשבועיים הקרובים. התחזית הולכת יום אחר יום ואינה
+          מסכמת סכומים — פריטים חוזרים בין הזמנות, ולכן ״יש חמישים ונדרשים
+          שלושים״ אינה תשובה.
         </p>
       </header>
 
-      <InventoryFilterBar
-        path="/inventory"
-        states={INVENTORY_STATES}
-        selected={filter.state}
-      />
-
-      {failure ? (
-        <ActionError error={failure.error} />
-      ) : emptyReason ? (
-        <EmptyState
-          illustration={emptyReason === 'no_results' ? 'search' : 'unit'}
-          title={
-            emptyReason === 'no_results'
-              ? 'אין פריטים שתואמים לסינון'
-              : reachable === 0
-                ? 'אין פריטי מלאי בטווח שלך'
-                : 'אין פריטי מלאי'
-          }
-          body={
-            emptyReason === 'no_results'
-              ? `הסינון הפעיל (${describeInventoryFilter(
-                  filter,
-                  INVENTORY_STATE_LABEL,
-                  propertyName,
-                )}) לא מחזיר תוצאות. פריטים אחרים קיימים במערכת — שינוי או ניקוי הסינון יחזיר אותם.`
-              : 'כאן יופיעו הדברים הפיזיים שהעסק רץ עליהם — מצעים, מגבות, מתכלים וציוד — עם הכמות, מה מהם משוריין כבר, איפה הם נמצאים ומתי נספרו. מלאי משויך לנכס וליחידה, ולא לצוות, ולכן חברות בצוות בלבד אינה מגיעה אליו.'
-          }
-          action={
-            emptyReason === 'no_results' ? (
-              <Button href="/inventory" variant="secondary">
-                נקה סינון
-              </Button>
-            ) : null
-          }
-        />
-      ) : (
-        <>
-          {short.length > 0 && (
-            <p
-              // `alert`: a shortage noticed when a cleaner opens an empty
-              // cupboard has already cost a changeover.
-              role="alert"
-              className="rounded-lg border border-warning bg-surface px-4 py-3 text-sm text-foreground"
-            >
-              <span className="font-semibold text-warning">
-                {short.length === 1
-                  ? 'פריט אחד מתחת לנקודת ההזמנה'
-                  : `${short.length} פריטים מתחת לנקודת ההזמנה`}
-              </span>{' '}
-              — {short.map((item) => item.name).join(', ')}. יש להזמין לפני
-              ההחלפה הבאה.
-            </p>
-          )}
-
-          <dl className="grid gap-4 rounded-xl border border-border bg-surface p-4 shadow-soft sm:grid-cols-3 sm:p-5">
-            <div className="flex flex-col gap-1">
-              <dt className="text-xs text-muted-foreground">פריטים</dt>
-              <dd className="font-display text-xl font-bold tabular-nums text-foreground">
-                {items.length}
-              </dd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <dt className="text-xs text-muted-foreground">משוריין</dt>
-              <dd className="font-display text-xl font-bold tabular-nums text-foreground">
-                {items.reduce(
-                  (total, item) => total + item.quantityReserved,
-                  0,
-                )}
-              </dd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <dt className="text-xs text-muted-foreground">שווי המלאי</dt>
-              <dd className="font-display text-xl font-bold text-foreground">
-                <Money agorot={totalValue} emphasis />
-              </dd>
-            </div>
-            <p className="text-xs text-muted-foreground sm:col-span-3">
-              {maySeeMoney
-                ? 'השווי הוא סיכום השורות המוצגות בלבד, לפי עלות היחידה שנרשמה. פריט שלא נרשמה לו עלות אינו נספר בשווי.'
-                : 'שווי המלאי אינו זמין לך. הרשאת "צפייה בהוצאות" היא שפותחת אותו, ובלעדיה השדה ריק ולא אפס.'}
-            </p>
-          </dl>
-
-          <InventoryTable
-            items={items}
-            caption="פריטי המלאי שבטווח שלך, ממוינים לפי מיקום ואז לפי שם"
-          />
-
-          {items.length === INVENTORY_PAGE_SIZE && (
-            <p
-              role="status"
-              className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
-            >
-              מוצגים {INVENTORY_PAGE_SIZE} פריטים. צמצם את הסינון כדי לראות
-              פריטים נוספים.
-            </p>
-          )}
-
-          <section className="flex flex-col gap-3">
-            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">
-              תנועות אחרונות
-            </h2>
-            <p className="max-w-prose text-sm text-muted-foreground">
-              יומן התנועות הוא רשומה שאי אפשר לערוך: תיקון נרשם כתנועה נגדית ולא
-              כמחיקה, כך ש״חשבנו שיש ארבעים ויש שלושים ושתיים״ נשאר רשום.
-            </p>
-
-            {movements.length === 0 ? (
-              <p className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-                לא נרשמו תנועות לפריטים המוצגים. הכמויות שלמעלה הן הכמויות
-                שנקבעו כשהפריטים נוצרו.
-              </p>
-            ) : (
-              <MovementList movements={movements} />
-            )}
-          </section>
-        </>
+      {stock.failure !== null && (
+        <p
+          role="alert"
+          className="rounded-lg border border-danger bg-surface px-4 py-3 text-sm text-foreground"
+        >
+          {stock.failure}
+        </p>
       )}
+
+      <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Tile
+          label="מחסור עכשיו"
+          value={critical.length}
+          tone={critical.length > 0 ? 'danger' : 'quiet'}
+          note="פריטים שחסרים היום"
+        />
+        <Tile
+          label="מחסור צפוי"
+          value={projected.length}
+          tone={projected.length > 0 ? 'warning' : 'quiet'}
+          note="נמצא לפני שקרה"
+        />
+        <Tile
+          label="מתחת לנקודת הזמנה"
+          value={low.length}
+          tone={low.length > 0 ? 'warning' : 'quiet'}
+          note="לפי הספירה הנוכחית"
+        />
+        <Tile
+          label="בכביסה ובדרך"
+          value={inLaundry + returning}
+          tone="quiet"
+          note={`${returning} כבר בדרך חזרה`}
+        />
+      </dl>
+
+      <dl className="grid gap-4 sm:grid-cols-3">
+        <Tile
+          label="פגום או אבוד"
+          value={damaged}
+          tone={damaged > 0 ? 'warning' : 'quiet'}
+          note="קיים ולא שמיש, או נעלם"
+        />
+        <Tile
+          label="פריטים"
+          value={items.length}
+          tone="quiet"
+          note={`${owned} יחידות בסך הכול`}
+        />
+        <Tile
+          label="התראות מלאי ביטחון"
+          value={warnings.length}
+          tone="quiet"
+          note="מספיק, אבל יורד מתחת לרצפה"
+        />
+      </dl>
+
+      <nav aria-label="מסכי מלאי" className="flex flex-wrap gap-3">
+        <Button href="/inventory/forecast">תחזית מלאה</Button>
+        <Button href="/inventory/shortages" variant="secondary">
+          מחסורים
+        </Button>
+        <Button href="/inventory/items" variant="secondary">
+          פריטים
+        </Button>
+        <Button href="/inventory/entry" variant="ghost">
+          הוספת מלאי
+        </Button>
+        <Button href="/inventory/adjustments" variant="ghost">
+          תנועות ותיקונים
+        </Button>
+      </nav>
+
+      {forecast.alerts.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display text-lg font-bold text-foreground">
+            מה דורש טיפול
+          </h2>
+          <ShortageList alerts={forecast.alerts.slice(0, 5)} />
+          {forecast.alerts.length > 5 && (
+            <Button href="/inventory/shortages" variant="ghost" size="sm">
+              עוד {forecast.alerts.length - 5} התראות
+            </Button>
+          )}
+        </section>
+      )}
+
+      {low.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display text-lg font-bold text-foreground">
+            מתחת לנקודת ההזמנה
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {low.map((item) => (
+              <li
+                key={item.itemId}
+                className="rounded-lg border border-warning bg-surface px-4 py-3 text-sm"
+              >
+                <span className="font-semibold text-foreground">
+                  {item.label}
+                </span>{' '}
+                — נקיים {item.onHandClean}, נקודת הזמנה {item.minQuantity}
+                {item.parLevel !== null && `, רמת יעד ${item.parLevel}`}.
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-lg font-bold text-foreground">
+          ביקוש קרוב
+        </h2>
+        {upcoming.length === 0 ? (
+          <p className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+            {stock.capabilities.forecast
+              ? 'אין שריון מלאי להזמנות בשבועיים הקרובים. הביקוש מגיע משריונים, ולכן הזמנה שלא שוריין לה מלאי אינה מופיעה כאן — וזו אמירה על השריון ולא על ההזמנה.'
+              : 'התחזית אינה פעילה בארגון הזה. הספירה, נקודת ההזמנה וההתראה על מלאי נמוך ממשיכות לעבוד.'}
+          </p>
+        ) : (
+          <ForecastTable
+            rows={upcoming}
+            today={stock.today}
+            propertyNames={stock.propertyNames}
+            caption="הימים הקרובים שבהם נדרש מלאי, עם החשבון המלא"
+          />
+        )}
+      </section>
+
+      {items.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display text-lg font-bold text-foreground">
+            איפה המלאי נמצא
+          </h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            הכמות שמופיעה כ״נקי״ היא רק מה שבמצב זמין. ארבעים סטים בטנדר של
+            המכבסה הם רכוש העסק ואינם התשובה ליום שישי, ולכן הם נספרים בנפרד.
+          </p>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {items.slice(0, 12).map((item) => (
+              <li
+                key={item.itemId}
+                className="rounded-xl border border-border bg-surface p-4 text-sm shadow-soft"
+              >
+                <p className="font-semibold text-foreground">{item.label}</p>
+                <p className="text-muted-foreground">
+                  נקי {item.onHandClean} · משוריין {item.reservedTotal} · סך
+                  הכול {totalOwned(item)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {/* Hebrew names, never the enum. `out_of_service` rendered
+                      at a housekeeper is the failure the label map exists to
+                      prevent. */}
+                  {Object.entries(item.byState)
+                    .filter(([, quantity]) => (quantity ?? 0) > 0)
+                    .map(
+                      ([state, quantity]) =>
+                        `${INVENTORY_STATE_LABEL[state as InventoryState]}: ${quantity}`,
+                    )
+                    .join(' · ')}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function Tile({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string
+  value: number
+  note: string
+  tone: 'danger' | 'warning' | 'quiet'
+}) {
+  const colour =
+    tone === 'danger'
+      ? 'text-danger'
+      : tone === 'warning'
+        ? 'text-warning'
+        : 'text-foreground'
+
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-4 shadow-soft">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className={`font-display text-2xl font-bold tabular-nums ${colour}`}>
+        {value}
+      </dd>
+      <p className="text-xs text-muted-foreground">{note}</p>
     </div>
   )
 }
