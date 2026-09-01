@@ -243,7 +243,11 @@ playwright.config.ts                          qa                   write
 # ── Screen groups. Each owns its routes, its components, its demo data. ───
 src/app/(app)/guests/**                       guests               write
 src/components/guests/**                      guests               write
-src/lib/demo/dataset-bookings.ts              guests               write
+# dataset-bookings claimed for this wave: 0028 added five columns to
+# `bookings`, and a seeded row without them makes every preparation plan page
+# fail for seeded stays while working for one created through the form — the
+# worst shape a fixture gap can take.
+src/lib/demo/dataset-bookings.ts              coordinator          write
 
 src/app/(app)/tasks/**                        operations           write
 src/app/(app)/maintenance/**                  operations           write

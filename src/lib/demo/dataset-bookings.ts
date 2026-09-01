@@ -1003,6 +1003,34 @@ export const BOOKING_ROWS: DemoRow[] = BOOKINGS.map((booking, index) => ({
   adults: booking.adults,
   children: booking.children,
   infants: booking.infants,
+
+  // ── The party, as 0028 stores it ─────────────────────────────────────────
+  //
+  // Without these five the preparation plan page fails for every *seeded*
+  // booking — `loadBooking` reads columns the demo row does not carry — while
+  // working perfectly for one created through the form, which is the worst
+  // shape a demo gap can take: it looks like a bug in the feature rather than
+  // an absence in the fixture.
+  //
+  // Derived rather than invented. `couples` is floor(adults / 2), which is what
+  // the booking form itself defaults to and pre-fills for the desk to correct;
+  // it satisfies `bookings_couples_within_adults` by construction. Every other
+  // field takes the column's own default, because a fixture that guesses at a
+  // guest's request is fabricating one.
+  couples: Math.floor(booking.adults / 2),
+  extra_beds_requested: 0,
+  cots_requested: booking.infants,
+  // Two stays carry a real event type and a real request, so the demo can show
+  // what an event template and a special request actually do. Chosen by index
+  // rather than at random: a dataset whose shape moved between renders would
+  // produce a plan that disagrees with the screen it was drawn beside.
+  event_type: index % 9 === 3 ? 'shabbat' : 'accommodation',
+  special_requests:
+    index % 9 === 3
+      ? 'שתי מיטות תינוק, אחת בחדר ההורים. מגיעים אחרי כניסת שבת.'
+      : booking.infants > 0
+        ? 'מיטת תינוק בבקשה.'
+        : null,
   source: booking.source,
   source_channel:
     booking.source === 'airbnb'
