@@ -158,10 +158,22 @@ src/lib/demo/dataset-store.ts                 store                write
 src/app/(app)/store/**                        store                write
 src/components/store/**                       store                write
 
-# The guest portal. It does not exist yet — nothing in `src/app` serves a
-# guest holding a `bookings.guest_token`. Claimed here so the store worker
-# can build the shell it needs without a second owner appearing in it later.
-src/app/g/**                                  store                write
+# The guest portal.
+#
+# The shell, the token and the session belong to the coordinator: a guest link
+# is a capability URL, the second specification made the portal the home of the
+# whole guest journey rather than of one module, and two workers building the
+# same layout is the collision this register exists to prevent. The store owns
+# its own section inside it and nothing else.
+src/app/g/[token]/store/**                    store                write
+src/lib/guest-portal/**                       coordinator          write
+supabase/migrations/0033_guest_link.sql       coordinator          write
+# The frame, and only the frame. Two workers build inside this portal and both
+# need the same answer to "whose booking is this"; resolving the token twice is
+# how one section eventually shows a guest somebody else's stay.
+src/app/g/[token]/layout.tsx                  coordinator          write
+src/lib/supabase/proxy.ts                     coordinator          write
+src/app/g/**                                  guest-journey        write
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
 src/lib/agents/**                             authz                write

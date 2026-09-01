@@ -37,6 +37,16 @@ const PUBLIC_PREFIXES = [
   '/forgot-password',
   '/reset-password',
   '/auth', // the callback route handler
+  // The guest portal. A guest has no account and never will — the whole
+  // design of `bookings.guest_token` is that possession of a capability is
+  // the authorization. Redirecting them to /sign-in would send somebody who
+  // is legitimately holding their own booking to a form they cannot complete.
+  //
+  // Public here means only "the proxy does not demand a session". The route
+  // still refuses every invalid, revoked and expired token, and the database
+  // still hands `anon` nothing but one hand-picked projection of one booking
+  // — see migration 0033.
+  '/g',
 ]
 
 /** Auth screens a signed-in visitor should be moved off. */
