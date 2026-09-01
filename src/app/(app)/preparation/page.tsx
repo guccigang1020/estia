@@ -50,9 +50,9 @@ export const metadata: Metadata = { title: 'הכנת יחידות' }
  *      inspection and the maintenance that stops a unit being lettable, with a
  *      due time, a unit, a status and the people on them.
  *
- * THE EMPTY PLAN IS A FACT, NOT A FAILURE. `buildPlan` is a write and no
- * screen calls it yet, so a business can have a full board of real cleaning
- * jobs and no computed plan behind any of them. That is said in words — see
+ * THE EMPTY PLAN IS A FACT, NOT A FAILURE. A business can have a full board of
+ * real cleaning jobs and no computed plan behind any of them, and until it
+ * presses the button on `/preparation/[bookingId]` it will. That is said in words — see
  * `WorkPlanPanel` — and is rendered *only* on the success path. A read that
  * threw renders `ActionError` with a correlation id instead, because "nothing
  * is scheduled" and "we could not find out" must never look alike.

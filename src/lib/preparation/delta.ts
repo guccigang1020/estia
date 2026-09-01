@@ -24,6 +24,7 @@
 import {
   PLAN_SECTIONS,
   type PlanDelta,
+  type PlanItem,
   type PlanSectionKey,
   type PlanVersion,
   type RequirementChange,
@@ -202,11 +203,28 @@ export function describeDelta(delta: PlanDelta): string {
  * fifteen to ten with twelve already done is ten of ten, not twelve of ten.
  * A section previously marked complete drops back to `in_progress` when its
  * requirement grew — it is, in plain fact, no longer complete.
+ *
+ * ── Three things survive a recomputation, and each for its own reason ─────
+ *
+ * **Progress**, because resetting it would punish the worker for a change
+ * somebody else made. **A manual adjustment**, because a supervisor who said
+ * "the fifteenth mattress is not in the building" is still right after the
+ * booking grows by one guest, and silently reinstating the engine's figure
+ * would undo a decision nobody was told had been undone. **The
+ * acknowledgement**, deliberately *not* advanced: it keeps the version it was
+ * given, so a plan that has just moved to a newer version raises the notice
+ * again for every section already under way. That last one is the mechanism —
+ * carrying it forward would make every change silent, which is the failure
+ * this whole module was written against.
  */
 export function carryProgress(previous: WorkPlan, next: WorkPlan): WorkPlan {
   const done = new Map<
     string,
-    { completedCount: number; photoIds: readonly string[] }
+    {
+      completedCount: number
+      photoIds: readonly string[]
+      adjustment: PlanItem['adjustment']
+    }
   >()
 
   for (const section of previous.sections) {
@@ -214,6 +232,7 @@ export function carryProgress(previous: WorkPlan, next: WorkPlan): WorkPlan {
       done.set(`${section.key} ${item.category} ${item.itemId}`, {
         completedCount: item.completedCount,
         photoIds: item.photoIds,
+        adjustment: item.adjustment ?? null,
       })
     }
   }
@@ -236,6 +255,7 @@ export function carryProgress(previous: WorkPlan, next: WorkPlan): WorkPlan {
           ...item,
           completedCount: Math.min(item.requiredCount, carried.completedCount),
           photoIds: carried.photoIds,
+          adjustment: carried.adjustment,
         }
       })
 
@@ -257,6 +277,8 @@ export function carryProgress(previous: WorkPlan, next: WorkPlan): WorkPlan {
         status,
         assignedToUserId: before?.assignedToUserId ?? null,
         override: before?.status === 'completed' ? before.override : null,
+        // Kept at the version it was given rather than advanced. See above.
+        acknowledgedVersion: before?.acknowledgedVersion ?? null,
       }
     }),
   }

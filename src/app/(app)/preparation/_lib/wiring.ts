@@ -21,10 +21,10 @@
  * that performs no write would be wiring a mechanism nobody can observe
  * working.
  *
- * That is also why `loadBooking` and `loadAllocationContexts` never fire from
- * that screen. Both still raise `SchemaNotProvisionedError` — see the header
- * of `persistence/preparation.ts` — and both are reached only from
- * `buildPlan`, which is a write.
+ * `loadBooking` is no longer blocked — 0028 gave it the columns it was waiting
+ * for — but it still never fires from the board, because the board reads plans
+ * and tasks and never a booking. `loadAllocationContexts` does still raise
+ * `SchemaNotProvisionedError`; it is reached only from the profit statement.
  *
  * ── The policy screen does write, so it gets the whole pipeline ───────────
  *
@@ -52,7 +52,9 @@ import {
 } from '@/lib/persistence'
 import {
   createCatalogueOperations,
+  createPreparationOperations,
   type CatalogueOperations,
+  type PreparationOperations,
 } from '@/lib/preparation'
 import type { OperationServices } from '@/lib/service'
 import { createClient } from '@/lib/supabase/server'
@@ -102,6 +104,51 @@ function transactionRunner(db: Db): {
     }
 
     return { transactions: sequentialUnitOfWork(db), atomic: false }
+  }
+}
+
+export type PlanWiring = {
+  db: Db
+  ports: SupabasePreparationPorts
+  operations: PreparationOperations
+  services: OperationServices
+  /** False when the writes are sequential rather than one transaction. */
+  atomic: boolean
+}
+
+/**
+ * The plan write side, which the board deliberately does not get.
+ *
+ * `preparationWiring` above reads and nothing else, so it needs no unit of
+ * work. Building a plan is a different act: it captures a snapshot, writes it,
+ * writes the plan, records an audit event and raises `preparation.calculated`,
+ * and those have to commit together or not at all — a plan whose frozen
+ * ruleset did not land is a plan that will silently re-cost itself against
+ * next month's catalogue, which is the one property the whole snapshot
+ * mechanism exists to guarantee.
+ *
+ * `createPreparationOperations` and not `createCatalogueOperations`: the two
+ * port lists are separate on purpose, so operations that must only ever read a
+ * frozen snapshot cannot reach a catalogue writer.
+ */
+export async function planWiring(): Promise<PlanWiring> {
+  const db = await createClient()
+  const ports = new SupabasePreparationPorts(db)
+  const { transactions, atomic } = transactionRunner(db)
+
+  return {
+    db,
+    ports,
+    operations: createPreparationOperations(ports),
+    services: {
+      audit: new SupabaseAuditWriter(db),
+      idempotency: new SupabaseIdempotencyStore(db),
+      transactions,
+      onEventError(error) {
+        console.error('[preparation] domain event delivery failed', error)
+      },
+    },
+    atomic,
   }
 }
 

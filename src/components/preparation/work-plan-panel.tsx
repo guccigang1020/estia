@@ -3,11 +3,13 @@
  *
  * ── The empty state here is a fact, not a failure ─────────────────────────
  *
- * `work_plans` is written by `buildPlan`, which is a write, and no screen in
- * this product calls it yet. So today every deployment — including the demo,
- * where the table is seeded empty on purpose — has stays with real cleaning
- * jobs and no computed plan behind them. That is an ordinary state with an
- * ordinary explanation, and it is said in those words.
+ * `work_plans` is written by `buildPlan`, and until `/preparation/[bookingId]`
+ * existed nothing called it — so every deployment, the demo included, had
+ * stays with real cleaning jobs and no computed plan behind any of them. That
+ * is still an ordinary state for a business that has not built one yet, and it
+ * is said in those words. What is new is that it is now an *actionable* state:
+ * every stay without a plan carries a link to the screen that can build one,
+ * rather than a paragraph explaining a dead end.
  *
  * What it must never be confused with is a query that threw. A screen that
  * renders nothing because a read failed looks identical to a business with
@@ -30,6 +32,8 @@
  * No `"use client"`: plans in, markup out.
  */
 
+import Link from 'next/link'
+
 import type { PlannedStay } from '@/app/(app)/preparation/_lib/queries'
 import { EmptyState } from '@/components/states/empty-state'
 import { cn } from '@/components/ui/cn'
@@ -47,20 +51,28 @@ export type WorkPlanPanelProps = {
   lookedUp: number
 }
 
+/**
+ * Where one stay's plan lives.
+ *
+ * The same route whether a plan exists or not: with one it renders the plan,
+ * without one it offers to build it. A separate "create" URL would be a second
+ * place for the same stay to live, and the pair would drift.
+ */
+export function planHref(bookingId: string): string {
+  return `/preparation/${bookingId}`
+}
+
 export function WorkPlanPanel({ stays, lookedUp }: WorkPlanPanelProps) {
   const planned = stays.filter((stay) => stay.plan !== null)
+  const unplanned = stays.filter((stay) => stay.plan === null)
 
-  if (planned.length === 0) {
+  if (planned.length === 0 && unplanned.length === 0) {
     return (
       <EmptyState
         illustration="task"
         as="h3"
         title="עוד לא נבנתה תוכנית הכנה מחושבת"
-        body={
-          lookedUp === 0
-            ? 'תוכנית הכנה נבנית לשהייה מתוך חוקי הנכס — כמה מצעים, כמה מגבות, כמה זמן וכמה אנשים. אין כרגע שהייה בטווח שאפשר לבדוק עבורה, ולכן אין מה להציג. זו אינה תקלה.'
-            : `תוכנית הכנה נבנית לשהייה מתוך חוקי הנכס — כמה מצעים, כמה מגבות, כמה זמן וכמה אנשים — ונשמרת יחד עם צילום קפוא של החוקים, כדי שתוכנית מחודש שעבר לא תשתנה כשמחירון משתנה היום. נבדקו ${lookedUp} שהיות בטווח ולאף אחת מהן עוד לא נבנתה תוכנית. המשימות שלמטה קיימות ומוקצות כרגיל.`
-        }
+        body="תוכנית הכנה נבנית לשהייה מתוך חוקי הנכס — כמה מצעים, כמה מגבות, כמה זמן וכמה אנשים. אין כרגע שהייה בטווח שאפשר לבדוק עבורה, ולכן אין מה להציג. זו אינה תקלה."
       />
     )
   }
@@ -70,6 +82,38 @@ export function WorkPlanPanel({ stays, lookedUp }: WorkPlanPanelProps) {
       {planned.map((stay) => (
         <PlanCard key={stay.bookingId} stay={stay} />
       ))}
+
+      {/* Stays with jobs on the board and no computed plan behind them. Listed
+          rather than hidden, and each one links to the screen that can build
+          it. `buildPlan` is a write and nothing called it until that screen
+          existed, which is exactly why every deployment had an empty
+          `work_plans` and an empty state that never resolved. */}
+      {unplanned.length > 0 && (
+        <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-soft">
+          <h4 className="font-display text-base font-bold text-foreground">
+            שהיות בלי תוכנית מחושבת
+          </h4>
+          <p className="text-sm text-muted-foreground">
+            תוכנית הכנה נבנית לשהייה מתוך חוקי הנכס ונשמרת יחד עם צילום קפוא של
+            החוקים, כדי שתוכנית מחודש שעבר לא תשתנה כשהמדיניות משתנה היום. נבדקו{' '}
+            {lookedUp} שהיות בטווח, ו
+            {unplanned.length === 1 ? 'לאחת מהן' : `-${unplanned.length} מהן`}{' '}
+            עוד לא נבנתה תוכנית. המשימות שלמטה קיימות ומוקצות כרגיל.
+          </p>
+          <ul className="flex flex-col gap-1">
+            {unplanned.map((stay) => (
+              <li key={stay.bookingId}>
+                <Link
+                  href={planHref(stay.bookingId)}
+                  className="text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  בנה תוכנית הכנה לשהייה זו ←
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }
@@ -84,7 +128,12 @@ function PlanCard({ stay }: { stay: PlannedStay }) {
     <article className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-soft">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="font-display text-base font-bold text-foreground">
-          תוכנית הכנה · גרסה {plan.version}
+          <Link
+            href={planHref(stay.bookingId)}
+            className="underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            תוכנית הכנה · גרסה {plan.version}
+          </Link>
         </h4>
         <p className="text-sm text-muted-foreground">
           {/* From the domain, over the stored sections — not the column, so

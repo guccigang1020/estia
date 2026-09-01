@@ -21,6 +21,7 @@
  * time at all for a wedding.
  */
 
+import { finalCount } from './adjustment'
 import type {
   PlanSectionKey,
   ReadinessAlert,
@@ -127,14 +128,12 @@ function sectionLine(
 
   for (const section of sections) {
     for (const item of section.items) {
-      required += item.requiredCount
+      required += finalCount(item)
       // A section a supervisor closed counts as done. The override is recorded
       // on the section; pretending the items are still outstanding would leave
       // the house permanently un-ready after a legitimate decision.
       completed +=
-        section.status === 'completed'
-          ? item.requiredCount
-          : item.completedCount
+        section.status === 'completed' ? finalCount(item) : item.completedCount
     }
   }
 

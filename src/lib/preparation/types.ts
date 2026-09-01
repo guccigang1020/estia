@@ -531,19 +531,52 @@ export interface InventoryCheck {
 
 // ── The work plan ─────────────────────────────────────────────────────────
 
+/**
+ * A person changing a computed quantity, without erasing what was computed.
+ *
+ * Three values, never two. `PlanItem.requiredCount` stays exactly what the
+ * rules produced, `delta` is what a person added or removed, and the final
+ * figure is their sum — derived by `finalCount` rather than stored. Storing
+ * only the final number is the shape that loses the argument three weeks
+ * later: nobody can then tell whether the house needed thirty towels because
+ * the engine said so or because somebody typed it, and the engine's own figure
+ * is gone.
+ *
+ * The reason is mandatory, for the same reason `SectionOverride.reason` is.
+ */
+export interface QuantityAdjustment {
+  /** Signed. Positive adds to the calculated figure, negative removes. */
+  delta: number
+  /** In the adjuster's own words. Hebrew, and never empty. */
+  reason: string
+  byUserId: string
+  at: string
+}
+
 export interface PlanItem {
   id: string
   itemId: string
   label: string
   category: RequirementCategory
   unit: RequirementUnit
-  /** The count the cleaner sees as `0 / 15`. */
+  /**
+   * What the rules computed, and only that. A manual change lands on
+   * `adjustment` beside it and never on this number, which is what keeps the
+   * arithmetic explainable after somebody has intervened.
+   */
   requiredCount: number
   completedCount: number
   requiresPhoto: boolean
   photoIds: readonly string[]
   instructions: string | null
   minutes: number
+  /**
+   * A manual change to the calculated figure, or `null` where there is none.
+   *
+   * Optional so that every plan stored before adjustments existed still parses
+   * and every caller that builds a `PlanItem` still compiles.
+   */
+  adjustment?: QuantityAdjustment | null
 }
 
 export interface PlanSection {
@@ -558,6 +591,16 @@ export interface PlanSection {
   assignedToUserId: string | null
   /** Present when a supervisor closed the section with items outstanding. */
   override: SectionOverride | null
+  /**
+   * The plan version whose changes the person working this section has seen.
+   *
+   * `null` — and absent — means nothing has been acknowledged, which is the
+   * right answer for a section nobody has started. It matters only where work
+   * is already under way: a booking that grew from twenty-five to thirty while
+   * the beds were being made must show "ההזמנה השתנתה — ההכנה עודכנה" until
+   * the person holding it says they have seen it. See `needsAcknowledgement`.
+   */
+  acknowledgedVersion?: number | null
 }
 
 /**
@@ -960,6 +1003,43 @@ export interface PreparationBooking {
   /** ISO instant. Drives the readiness countdown. */
   arrivalAt: string
   priceLines: readonly PriceLine[]
+  /**
+   * What the guest asked for, in their own words. Hebrew free text.
+   *
+   * On the booking rather than in `extras` because it is not countable: "שתי
+   * מיטות תינוק, אחת בחדר ההורים" is an instruction to a person and not a
+   * quantity for an engine. It reaches the cleaner — see `cleaner-view.ts` —
+   * because a request nobody doing the work ever reads is a request that was
+   * not honoured.
+   *
+   * Optional, so a caller written before the column existed still compiles.
+   */
+  specialRequests?: string | null
+  /**
+   * The sleeping shape the desk recorded, as asked for by name.
+   *
+   * Distinct from `SleepingAllocation`, which is an *output* — the beds the
+   * house turned out to be short of. A booking may want a cot in a house with
+   * a spare bedroom, and the two numbers are allowed to disagree.
+   */
+  sleeping?: SleepingShape
+}
+
+/**
+ * Couples, extra beds and cots, exactly as the desk typed them.
+ *
+ * Structurally the same three numbers as `SleepingRequest` in
+ * `src/lib/booking/party.ts`, and deliberately not an import of it: this
+ * module is the engine's vocabulary and the booking domain's must be free to
+ * grow a field without changing what preparation reads. `couples` is recorded
+ * and, today, consumed by nothing — `allocateSleeping` lays four adults out
+ * identically whether they are two couples or four colleagues — which is a
+ * real gap in the allocator's input and is stated here rather than hidden.
+ */
+export interface SleepingShape {
+  couples: number
+  extraBedsRequested: number
+  cotsRequested: number
 }
 
 // ── Catalogue and snapshot ────────────────────────────────────────────────

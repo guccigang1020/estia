@@ -216,7 +216,7 @@ describe('a booking taken with the party split three ways', () => {
     expect(draft.guestCount).toBe(7)
   })
 
-  it('lands a real row, and the adapter still writes the party as adults', async () => {
+  it('lands a real row carrying the party the desk actually typed', async () => {
     const before = database().rows('bookings').length
     const { db } = await attemptTheBooking()
 
@@ -227,14 +227,16 @@ describe('a booking taken with the party split three ways', () => {
     const written = db.rows('bookings')[db.rows('bookings').length - 1]
 
     // And here is the handoff, stated as numbers rather than as a paragraph.
-    // `SupabaseBookingRepository.insertBooking` writes `adults: draft.guestCount,
-    // children: 0, infants: 0` — the mapping it has had since it was written,
-    // in a file this work does not own. The party the desk typed is 4/2/1; the
-    // row says 7/0/0. The whole count round-trips, which is why nothing is
-    // visibly broken and why the split has gone nowhere.
-    expect(Number(written.adults)).toBe(7)
-    expect(Number(written.children)).toBe(0)
-    expect(Number(written.infants)).toBe(0)
+    // This assertion used to read 7/0/0 and to explain why: the adapter wrote
+    // `adults: draft.guestCount, children: 0, infants: 0`, so the desk typed
+    // 4/2/1 and the row said seven adults and nobody else. The whole count
+    // round-tripped, which is exactly why nothing looked broken while the
+    // preparation engine was being handed a party with no children and no
+    // babies. 0028 and `insertBooking` closed it, and this is the positive
+    // statement that used to be a description of the gap.
+    expect(Number(written.adults)).toBe(4)
+    expect(Number(written.children)).toBe(2)
+    expect(Number(written.infants)).toBe(1)
   })
 
   /**

@@ -28,6 +28,7 @@
  */
 
 import { BusinessRuleError } from '../errors'
+import { finalCount } from './adjustment'
 import { sectionRequirements } from './requirements'
 import {
   PLAN_SECTIONS,
@@ -286,7 +287,7 @@ export function recordProgress(plan: WorkPlan, input: ProgressInput): WorkPlan {
           ? {
               ...item,
               completedCount: Math.min(
-                item.requiredCount,
+                finalCount(item),
                 Math.max(0, input.completedCount),
               ),
               photoIds: input.photoIds
@@ -331,7 +332,7 @@ export function outstandingItems(
     .map((item) => ({
       itemId: item.itemId,
       label: item.label,
-      missing: Math.max(0, item.requiredCount - item.completedCount),
+      missing: Math.max(0, finalCount(item) - item.completedCount),
       missingPhoto: item.requiresPhoto && item.photoIds.length === 0,
     }))
     .filter((item) => item.missing > 0 || item.missingPhoto)

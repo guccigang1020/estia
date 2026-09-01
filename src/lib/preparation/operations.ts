@@ -27,6 +27,7 @@
  */
 
 import { BusinessRuleError, NotFoundError } from '../errors'
+import { acknowledgeSection, adjustItem } from './adjustment'
 import {
   defineOperation,
   s,
@@ -43,7 +44,7 @@ import { checkInventory } from './inventory'
 import { assemblePlan } from './preview'
 import { computeRequirements } from './requirements'
 import { captureSnapshot } from './snapshot'
-import { completeSection } from './work-plan'
+import { completeSection, outstandingItems } from './work-plan'
 import {
   PLAN_SECTIONS,
   type EventPnL,
@@ -146,6 +147,36 @@ export interface SectionResult {
   outstanding: number
 }
 
+export interface AdjustItemInput {
+  bookingId: string
+  section: PlanSectionKey
+  itemId: string
+  /** What the person says the house actually needs. */
+  finalCount: number
+}
+
+/** The three numbers, kept apart. Never collapsed into the one that is final. */
+export interface AdjustmentResult {
+  plan: WorkPlan
+  section: PlanSectionKey
+  itemId: string
+  label: string
+  /** What the rules produced, and what stays on the item. */
+  calculated: number
+  /** Signed. What the person moved it by. */
+  adjustment: number
+  /** Their sum, and what the cleaner works to. */
+  final: number
+}
+
+export interface CancellationResult {
+  plan: WorkPlan
+  /** Work that was still outstanding and has been stopped. */
+  cancelledSections: readonly PlanSectionKey[]
+  /** Work that was already done and is kept as history. */
+  keptSections: readonly PlanSectionKey[]
+}
+
 // ── The operations ────────────────────────────────────────────────────────
 
 export interface PreparationOperations {
@@ -164,6 +195,17 @@ export interface PreparationOperations {
     { bookingId: string; section: PlanSectionKey },
     BookingEntity,
     SectionResult
+  >
+  adjustPlanItem: Operation<AdjustItemInput, BookingEntity, AdjustmentResult>
+  acknowledgePlanSection: Operation<
+    { bookingId: string; section: PlanSectionKey },
+    BookingEntity,
+    SectionResult
+  >
+  cancelPlan: Operation<
+    { bookingId: string },
+    BookingEntity,
+    CancellationResult
   >
   calculateEventProfit: Operation<
     { bookingId: string },
@@ -527,6 +569,240 @@ export function createPreparationOperations(
   })
 
   /**
+   * Changing a computed quantity by hand.
+   *
+   * `checklist.manage` and not `task.update`, deliberately. Ticking an item
+   * off is saying what happened; overruling the engine is saying what the
+   * house needs, and the person who decides the second is the person who
+   * writes the policy. A reason is mandatory, and the calculated figure is
+   * kept beside the change rather than replaced — see `adjustment.ts`.
+   *
+   * The revision advances, which is the point rather than bookkeeping: an
+   * adjustment changes what a worker is being asked for, so every started
+   * section goes back to needing an acknowledgement exactly as a recomputation
+   * does. `work_plan_versions` then holds both figures, so "who changed the
+   * towel count and what did they say" is answerable three weeks later.
+   */
+  const adjustPlanItem = defineOperation<
+    AdjustItemInput,
+    BookingEntity,
+    AdjustmentResult
+  >({
+    name: 'preparation.item.adjust',
+    permission: 'checklist.manage',
+    resourceType: 'preparation_plan',
+    requiresVersion: true,
+    requiresReason: true,
+    input: s.object({
+      bookingId: s.uuid({ label: 'הזמנה' }),
+      section: s.enumOf(PLAN_SECTIONS, { label: 'מקטע' }),
+      itemId: s.string({ label: 'פריט', min: 1 }),
+      finalCount: s.number({ label: 'כמות', min: 0, integer: true }),
+    }),
+    loadResource: ({ input }) => loadPlanEntity(input.bookingId),
+
+    rule: ({ entity }) => assertPlan(entity),
+
+    execute: async ({ entity, input, context, now, tx }) => {
+      const previous = entity.plan as WorkPlan
+
+      const adjusted = adjustItem(previous, {
+        section: input.section,
+        itemId: input.itemId,
+        finalCount: input.finalCount,
+        // The pipeline has already refused a missing reason — `requiresReason`
+        // — so this fallback is unreachable and is here for the type rather
+        // than as a second policy.
+        reason: context.reason ?? '',
+        byUserId: context.actor.userId,
+        at: now.toISOString(),
+      })
+
+      const plan: WorkPlan = { ...adjusted, version: previous.version + 1 }
+      await ports.savePlan(plan, tx)
+
+      const item = plan.sections
+        .find((section) => section.key === input.section)
+        ?.items.find((candidate) => candidate.itemId === input.itemId)
+
+      return {
+        plan,
+        section: input.section,
+        itemId: input.itemId,
+        label: item?.label ?? input.itemId,
+        calculated: item?.requiredCount ?? input.finalCount,
+        adjustment: item?.adjustment?.delta ?? 0,
+        final: input.finalCount,
+      }
+    },
+
+    audit: ({ result, entity, context }) => ({
+      resourceId: result.plan.id,
+      propertyId: entity.booking.propertyId,
+      reason: context.reason ?? null,
+      summary: `${context.auditActor.label} שינתה את "${result.label}" מ-${result.calculated} שחושבו ל-${result.final} בפועל (${signed(result.adjustment)}): ${context.reason ?? ''}`,
+      before: { calculated: result.calculated },
+      after: { final: result.final, adjustment: result.adjustment },
+    }),
+
+    events: ({ result, entity }): readonly PreparationEventDraft[] => [
+      {
+        name: 'preparation.changed',
+        propertyId: entity.booking.propertyId,
+        payload: {
+          planId: result.plan.id,
+          bookingId: entity.booking.id,
+          version: result.plan.version,
+          adjustment: {
+            section: result.section,
+            itemId: result.itemId,
+            calculated: result.calculated,
+            adjustment: result.adjustment,
+            final: result.final,
+          },
+          notifyUserIds: assigneesOf(result.plan, result.section),
+        },
+      },
+    ],
+  })
+
+  /**
+   * "I have seen that the booking changed."
+   *
+   * Deliberately the weakest permission of the five: the person who has to
+   * acknowledge a change is the person already doing the work, and a product
+   * that made them find a supervisor to dismiss a banner is a product where
+   * the banner gets ignored instead.
+   *
+   * The revision does **not** advance. Acknowledging is not a new version of
+   * what the house needs — `tg_work_plans_record_version` writes
+   * `on conflict (plan_id, version) do nothing`, so re-saving at the same
+   * revision records nothing and is safe to repeat.
+   */
+  const acknowledgePlanSection = defineOperation<
+    { bookingId: string; section: PlanSectionKey },
+    BookingEntity,
+    SectionResult
+  >({
+    name: 'preparation.section.acknowledge',
+    permission: 'task.update',
+    resourceType: 'preparation_plan',
+    input: sectionInput,
+    loadResource: ({ input }) => loadPlanEntity(input.bookingId),
+
+    rule: ({ entity }) => assertPlan(entity),
+
+    execute: async ({ entity, input, tx }) => {
+      const plan = acknowledgeSection(entity.plan as WorkPlan, input.section)
+      await ports.savePlan(plan, tx)
+
+      return {
+        plan,
+        section: input.section,
+        overridden: false,
+        outstanding: outstandingOf(plan, input.section),
+      }
+    },
+
+    audit: ({ result, entity, context }) => ({
+      resourceId: result.plan.id,
+      propertyId: entity.booking.propertyId,
+      summary: `${context.auditActor.label} אישרה שראתה את השינוי במקטע "${sectionLabel(result.plan, result.section)}" בגרסה ${result.plan.version}`,
+      after: {
+        section: result.section,
+        acknowledgedVersion: result.plan.version,
+      },
+    }),
+  })
+
+  /**
+   * The stay is off. Stop the work that is left and keep the work that was done.
+   *
+   * ── What this deliberately does not do ────────────────────────────────────
+   *
+   * It does not touch `public.tasks`, and it does not call the laundry, the
+   * stock or the payment module. Those are other people's tables and other
+   * people's rules — whether a linen order already sent to a provider can be
+   * recalled is not a question this file is entitled to answer. What it does
+   * is raise `preparation.changed` with the cancellation on it, which is the
+   * seam those modules subscribe to.
+   *
+   * ── History is preserved rather than deleted ──────────────────────────────
+   *
+   * Completed sections stay completed. A house that was cleaned was cleaned,
+   * the hours were worked and somebody is owed for them, and rewriting that to
+   * `cancelled` because the guest pulled out on the Thursday is the product
+   * lying about labour that happened. Only work still outstanding is stopped.
+   */
+  const cancelPlan = defineOperation<
+    { bookingId: string },
+    BookingEntity,
+    CancellationResult
+  >({
+    name: 'preparation.plan.cancel',
+    permission: 'task.update',
+    resourceType: 'preparation_plan',
+    requiresVersion: true,
+    requiresReason: true,
+    input: s.object({ bookingId: s.uuid({ label: 'הזמנה' }) }),
+    loadResource: ({ input }) => loadPlanEntity(input.bookingId),
+
+    rule: ({ entity }) => assertPlan(entity),
+
+    execute: async ({ entity, tx }) => {
+      const previous = entity.plan as WorkPlan
+      const stopped: PlanSectionKey[] = []
+      const kept: PlanSectionKey[] = []
+
+      const sections = previous.sections.map((section) => {
+        if (section.status === 'completed' || section.status === 'cancelled') {
+          if (section.status === 'completed') kept.push(section.key)
+          return section
+        }
+        stopped.push(section.key)
+        return { ...section, status: 'cancelled' as const }
+      })
+
+      const plan: WorkPlan = {
+        ...previous,
+        sections,
+        version: previous.version + 1,
+      }
+      await ports.savePlan(plan, tx)
+
+      return { plan, cancelledSections: stopped, keptSections: kept }
+    },
+
+    audit: ({ result, entity, context }) => ({
+      resourceId: result.plan.id,
+      propertyId: entity.booking.propertyId,
+      reason: context.reason ?? null,
+      summary: `ההזמנה בוטלה, ולכן ${result.cancelledSections.length} מקטעי הכנה נסגרו כמבוטלים ו-${result.keptSections.length} מקטעים שכבר הושלמו נשמרו כהיסטוריה: ${context.reason ?? ''}`,
+      before: { version: result.plan.version - 1 },
+      after: {
+        version: result.plan.version,
+        cancelled: result.cancelledSections,
+      },
+    }),
+
+    events: ({ result, entity }): readonly PreparationEventDraft[] => [
+      {
+        name: 'preparation.changed',
+        propertyId: entity.booking.propertyId,
+        payload: {
+          planId: result.plan.id,
+          bookingId: entity.booking.id,
+          version: result.plan.version,
+          cancelled: true,
+          cancelledSections: result.cancelledSections,
+          keptSections: result.keptSections,
+          notifyUserIds: assignedUsers(result.plan),
+        },
+      },
+    ],
+  })
+
+  /**
    * The profit statement.
    *
    * Guarded by `report.financial.view` and nothing weaker. The same plan a
@@ -595,11 +871,47 @@ export function createPreparationOperations(
     recomputePlan,
     completePlanSection,
     overridePlanSection,
+    adjustPlanItem,
+    acknowledgePlanSection,
+    cancelPlan,
     calculateEventProfit,
   }
 }
 
 // ── Sentence fragments ────────────────────────────────────────────────────
+
+/** How much of one section is still outstanding. Zero when it has gone. */
+function outstandingOf(plan: WorkPlan, key: PlanSectionKey): number {
+  const section = plan.sections.find((entry) => entry.key === key)
+  return section ? outstandingItems(section).length : 0
+}
+
+/** `+5` / `−2`. Signed, so the direction is readable without the words. */
+function signed(delta: number): string {
+  return delta >= 0 ? `+${delta}` : `−${Math.abs(delta)}`
+}
+
+/** Everybody holding one section, for the notification list. */
+function assigneesOf(
+  plan: WorkPlan,
+  section: PlanSectionKey,
+): readonly string[] {
+  const userId = plan.sections.find(
+    (entry) => entry.key === section,
+  )?.assignedToUserId
+  return userId ? [userId] : []
+}
+
+/** Everybody holding any section of a plan. */
+function assignedUsers(plan: WorkPlan): readonly string[] {
+  return [
+    ...new Set(
+      plan.sections
+        .map((section) => section.assignedToUserId)
+        .filter((userId): userId is string => userId !== null),
+    ),
+  ]
+}
 
 function assertPlan(entity: BookingEntity): void {
   if (entity.plan) return

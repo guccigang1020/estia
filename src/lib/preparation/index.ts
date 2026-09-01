@@ -73,6 +73,37 @@ export {
 } from './delta'
 
 export {
+  CHANGE_NOTICE,
+  acknowledgeSection,
+  adjustItem,
+  adjustedItems,
+  adjustmentDelta,
+  calculatedCount,
+  finalCount,
+  itemOutstanding,
+  needsAcknowledgement,
+  unacknowledgedSections,
+  type AdjustInput,
+} from './adjustment'
+
+export {
+  FACT_BASIS_LABEL,
+  FACT_BASIS_PER,
+  explainRequirement,
+  explanationIndex,
+  type ExplainedSource,
+  type Explanation,
+} from './explain'
+
+export {
+  COT_BED_TYPE_ID,
+  EXTRA_BED_ITEM_ID,
+  NO_SLEEPING_REQUEST,
+  sleepingExtras,
+  type SleepingExtrasInput,
+} from './intake'
+
+export {
   estimateStaffing,
   labourCostOf,
   type StaffingInput,
@@ -122,7 +153,10 @@ export {
 
 export {
   createPreparationOperations,
+  type AdjustItemInput,
+  type AdjustmentResult,
   type BuildPlanResult,
+  type CancellationResult,
   type PreparationOperations,
   type PreparationPorts,
   type RecomputeResult,

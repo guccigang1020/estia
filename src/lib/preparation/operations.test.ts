@@ -733,3 +733,285 @@ describe('the resource the pipeline authorizes against', () => {
     ).rejects.toBeInstanceOf(AuthorizationError)
   })
 })
+
+// ── Adjusting, acknowledging and cancelling ───────────────────────────────
+
+describe('overruling a computed quantity', () => {
+  it('keeps the calculated figure and records who changed it and why', async () => {
+    const w = world()
+    seedPlan(w)
+
+    const outcome = await w.operations.adjustPlanItem.run({
+      request: {
+        input: {
+          bookingId: BOOKING_ID,
+          section: 'towels',
+          itemId: 'bath_towel',
+          finalCount: 30,
+        },
+        expectedVersion: 1,
+      },
+      context: context(['checklist.manage'], {
+        reason: 'ספרתי במחסן ויש שלושים',
+      }),
+      services: w.services,
+    })
+
+    expect(outcome.data.calculated).toBe(25)
+    expect(outcome.data.adjustment).toBe(5)
+    expect(outcome.data.final).toBe(30)
+
+    const item = w.state.plan?.sections
+      .find((section) => section.key === 'towels')
+      ?.items.find((entry) => entry.itemId === 'bath_towel')
+
+    // The engine's own figure is still there. Overwriting it would answer
+    // "how many" and destroy "why".
+    expect(item?.requiredCount).toBe(25)
+    expect(item?.adjustment?.reason).toBe('ספרתי במחסן ויש שלושים')
+    expect(item?.adjustment?.byUserId).toBe(SUPERVISOR)
+  })
+
+  it('says all three numbers in the audit sentence', async () => {
+    const w = world()
+    seedPlan(w)
+
+    await w.operations.adjustPlanItem.run({
+      request: {
+        input: {
+          bookingId: BOOKING_ID,
+          section: 'towels',
+          itemId: 'bath_towel',
+          finalCount: 30,
+        },
+        expectedVersion: 1,
+      },
+      context: context(['checklist.manage'], { reason: 'ספרתי במחסן' }),
+      services: w.services,
+    })
+
+    const summary = w.audit.records[0].summary
+    expect(summary).toContain('25')
+    expect(summary).toContain('30')
+    expect(summary).toContain('+5')
+    expect(summary).toContain('ספרתי במחסן')
+  })
+
+  it('advances the revision, so the people working the section are told', async () => {
+    const w = world()
+    seedPlan(w)
+
+    const outcome = await w.operations.adjustPlanItem.run({
+      request: {
+        input: {
+          bookingId: BOOKING_ID,
+          section: 'towels',
+          itemId: 'bath_towel',
+          finalCount: 30,
+        },
+        expectedVersion: 1,
+      },
+      context: context(['checklist.manage'], { reason: 'סיבה' }),
+      services: w.services,
+    })
+
+    expect(outcome.data.plan.version).toBe(2)
+    expect(outcome.events.map((event) => event.name)).toContain(
+      'preparation.changed',
+    )
+  })
+
+  it('refuses without a reason', async () => {
+    const w = world()
+    seedPlan(w)
+
+    await expect(
+      w.operations.adjustPlanItem.run({
+        request: {
+          input: {
+            bookingId: BOOKING_ID,
+            section: 'towels',
+            itemId: 'bath_towel',
+            finalCount: 30,
+          },
+          expectedVersion: 1,
+        },
+        context: context(['checklist.manage']),
+        services: w.services,
+      }),
+    ).rejects.toBeTruthy()
+  })
+
+  it('is not something the grant to do the work carries', async () => {
+    // Ticking an item off is saying what happened. Overruling the engine is
+    // saying what the house needs, and that is the policy grant.
+    const w = world()
+    seedPlan(w)
+
+    await expect(
+      w.operations.adjustPlanItem.run({
+        request: {
+          input: {
+            bookingId: BOOKING_ID,
+            section: 'towels',
+            itemId: 'bath_towel',
+            finalCount: 30,
+          },
+          expectedVersion: 1,
+        },
+        context: context(['task.complete', 'task.update'], {
+          reason: 'סיבה',
+        }),
+        services: w.services,
+      }),
+    ).rejects.toBeInstanceOf(AuthorizationError)
+  })
+})
+
+describe('acknowledging a change', () => {
+  it('stamps the section with the version the person has seen', async () => {
+    const w = world()
+    const seeded = seedPlan(w)
+
+    // Somebody is halfway through the towels and the plan has moved on.
+    w.state.plan = {
+      ...seeded,
+      version: 2,
+      sections: seeded.sections.map((section) =>
+        section.key === 'towels'
+          ? { ...section, status: 'in_progress' as const }
+          : section,
+      ),
+    }
+
+    const outcome = await w.operations.acknowledgePlanSection.run({
+      request: { input: { bookingId: BOOKING_ID, section: 'towels' } },
+      context: context(['task.update']),
+      services: w.services,
+    })
+
+    const towels = outcome.data.plan.sections.find(
+      (section) => section.key === 'towels',
+    )
+
+    expect(towels?.acknowledgedVersion).toBe(2)
+    // Acknowledging is not a new version of what the house needs.
+    expect(outcome.data.plan.version).toBe(2)
+  })
+})
+
+describe('cancelling the preparation behind a cancelled booking', () => {
+  it('stops the outstanding work and keeps what was already done', async () => {
+    const w = world()
+    const seeded = seedPlan(w)
+
+    // The cleaning is finished; everything else is not.
+    w.state.plan = {
+      ...seeded,
+      sections: seeded.sections.map((section) =>
+        section.key === 'cleaning'
+          ? { ...section, status: 'completed' as const }
+          : section,
+      ),
+    }
+
+    const outcome = await w.operations.cancelPlan.run({
+      request: { input: { bookingId: BOOKING_ID }, expectedVersion: 1 },
+      context: context(['task.update'], { reason: 'האורח ביטל' }),
+      services: w.services,
+    })
+
+    // A house that was cleaned was cleaned. Rewriting that to `cancelled`
+    // because the guest pulled out is the product lying about labour.
+    expect(outcome.data.keptSections).toContain('cleaning')
+    expect(outcome.data.cancelledSections).not.toContain('cleaning')
+
+    const cleaning = outcome.data.plan.sections.find(
+      (section) => section.key === 'cleaning',
+    )
+    expect(cleaning?.status).toBe('completed')
+
+    for (const key of outcome.data.cancelledSections) {
+      const section = outcome.data.plan.sections.find(
+        (entry) => entry.key === key,
+      )
+      expect(section?.status).toBe('cancelled')
+    }
+  })
+
+  it('raises the event the other modules react to, rather than calling them', async () => {
+    const w = world()
+    seedPlan(w)
+
+    const outcome = await w.operations.cancelPlan.run({
+      request: { input: { bookingId: BOOKING_ID }, expectedVersion: 1 },
+      context: context(['task.update'], { reason: 'האורח ביטל' }),
+      services: w.services,
+    })
+
+    const changed = outcome.events.find(
+      (event) => event.name === 'preparation.changed',
+    )
+
+    expect(changed).toBeTruthy()
+    expect(changed?.payload).toMatchObject({ cancelled: true })
+  })
+
+  it('keeps the plan and its history rather than deleting the row', async () => {
+    const w = world()
+    seedPlan(w)
+
+    await w.operations.cancelPlan.run({
+      request: { input: { bookingId: BOOKING_ID }, expectedVersion: 1 },
+      context: context(['task.update'], { reason: 'האורח ביטל' }),
+      services: w.services,
+    })
+
+    expect(w.state.plan).not.toBeNull()
+    // A new revision, so `work_plan_versions` holds both the plan as worked
+    // and the plan as cancelled.
+    expect(w.state.plan?.version).toBe(2)
+  })
+
+  it('refuses without a reason', async () => {
+    const w = world()
+    seedPlan(w)
+
+    await expect(
+      w.operations.cancelPlan.run({
+        request: { input: { bookingId: BOOKING_ID }, expectedVersion: 1 },
+        context: context(['task.update']),
+        services: w.services,
+      }),
+    ).rejects.toBeTruthy()
+  })
+})
+
+describe('a date change', () => {
+  it('moves the stay and recomputes against the same frozen rules', async () => {
+    const w = world()
+    const previous = seedPlan(w)
+
+    // The stay moved a week later. Same booking, same snapshot, new dates.
+    const moved = world({
+      booking: exampleBooking({
+        stay: { checkIn: '2026-09-11', checkOut: '2026-09-13' },
+        arrivalAt: '2026-09-11T14:00:00.000Z',
+      }),
+    })
+    moved.state.snapshot = w.state.snapshot
+    moved.state.plan = previous
+
+    const outcome = await moved.operations.recomputePlan.run({
+      request: { input: { bookingId: BOOKING_ID }, expectedVersion: 1 },
+      context: context(['task.update'], { reason: 'ההזמנה נדחתה בשבוע' }),
+      services: moved.services,
+    })
+
+    expect(outcome.data.plan.version).toBe(2)
+    // The rules the plan is measured by did not move with the dates. That is
+    // the snapshot doing its job: a plan built in September stays a September
+    // plan even when the stay slides.
+    expect(outcome.data.plan.snapshotHash).toBe(previous.snapshotHash)
+  })
+})

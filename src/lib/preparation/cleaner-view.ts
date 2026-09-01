@@ -21,15 +21,44 @@
  * of defence and the explicit projection is the first.
  */
 
-import type { PlanSectionKey, SectionStatus, WorkPlan } from './types'
+import {
+  CHANGE_NOTICE,
+  adjustmentDelta,
+  calculatedCount,
+  finalCount,
+  itemOutstanding,
+  needsAcknowledgement,
+} from './adjustment'
+import type {
+  PlanSectionKey,
+  RequirementUnit,
+  SectionStatus,
+  WorkPlan,
+} from './types'
 
 export interface CleanerItemView {
   itemId: string
   /** Hebrew. What to do. */
   label: string
-  /** The count, shown as `3 / 15`. */
+  /**
+   * The count to work to, shown as `3 / 15`.
+   *
+   * The **final** figure — what the rules produced plus any manual change —
+   * because that is what the house needs and what the person in it is being
+   * asked for. Both halves are beside it, so somebody told the number moved
+   * can see by how much and why.
+   */
   requiredCount: number
+  /** What the rules produced, before anybody intervened. */
+  calculatedCount: number
+  /** Signed. Zero where nobody has changed it. */
+  adjustmentDelta: number
+  /** Why it was changed, in the adjuster's words. Null where it was not. */
+  adjustmentReason: string | null
   completedCount: number
+  /** Still to do, counting the adjustment. */
+  outstanding: number
+  unit: RequirementUnit
   requiresPhoto: boolean
   photoCount: number
   instructions: string | null
@@ -42,6 +71,19 @@ export interface CleanerSectionView {
   /** Sections that have to be finished first, so the order is visible. */
   dependsOn: readonly PlanSectionKey[]
   items: readonly CleanerItemView[]
+  /** Estimated work here. Minutes, never money. */
+  minutes: number
+  /** Items not yet finished. The number the person is working down. */
+  outstanding: number
+  /**
+   * The booking moved and this section is already under way.
+   *
+   * True only where somebody has started: a section nobody has touched has
+   * nothing to un-learn. See `needsAcknowledgement`.
+   */
+  changed: boolean
+  /** A supervisor's words when they closed this section unfinished. */
+  sectionNote: string | null
 }
 
 export interface CleanerPlanView {
@@ -49,12 +91,27 @@ export interface CleanerPlanView {
   version: number
   propertyLabel: string
   unitLabel: string
+  /** The stay's own number, so a person can say which job they mean. */
+  bookingReference: string | null
   /** ISO instant. When the guests arrive — the only deadline that matters. */
   arrivalAt: string
+  /**
+   * When the house has to be ready, where that is earlier than the arrival.
+   *
+   * Null when nobody has set one, and the arrival stands in its place on
+   * screen rather than a blank.
+   */
+  deadlineAt: string | null
   /** How many people are coming. A count, not a value. */
   guestCount: number
+  /** What kind of stay it is, in Hebrew. Null where nobody said. */
+  eventTypeLabel: string | null
+  /** What the guest asked for, in their words. "שתי מיטות תינוק". */
+  specialRequests: string | null
   sections: readonly CleanerSectionView[]
   recommendedStaff: number
+  /** Set when any started section is working from an older version. */
+  changeNotice: string | null
 }
 
 export interface CleanerViewInput {
@@ -63,34 +120,64 @@ export interface CleanerViewInput {
   unitLabel: string
   arrivalAt: string
   guestCount: number
+  /**
+   * Optional so that a caller written before these fields existed keeps
+   * compiling and keeps producing the view it always did.
+   */
+  bookingReference?: string | null
+  deadlineAt?: string | null
+  eventTypeLabel?: string | null
+  specialRequests?: string | null
 }
 
 export function toCleanerView(input: CleanerViewInput): CleanerPlanView {
   const { plan } = input
+
+  const sections = plan.sections.map((section) => {
+    const items = section.items.map((item) => ({
+      itemId: item.itemId,
+      label: item.label,
+      requiredCount: finalCount(item),
+      calculatedCount: calculatedCount(item),
+      adjustmentDelta: adjustmentDelta(item),
+      adjustmentReason: item.adjustment?.reason ?? null,
+      completedCount: item.completedCount,
+      outstanding: itemOutstanding(item),
+      unit: item.unit,
+      requiresPhoto: item.requiresPhoto,
+      photoCount: item.photoIds.length,
+      instructions: item.instructions,
+    }))
+
+    return {
+      key: section.key,
+      label: section.label,
+      status: section.status,
+      dependsOn: section.dependsOn,
+      items,
+      minutes: section.minutes,
+      outstanding: items.filter((item) => item.outstanding > 0).length,
+      changed: needsAcknowledgement(plan, section),
+      sectionNote: section.override?.reason ?? null,
+    }
+  })
 
   return {
     planId: plan.id,
     version: plan.version,
     propertyLabel: input.propertyLabel,
     unitLabel: input.unitLabel,
+    bookingReference: input.bookingReference ?? null,
     arrivalAt: input.arrivalAt,
+    deadlineAt: input.deadlineAt ?? null,
     guestCount: input.guestCount,
+    eventTypeLabel: input.eventTypeLabel ?? null,
+    specialRequests: input.specialRequests ?? null,
     recommendedStaff: plan.recommendedStaff,
-    sections: plan.sections.map((section) => ({
-      key: section.key,
-      label: section.label,
-      status: section.status,
-      dependsOn: section.dependsOn,
-      items: section.items.map((item) => ({
-        itemId: item.itemId,
-        label: item.label,
-        requiredCount: item.requiredCount,
-        completedCount: item.completedCount,
-        requiresPhoto: item.requiresPhoto,
-        photoCount: item.photoIds.length,
-        instructions: item.instructions,
-      })),
-    })),
+    sections,
+    changeNotice: sections.some((section) => section.changed)
+      ? CHANGE_NOTICE
+      : null,
   }
 }
 

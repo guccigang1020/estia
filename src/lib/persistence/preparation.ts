@@ -46,14 +46,18 @@
  */
 
 import { INVENTORY_STATES } from '../contracts/states'
-import type { PriceLine } from '../booking/types'
+import { PROPERTY_TIME_ZONE } from '../booking/dates'
+import { PRICE_LINE_KINDS, type PriceLine } from '../booking/types'
 import type { FixedAllocationInput } from '../preparation/costing'
-import type {
-  PreparationBooking,
-  PreparationCatalogue,
-  PreparationSnapshot,
-  StockLevel,
-  WorkPlan,
+import { sleepingExtras } from '../preparation/intake'
+import {
+  EVENT_TYPES,
+  type PreparationBooking,
+  type PreparationCatalogue,
+  type PreparationSnapshot,
+  type SleepingShape,
+  type StockLevel,
+  type WorkPlan,
 } from '../preparation/types'
 import type { PreparationCataloguePorts } from '../preparation/catalogue'
 import type { PreparationPorts } from '../preparation/operations'
@@ -69,6 +73,7 @@ import {
   asNumber,
   asNumberOrNull,
   asString,
+  asStringOrNull,
   asTimestamp,
   toRow,
   toRows,
@@ -95,6 +100,73 @@ const PLAN_COLUMNS =
   'id, organization_id, property_id, unit_id, booking_id, version, ' +
   'snapshot_hash, sections, critical_path_minutes, recommended_staff, ' +
   'created_at'
+
+/**
+ * The slice of a booking preparation reads. Deliberately not `*`.
+ *
+ * A guest's name, their telephone number and the channel payload are all on
+ * this row and none of them is any of this module's business — see the header
+ * of `PreparationBooking`. Naming the columns is what keeps that true as the
+ * table grows.
+ */
+const PREPARATION_BOOKING_COLUMNS =
+  'id, organization_id, property_id, unit_id, check_in, check_out, ' +
+  'arrival_time, adults, children, infants, couples, extra_beds_requested, ' +
+  'cots_requested, event_type, special_requests'
+
+export interface PreparationPlanContext {
+  /** The number a person quotes on the telephone. */
+  reference: string | null
+  propertyName: string | null
+  unitName: string | null
+}
+
+/** A booking that is not there, or not readable. Never a half-filled object. */
+const EMPTY_PLAN_CONTEXT: PreparationPlanContext = {
+  reference: null,
+  propertyName: null,
+  unitName: null,
+}
+
+/** The earliest a guest could arrive. The safe deadline when nothing is set. */
+const START_OF_DAY = '00:00:00'
+
+/**
+ * A property-local date and time, as a UTC instant.
+ *
+ * `bookings.arrival_time` and `units.check_in_time` are `time` columns with no
+ * zone on them, and the date beside them is a `date`. Composing the two into
+ * an instant needs a zone, and the only correct one is the property's — a
+ * server reading "15:00" as UTC puts a Jerusalem afternoon arrival two or
+ * three hours earlier than it is, and every readiness countdown in the product
+ * is measured from it.
+ *
+ * The offset is asked of `Intl` for that exact day rather than hard-coded,
+ * because Israel changes it twice a year. The one case this gets wrong is a
+ * time inside the hour a clock change skips or repeats, which no guest house
+ * schedules an arrival in.
+ */
+function atLocalTime(date: string, time: string): string {
+  const clock = time.length === 'HH:MM'.length ? `${time}:00` : time.slice(0, 8)
+  return new Date(`${date}T${clock}${offsetOn(date)}`).toISOString()
+}
+
+/** `+03:00` for that date in the property's zone. */
+function offsetOn(date: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PROPERTY_TIME_ZONE,
+    timeZoneName: 'longOffset',
+  }).formatToParts(new Date(`${date}T12:00:00Z`))
+
+  const named = parts.find((part) => part.type === 'timeZoneName')?.value ?? ''
+  const offset = named.replace('GMT', '')
+
+  // `GMT` on its own means UTC, which `Date` will not parse from an empty
+  // suffix. Anything unrecognised falls back to `Z` for the same reason: a
+  // string that does not parse produces `Invalid Date`, and a NaN instant
+  // silently disables every countdown rather than failing loudly.
+  return /^[+-]\d{2}:\d{2}$/.test(offset) ? offset : 'Z'
+}
 
 export class SupabasePreparationPorts
   implements PreparationPorts, PreparationCataloguePorts
@@ -420,28 +492,236 @@ export class SupabasePreparationPorts
     recordWrite(tx, `preparation_snapshots(${bookingId})`)
   }
 
-  // ── Blocked, and not on a table somebody forgot ─────────────────────────
+  // ── The booking a plan is built for ─────────────────────────────────────
 
   /**
-   * Blocked. `bookings` records the stay, not what preparing it involves.
+   * The stay, measured. Unblocked by 0028.
    *
-   * 0021 created the three tables this file was waiting for and deliberately
-   * did not touch `bookings`. `PreparationBooking` needs `eventType`, `extras`
-   * and the sleeping arrangement, and there is no column for any of them —
-   * `metadata` is not one either, because a jsonb blob nothing constrains would
-   * make "this is a wedding" a claim rather than a fact. Returning a booking
-   * with an invented event type would drive a work plan for the wrong kind of
-   * stay, and nobody would notice until the linen ran out.
+   * This port used to raise `SchemaNotProvisionedError`, and the reason it
+   * gave was accurate: `PreparationBooking` carries the event type, the
+   * sleeping request and the extras, and `bookings` had a column for none of
+   * them. 0028 added five — `couples`, `extra_beds_requested`,
+   * `cots_requested`, `event_type` and `special_requests` — and the three
+   * columns the schema has held since 0009 are now written with the party the
+   * desk actually typed rather than with the whole count as adults. So the
+   * facts exist, and this reads them instead of refusing.
+   *
+   * ── What is derived, and from what ────────────────────────────────────
+   *
+   * **`arrivalAt`** is the only computed field, and it is the deadline every
+   * readiness figure is measured against, so it is worth being exact about.
+   * It is the check-in *date* at the booking's own `arrival_time` where the
+   * guest gave one, otherwise the unit's `check_in_time`, otherwise the
+   * property's `default_check_in_time` — the fallback order 0008 set those
+   * columns up in. Resolved in `Asia/Jerusalem`, because a UTC reading of
+   * "three in the afternoon" is hours out and every countdown on every screen
+   * inherits the error.
+   *
+   * **`extras`** are the requested spare beds and cots, made countable by
+   * `sleepingExtras`. That wants the property's own bed catalogue for the
+   * Hebrew label and the setup minutes, which is why the catalogue is read
+   * here; the alternative is a plan line with no duration and a fallback name.
+   * A property with no policy configured yet still gets the lines, without
+   * minutes — `buildPlan` refuses for the missing catalogue a moment later,
+   * and refusing here instead would hide which of the two is really missing.
+   *
+   * **`priceLines`** are read and are frequently empty on purpose:
+   * `booking_price_lines_select` wants `booking.view_price`, which a cleaner
+   * does not hold. They feed the costing engine and nothing a cleaner sees, so
+   * an empty list here is the privacy rule working rather than a gap.
    */
-  async loadBooking(): Promise<PreparationBooking | null> {
-    throw blocked(
-      'preparation columns on public.bookings',
-      'reading the booking a work plan is built for. PreparationBooking ' +
-        'carries the event type, the extras and the sleeping arrangement, and ' +
-        'bookings has a column for none of them — 0021 added the catalogue, ' +
-        'the snapshot and the plan, and deliberately did not touch bookings',
-    )
+  async loadBooking(bookingId: string): Promise<PreparationBooking | null> {
+    const { data, error } = await this.db
+      .from('bookings')
+      .select(PREPARATION_BOOKING_COLUMNS)
+      .eq('id', bookingId)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) return null
+
+    const row = toRow(data)
+    const organizationId = asString(row, 'organization_id')
+    const propertyId = asString(row, 'property_id')
+    const unitId = asString(row, 'unit_id')
+
+    const [catalogue, arrivalAt, priceLines] = await Promise.all([
+      this.loadCatalogue(organizationId, propertyId),
+      this.arrivalInstant(row, propertyId, unitId),
+      this.loadPriceLines(bookingId),
+    ])
+
+    const adults = asNumber(row, 'adults')
+    const children = asNumber(row, 'children')
+    const infants = asNumber(row, 'infants')
+
+    const sleeping: SleepingShape = {
+      couples: asNumber(row, 'couples'),
+      extraBedsRequested: asNumber(row, 'extra_beds_requested'),
+      cotsRequested: asNumber(row, 'cots_requested'),
+    }
+
+    return {
+      id: bookingId,
+      organizationId,
+      propertyId,
+      unitId,
+      stay: {
+        checkIn: asIsoDate(row, 'check_in'),
+        checkOut: asIsoDate(row, 'check_out'),
+      },
+      // Every head, infants included — the number the stay was priced and its
+      // capacity checked against. `allocateSleeping` is handed this and will
+      // therefore lay out a bed for a baby. That is a known gap in
+      // `SleepingAllocationInput`, which takes `{ guests, configuration,
+      // bedTypes }` and has nowhere to be told which of them sleep in a cot;
+      // subtracting the infants here instead would make the fire count and the
+      // bed count disagree, which is the worse of the two errors.
+      guests: adults + children + infants,
+      adults,
+      children,
+      eventType: asEnum(row, 'event_type', EVENT_TYPES),
+      extras: sleepingExtras({
+        sleeping,
+        extraBedTypeId:
+          catalogue?.propertyConfiguration.extraSleepingBedTypeId ?? null,
+        bedTypes: catalogue?.bedTypes ?? [],
+      }),
+      arrivalAt,
+      priceLines,
+      specialRequests: asStringOrNull(row, 'special_requests'),
+      sleeping,
+    }
   }
+
+  /**
+   * What the plan screen needs and the engine has no business carrying.
+   *
+   * The property's and the unit's Hebrew names and the booking's own
+   * reference. `PreparationBooking` deliberately holds none of them — its own
+   * header says a type that could carry a guest's phone number eventually
+   * does — so they are fetched beside it rather than smuggled onto it.
+   *
+   * Every field is nullable and a name that does not come back stays `null`.
+   * Row level security may refuse the unit or the property to this reader, and
+   * a truncated uuid under a heading that says "יחידה" is worse than nothing.
+   */
+  async loadPlanContext(bookingId: string): Promise<PreparationPlanContext> {
+    const { data, error } = await this.db
+      .from('bookings')
+      .select('id, reference, property_id, unit_id')
+      .eq('id', bookingId)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) return EMPTY_PLAN_CONTEXT
+
+    const row = toRow(data)
+
+    const [propertyName, unitName] = await Promise.all([
+      this.nameOf('properties', asStringOrNull(row, 'property_id')),
+      this.nameOf('units', asStringOrNull(row, 'unit_id')),
+    ])
+
+    return {
+      reference: asStringOrNull(row, 'reference'),
+      propertyName,
+      unitName,
+    }
+  }
+
+  /** One row's `name`, or `null` where this reader may not see it. */
+  private async nameOf(
+    table: string,
+    id: string | null,
+  ): Promise<string | null> {
+    if (id === null) return null
+
+    const { data, error } = await this.db
+      .from(table)
+      .select('id, name')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error) throw error
+    return data ? asStringOrNull(toRow(data), 'name') : null
+  }
+
+  /**
+   * The booking's price lines, for the costing engine.
+   *
+   * Empty for a reader without `booking.view_price`, which is most readers of
+   * a preparation screen and every cleaner. See the header.
+   */
+  private async loadPriceLines(
+    bookingId: string,
+  ): Promise<readonly PriceLine[]> {
+    const { data, error } = await this.db
+      .from('booking_price_lines')
+      .select('kind, label, amount_agorot, quantity, line_date, sort_order')
+      .eq('booking_id', bookingId)
+      .order('sort_order', { ascending: true })
+
+    if (error) throw error
+
+    return toRows(data).map((row) => ({
+      kind: asEnum(row, 'kind', PRICE_LINE_KINDS),
+      label: asString(row, 'label'),
+      amount: asNumber(row, 'amount_agorot'),
+      quantity: asNumber(row, 'quantity'),
+      date: asStringOrNull(row, 'line_date'),
+    }))
+  }
+
+  /**
+   * When the guests actually turn up, as an instant.
+   *
+   * The booking's own `arrival_time` first — a guest who said they are coming
+   * at nine in the evening is the entire reason that column exists — then the
+   * unit's, then the property's default. A deployment where none of the three
+   * is readable falls back to the start of the property-local day, which is
+   * the earliest possible arrival and therefore the safest deadline to work
+   * to: it makes the house look late rather than making it look ready.
+   */
+  private async arrivalInstant(
+    row: Row,
+    propertyId: string,
+    unitId: string,
+  ): Promise<string> {
+    const checkIn = asIsoDate(row, 'check_in')
+
+    const stated = asStringOrNull(row, 'arrival_time')
+    if (stated !== null) return atLocalTime(checkIn, stated)
+
+    const unit = await this.db
+      .from('units')
+      .select('id, check_in_time')
+      .eq('id', unitId)
+      .maybeSingle()
+
+    if (unit.error) throw unit.error
+    const unitTime = unit.data
+      ? asStringOrNull(toRow(unit.data), 'check_in_time')
+      : null
+    if (unitTime !== null) return atLocalTime(checkIn, unitTime)
+
+    const property = await this.db
+      .from('properties')
+      .select('id, default_check_in_time')
+      .eq('id', propertyId)
+      .maybeSingle()
+
+    if (property.error) throw property.error
+    const propertyTime = property.data
+      ? asStringOrNull(toRow(property.data), 'default_check_in_time')
+      : null
+
+    return atLocalTime(checkIn, propertyTime ?? START_OF_DAY)
+  }
+
+  // ── Blocked, and not on a table somebody forgot ─────────────────────────
 
   /**
    * Blocked. These are measurements of a month, and nothing measures it.

@@ -61,13 +61,38 @@
  * always has one, so this always succeeds — it just costs a round trip that a
  * non-null draft field would not.
  *
- * **`guestCount` versus `adults`/`children`/`infants`.** The domain counts
- * heads; the schema separates them, and the separation is what drives extra-
- * guest pricing and occupancy limits. A single count is written entirely to
- * `adults` and read back as the sum of all three, which round-trips a booking
- * this adapter created and *under*-reports nothing — but a booking created
- * through a future UI that fills all three will come back to the domain as one
- * number, losing the split.
+ * ── The party is now written, and this is what changed ───────────────────
+ *
+ * This adapter used to write `adults: draft.guestCount, children: 0,
+ * infants: 0`: the desk typed four adults, two children and one infant, and
+ * the row said seven and nothing. The whole count round-tripped — `hydrate`
+ * reads the sum — so nothing looked broken, and the preparation engine was
+ * fed a party with no children and no babies. A baby is the case that makes
+ * the split load-bearing: they need no sleeping place and they need a cot, and
+ * a seven-adult booking buys a bed nobody sleeps in and fetches no cot.
+ *
+ * 0028 added the five columns the intake had nowhere to put — `couples`,
+ * `extra_beds_requested`, `cots_requested`, `event_type` and
+ * `special_requests` — so the desk's answers are now stored as given.
+ *
+ * **`draft.party` is optional and the fallback is documented, not invented.**
+ * A caller older than the split supplies only `guestCount`, and
+ * `legacyParty(guestCount)` in `src/lib/booking/party.ts` is the whole-party-
+ * as-adults mapping this file used to hard-code. It is imported rather than
+ * repeated, so the day the fallback should change there is one place to change
+ * it.
+ *
+ * **Three CHECK constraints are refused here before the database sees them.**
+ * `bookings_couples_within_adults` (`couples * 2 <= adults`),
+ * `bookings_special_requests_length` and the non-negative counts. `assertParty`
+ * is the same function the booking form validates with, called again on the
+ * way to the write — so a caller that skipped the form meets a Hebrew sentence
+ * naming the field, and never a constraint name.
+ *
+ * **`special_requests` is not behind `booking.note.internal`.** It is readable
+ * exactly like `guest_notes`, on purpose: "שתי מיטות תינוק" is an instruction
+ * to whoever prepares the room, and a request the cleaner cannot read is a
+ * request that will not be honoured.
  */
 
 import type {
@@ -81,6 +106,13 @@ import type {
   UnitAvailabilityRules,
 } from '../booking/availability'
 import type { HoldDraft } from '../booking/holds'
+import {
+  DEFAULT_EVENT_TYPE,
+  SPECIAL_REQUESTS_MAX,
+  assertParty,
+  legacyParty,
+  type SleepingRequest,
+} from '../booking/party'
 import type { BookingSnapshot } from '../booking/state-machine'
 import {
   BOOKING_SOURCES,
@@ -90,7 +122,7 @@ import {
   type Hold,
   type PriceLine,
 } from '../booking/types'
-import { ConflictError, NotFoundError } from '../errors'
+import { ConflictError, NotFoundError, ValidationError } from '../errors'
 import type { TransactionHandle } from '../service'
 import type { Db, Row } from './client'
 import { throwWriteError } from './errors'
@@ -121,9 +153,10 @@ import { clientFor, recordWrite } from './transaction'
  */
 const BOOKING_COLUMNS =
   'id, organization_id, property_id, unit_id, guest_id, reference, status, ' +
-  'check_in, check_out, adults, children, infants, source, source_channel, ' +
-  'agent_user_id, agency_id, campaign_id, referral_id, total_agorot, ' +
-  'created_by, version, guests(full_name)'
+  'check_in, check_out, arrival_time, adults, children, infants, couples, ' +
+  'extra_beds_requested, cots_requested, event_type, special_requests, ' +
+  'source, source_channel, agent_user_id, agency_id, campaign_id, ' +
+  'referral_id, total_agorot, created_by, version, guests(full_name)'
 
 const PRICE_LINE_COLUMNS =
   'kind, label, amount_agorot, quantity, line_date, sort_order'
@@ -131,6 +164,52 @@ const PRICE_LINE_COLUMNS =
 const HOLD_COLUMNS =
   'id, organization_id, unit_id, check_in, check_out, reason, ' +
   'held_by_user_id, expires_at, released_at, converted_to_booking_id'
+
+/**
+ * Nobody asked for anything, which is what the three columns default to.
+ *
+ * Stated rather than left to the database defaults for the reason the event
+ * type is: a draft that carries a sleeping request and one that does not
+ * should produce the same row when the request is empty, so that comparing two
+ * bookings never turns up a difference that is really an absence.
+ */
+const NO_SLEEPING_REQUESTED: SleepingRequest = {
+  couples: 0,
+  extraBedsRequested: 0,
+  cotsRequested: 0,
+}
+
+/**
+ * The guest's words, or nothing at all.
+ *
+ * Empty and whitespace-only both become `null`. The column is nullable and a
+ * row holding `''` would render as a special-request block containing a blank
+ * line, which reads as "they asked for something we lost".
+ */
+function normaliseRequests(value: string | null | undefined): string | null {
+  const trimmed = (value ?? '').trim()
+  return trimmed.length === 0 ? null : trimmed
+}
+
+/**
+ * `bookings_special_requests_length`, refused before the database refuses it.
+ *
+ * `SPECIAL_REQUESTS_MAX` is imported from the booking domain rather than
+ * repeated, so the form, this adapter and the column cannot end up disagreeing
+ * about how long a paragraph may be.
+ */
+function assertRequestLength(value: string | null): void {
+  if (value !== null && value.length > SPECIAL_REQUESTS_MAX) {
+    throw new ValidationError([
+      {
+        field: 'specialRequests',
+        code: 'too_long',
+        message: `אורך מרבי הוא ${SPECIAL_REQUESTS_MAX} תווים.`,
+        label: 'בקשות מיוחדות',
+      },
+    ])
+  }
+}
 
 export class SupabaseBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
@@ -310,6 +389,19 @@ export class SupabaseBookingRepository implements BookingRepository {
     tx: TransactionHandle,
   ): Promise<BookingSnapshot> {
     const db = clientFor(tx, this.db)
+
+    // The party as the desk recorded it, or the documented fallback for a
+    // caller that predates the split. Never a guess made here.
+    const party = draft.party ?? legacyParty(draft.guestCount)
+    const sleeping = draft.sleeping ?? NO_SLEEPING_REQUESTED
+    const specialRequests = normaliseRequests(draft.specialRequests)
+
+    // The same rules the form checks, checked again on the way to the write.
+    // 0028's `bookings_couples_within_adults` would otherwise refuse three
+    // couples among four adults with a constraint name nobody can act on.
+    assertParty(party, sleeping)
+    assertRequestLength(specialRequests)
+
     const propertyId =
       draft.propertyId ?? (await this.propertyForUnit(db, draft))
     const guestId = await this.createGuest(db, draft)
@@ -324,12 +416,21 @@ export class SupabaseBookingRepository implements BookingRepository {
         status: draft.status,
         check_in: draft.checkIn,
         check_out: draft.checkOut,
-        // The whole party as adults. See the header: the port carries one
-        // number and the schema wants three, and inventing a split would be
-        // this adapter guessing at how many of them are children.
-        adults: draft.guestCount,
-        children: 0,
-        infants: 0,
+        // The three columns the schema has held since 0009, filled with the
+        // three numbers the desk typed rather than with one of them.
+        adults: party.adults,
+        children: party.children,
+        infants: party.infants,
+        // The five 0028 added. `event_type` is the enum mirroring
+        // `EVENT_TYPES`; the default is the plain stay, and it is stated here
+        // rather than left to the column default so that a draft carrying an
+        // explicit `accommodation` and a draft carrying nothing produce the
+        // same row.
+        couples: sleeping.couples,
+        extra_beds_requested: sleeping.extraBedsRequested,
+        cots_requested: sleeping.cotsRequested,
+        event_type: draft.eventType ?? DEFAULT_EVENT_TYPE,
+        special_requests: specialRequests,
         source: draft.attribution.source,
         source_channel: draft.attribution.sourceChannel,
         agent_user_id: draft.attribution.agentUserId,

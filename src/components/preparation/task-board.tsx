@@ -156,6 +156,21 @@ function TaskRow({
             השהייה שאליה המשימה שייכת
           </Link>
         )}
+
+        {/* The plan is a different link from the stay, offered on different
+            terms. `/bookings/…` is the guest, the dates and the money and
+            needs `booking.view`; the preparation plan is the work, needs only
+            `task.view`, and carries neither a name nor a price. So the person
+            holding this job is given the plan and not the stay — the privacy
+            rule stated as two links rather than as one withheld. */}
+        {task.bookingId !== null && (
+          <Link
+            href={`/preparation/${task.bookingId}`}
+            className="text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            תוכנית ההכנה לשהייה
+          </Link>
+        )}
       </div>
     </article>
   )

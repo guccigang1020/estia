@@ -20,8 +20,8 @@
  * a cleaner opens the product to see.
  *
  * A plan without tasks is a plan nobody has been given; tasks without a plan
- * are what the product looks like today, because `work_plans` is written by
- * `buildPlan` and nothing has called it yet. Both states are ordinary, and the
+ * are what the product looked like everywhere until `/preparation/[bookingId]`
+ * called `buildPlan` for the first time. Both states are ordinary, and the
  * screen says which one it is in rather than rendering the same blank for
  * both.
  *
@@ -268,9 +268,8 @@ export type PlannedStay = {
  * bookings table to find its plans would show nothing at all to the one person
  * the plans are written for.
  *
- * `loadSnapshot` is only asked for where a plan exists, so a product with no
- * plans — which is every deployment today, because `buildPlan` is a write and
- * no screen calls it yet — costs one query per stay and no more.
+ * `loadSnapshot` is only asked for where a plan exists, so a business that has
+ * built none yet costs one query per stay and no more.
  */
 export async function loadPlansForTasks(
   ports: SupabasePreparationPorts,
