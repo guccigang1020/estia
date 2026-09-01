@@ -295,18 +295,107 @@ describe('the catalogue, the snapshot and the plan', () => {
   })
 })
 
-describe('what preparation still cannot read', () => {
-  it('refuses a booking rather than inventing an event type', async () => {
-    // 0021 added the catalogue, the snapshot and the plan and deliberately
-    // did not touch `bookings`. A plan built for the wrong kind of stay is
-    // not noticed until the linen runs out.
-    const ports = new SupabasePreparationPorts(new FakeSupabaseClient().asDb())
+describe('SupabasePreparationPorts.loadBooking', () => {
+  const BOOKING_ROW = {
+    id: 'book-1',
+    organization_id: 'org-a',
+    property_id: 'prop-a',
+    unit_id: 'unit-a',
+    check_in: '2026-05-10',
+    check_out: '2026-05-12',
+    arrival_time: '16:30:00',
+    adults: 4,
+    children: 2,
+    infants: 1,
+    couples: 2,
+    extra_beds_requested: 1,
+    cots_requested: 2,
+    event_type: 'shabbat',
+    special_requests: 'שתי מיטות תינוק',
+  }
 
-    const failure = await caught(ports.loadBooking())
-    expect(failure).toBeInstanceOf(SchemaNotProvisionedError)
-    expect(failure.message).toContain('event type')
+  function client(overrides: Record<string, unknown> = {}) {
+    return new FakeSupabaseClient({
+      responses: {
+        bookings: { data: { ...BOOKING_ROW, ...overrides } },
+        preparation_catalogues: { data: null },
+        booking_price_lines: { data: [] },
+        units: { data: null },
+        properties: { data: null },
+      },
+    })
+  }
+
+  it('reads the party the desk typed, rather than the whole count as adults', async () => {
+    // The assertion that used to stand here said this port *refuses*, because
+    // `bookings` carried no event type, no sleeping request and no extras.
+    // 0028 added the five columns and `SupabaseBookingRepository` now writes
+    // the real split, so the refusal is gone and this is what replaced it.
+    const booking = await new SupabasePreparationPorts(
+      client().asDb(),
+    ).loadBooking('book-1')
+
+    expect(booking?.adults).toBe(4)
+    expect(booking?.children).toBe(2)
+    // Every head, infants included: the number the stay was priced against.
+    expect(booking?.guests).toBe(7)
+    expect(booking?.eventType).toBe('shabbat')
+    expect(booking?.sleeping).toEqual({
+      couples: 2,
+      extraBedsRequested: 1,
+      cotsRequested: 2,
+    })
   })
 
+  it('carries the special request through, because a cleaner has to read it', async () => {
+    const booking = await new SupabasePreparationPorts(
+      client().asDb(),
+    ).loadBooking('book-1')
+
+    expect(booking?.specialRequests).toBe('שתי מיטות תינוק')
+  })
+
+  it('turns the requested beds and cots into countable extras', async () => {
+    const booking = await new SupabasePreparationPorts(
+      client().asDb(),
+    ).loadBooking('book-1')
+
+    expect(booking?.extras.map((extra) => extra.itemId)).toEqual([
+      'extra_bed',
+      'cot',
+    ])
+    // No catalogue is configured here, so nothing claims to know how long a
+    // cot takes. Understating the estimate is the honest direction.
+    expect(booking?.extras.every((extra) => extra.minutesPerUnit === 0)).toBe(
+      true,
+    )
+  })
+
+  it('resolves the arrival in the property time zone, not in UTC', async () => {
+    // May is summer time in Israel, so 16:30 local is 13:30Z. Reading the
+    // `time` column as UTC would put the deadline three hours early and every
+    // readiness countdown in the product inherits it.
+    const booking = await new SupabasePreparationPorts(
+      client().asDb(),
+    ).loadBooking('book-1')
+
+    expect(booking?.arrivalAt).toBe('2026-05-10T13:30:00.000Z')
+  })
+
+  it('is null for a booking that is not there', async () => {
+    const empty = new FakeSupabaseClient({
+      responses: { bookings: { data: null } },
+    })
+
+    const booking = await new SupabasePreparationPorts(
+      empty.asDb(),
+    ).loadBooking('missing')
+
+    expect(booking).toBeNull()
+  })
+})
+
+describe('what preparation still cannot read', () => {
   it('refuses allocation contexts rather than deciding what counts as occupied', async () => {
     // What is missing is the rule, not the storage. Whether a cancelled
     // booking is a booking and whether revenue is gross or net are business

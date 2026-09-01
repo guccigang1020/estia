@@ -68,9 +68,19 @@ export const GRANT_CAPABILITY: Partial<Record<Grant, string>> = {
   'incident.view': 'צפייה בתקלות',
   'integration.manage': 'ניהול החיבורים למערכות חיצוניות',
   'inventory.view': 'צפייה במלאי',
+  'inventory.edit': 'עריכת פריטי מלאי',
+  'inventory.import': 'ייבוא מלאי',
   'invoice.view': 'צפייה בחשבוניות',
   'lead.view': 'צפייה בלידים',
   'message.view': 'צפייה בתיבת ההודעות',
+  'order.view': 'צפייה בהזמנות מהחנות',
+  // Not "ניהול תשלומים": this grant decides what a guest must do before a
+  // booking is confirmed, which is a policy and not a payment. Somebody
+  // refused here is being told they cannot change the rule, not that they
+  // cannot take money.
+  'payment.policy_manage': 'הגדרת מדיניות הגבייה',
+  'product.view': 'צפייה בקטלוג המוצרים והשירותים',
+  'product.manage': 'ניהול הקטלוג',
   'organization.billing.manage': 'ניהול החבילה והחיוב',
   'organization.settings.edit': 'עריכת הגדרות הארגון',
   'owner_statement.view': 'צפייה בדוחות בעלי הנכסים',
