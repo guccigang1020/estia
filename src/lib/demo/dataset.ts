@@ -330,10 +330,20 @@ const TABLES: DemoTables = {
         property_id: towels.property_id,
         item_id: towels.id,
         booking_id: null,
-        quantity: 30,
+        // Forty for thirty guests, and two days after the first claim rather
+        // than four. Both were wrong in the first version of this fixture, and
+        // the inventory engine's own tests are what said so: at +4 the first
+        // twenty-five had already landed — a two-day wash lands exactly on the
+        // morning they were wanted — and at thirty the remaining thirty-six
+        // covered it anyway. Either correction alone leaves the screen blank.
+        //
+        // Forty is not a stretched figure for a thirty-person birthday with a
+        // pool: most guests take two. The shortage it produces is four, which
+        // is the arithmetic being right rather than the fixture being loud.
+        quantity: 40,
         status: 'reserved',
-        needed_from: day(4),
-        needed_to: day(6),
+        needed_from: day(3),
+        needed_to: day(5),
         note: 'אירוע יום הולדת — 30 אורחים',
         version: 1,
       },

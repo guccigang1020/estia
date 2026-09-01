@@ -378,3 +378,90 @@ describe('the rows a screen renders', () => {
     expect(result.to).toBe('2026-09-11')
   })
 })
+
+/**
+ * The demo's own numbers, and why the seeded pair does not bite.
+ *
+ * `src/lib/demo/dataset.ts` seeds 61 clean body towels at אחוזת רימונים, a
+ * two-day turnaround, 25 claimed on day +2 and 30 on day +4. That reports no
+ * shortage, and it is *right* to: +2 plus a two-day wash is +4, so the first
+ * twenty-five land on precisely the morning the thirty are wanted, and 61 − 25
+ * is 36, which covers 30 on its own anyway.
+ *
+ * Two independent reasons, and both have to be removed for the demo to show
+ * the behaviour it exists to show. These cases pin the arithmetic so the seed
+ * can be corrected against a proof rather than against an argument.
+ */
+describe('the demo dataset’s towels', () => {
+  const demo = settings({ linenTurnaroundDays: 2, safetyBufferPercent: 10 })
+  const towels: ForecastItem = {
+    ...towelsAt(VILLA_A, 61),
+    label: 'מגבת גוף',
+    parLevel: 60,
+    reservedTotal: 12,
+  }
+
+  function demoRun(lines: readonly DemandLine[]) {
+    return forecastStock({
+      today: FRIDAY,
+      horizonDays: 14,
+      settings: demo,
+      capabilities: capabilitiesFor(demo),
+      items: [towels],
+      demand: lines,
+      returns: [],
+    })
+  }
+
+  const day = (offset: number): string => {
+    const at = new Date(`${FRIDAY}T00:00:00Z`)
+    at.setUTCDate(at.getUTCDate() + offset)
+    return at.toISOString().slice(0, 10)
+  }
+
+  it('reports nothing for the seeded pair, and is right not to', () => {
+    const result = demoRun([
+      demand(day(2), VILLA_A, 25, 'booking-shabbat'),
+      demand(day(4), VILLA_A, 30, 'booking-birthday'),
+    ])
+
+    const fourth = result.rows.find((row) => row.date === day(4))
+    // The wash lands on exactly the morning the second claim is made.
+    expect(fourth?.incoming).toBe(25)
+    expect(fourth?.expectedClean).toBe(61)
+    expect(result.alerts).toHaveLength(0)
+  })
+
+  it('still reports nothing on day +3, because 61 − 25 covers 30', () => {
+    // Moving the claim inside the wash window is necessary and not sufficient.
+    const result = demoRun([
+      demand(day(2), VILLA_A, 25, 'booking-shabbat'),
+      demand(day(3), VILLA_A, 30, 'booking-birthday'),
+    ])
+
+    const third = result.rows.find((row) => row.date === day(3))
+    expect(third?.openingClean).toBe(36)
+    expect(third?.incoming).toBe(0)
+    expect(third?.shortage).toBe(0)
+  })
+
+  it('bites at 40 on day +3: required 40, expected clean 36, shortage 4', () => {
+    const result = demoRun([
+      demand(day(2), VILLA_A, 25, 'booking-shabbat'),
+      demand(day(3), VILLA_A, 40, 'booking-birthday'),
+    ])
+
+    const third = result.rows.find((row) => row.date === day(3))
+    expect(third?.required).toBe(40)
+    expect(third?.expectedClean).toBe(36)
+    expect(third?.shortage).toBe(4)
+
+    const alert = result.alerts.find((one) => one.date === day(3))
+    expect(alert?.severity).toBe('critical')
+    expect(alert?.daysAhead).toBe(3)
+    // Inside the seeded seven-day alert horizon, so it is raised rather than
+    // merely computed.
+    expect(alertsWorthRaising(result.alerts, demo)).toContain(alert)
+    expect(eventNameFor(alert!)).toBe('inventory.projected_shortage')
+  })
+})

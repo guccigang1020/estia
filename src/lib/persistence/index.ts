@@ -154,6 +154,7 @@ export { SupabaseAuditWriter } from './audit'
 export { SupabaseBookingRepository } from './booking'
 export { SupabaseIdempotencyStore } from './idempotency'
 export { SupabaseFinanceRepository } from './finance'
+export { SupabaseInventoryRepository } from './inventory'
 export { SupabaseMetricSource } from './metrics'
 export { SupabasePreparationPorts } from './preparation'
 
