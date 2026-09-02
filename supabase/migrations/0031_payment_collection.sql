@@ -159,7 +159,7 @@ comment on type public.payment_proof_review is
 -- policy referencing a permission code that is not in the catalogue admits
 -- nobody at all — including the owner.
 
-insert into public.permissions (code, kind, permission_group, is_owner_only, sort_order)
+insert into public.permissions (code, kind, category, is_owner_only, sort_order)
 values ('payment.policy_manage', 'action'::public.permission_kind, 'finance', false, 485)
 on conflict (code) do nothing;
 
