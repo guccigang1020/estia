@@ -118,11 +118,21 @@ function inspect(name) {
     text,
   )
   const adapterPattern = new RegExp(`${name}|${name.replace(/s$/, '')}`, 'i')
+  // An adapter counts wherever it lives.
+  //
+  // This used to look only under `src/lib/persistence`, which was a guess
+  // about layout rather than a fact about the product. `laundry` and
+  // `payments` each keep a `repository.ts` inside their own module — a
+  // perfectly ordinary choice — and both therefore read as PARTIAL forever,
+  // under a heading that said they had no screen. What the matrix is asking is
+  // "does this module talk to the database", and a repository beside the
+  // domain answers that just as well as one in the shared directory.
   const hasAdapter =
-    persistenceText.length > 0 &&
-    walk(PERSISTENCE)
-      .filter(isSource)
-      .some((p) => adapterPattern.test(relative(PERSISTENCE, p)))
+    (persistenceText.length > 0 &&
+      walk(PERSISTENCE)
+        .filter(isSource)
+        .some((p) => adapterPattern.test(relative(PERSISTENCE, p)))) ||
+    sources.some((p) => /(repository|adapter|persistence)\.tsx?$/.test(p))
 
   // Anything still refusing for want of a table is not wired, whatever exists.
   const blocked = (persistenceText.match(/SchemaNotProvisionedError/g) ?? [])
@@ -199,9 +209,33 @@ console.log(
   `\npages ${pageFiles.length} · route/action files ${routeFiles.length} · tables in migrations ${tables.size}`,
 )
 
-const unreached = product.filter((r) => r.status !== 'INTEGRATED')
-if (unreached.length > 0) {
-  console.log(
-    `\nnot reachable from any screen: ${unreached.map((r) => r.module).join(', ')}`,
-  )
+// Name the missing layer, per module.
+//
+// This used to print every non-INTEGRATED module under the heading "not
+// reachable from any screen", which was simply a false sentence: `laundry` had
+// seven screens and `payments` had two, and both were reported as having none.
+// They were PARTIAL for an entirely different reason — their repository lives
+// beside the domain rather than in `src/lib/persistence`.
+//
+// A matrix that mislabels is worse than no matrix, because it is the thing
+// completion gets certified against. So each row now says what it actually
+// lacks.
+const incomplete = product.filter((r) => r.status !== 'INTEGRATED')
+if (incomplete.length > 0) {
+  console.log('\nincomplete modules, and what each one lacks:')
+  for (const row of incomplete) {
+    const missing = [
+      row.hasAdapter ? null : 'no persistence adapter',
+      row.usedBySurface || row.usedByRoute ? null : 'no screen or route',
+      // `testFiles` is a count, not an array. Reading `.length` off a number
+      // is `undefined`, so this reported "no tests" for every incomplete
+      // module including one with seven of them — a checker lying in the
+      // first five minutes of its life.
+      row.testFiles > 0 ? null : 'no tests',
+    ].filter(Boolean)
+    console.log(
+      `  ${row.module.padEnd(16)} ${row.status.padEnd(20)} ` +
+        `${missing.join(' · ') || 'see the table above'}`,
+    )
+  }
 }
