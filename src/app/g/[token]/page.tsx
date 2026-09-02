@@ -45,7 +45,20 @@ import {
 import { ReconfirmNotice } from '@/components/guest/reconfirm-notice'
 import { StaySummary } from '@/components/guest/stay-summary'
 import { GuestCollectionPanel } from '@/components/payments/guest-collection-panel'
+import { CancelledPanel } from '@/components/guest-stay/cancelled-panel'
+import { HoldCountdown } from '@/components/guest-stay/hold-countdown'
+import { HoldPanel } from '@/components/guest-stay/hold-panel'
+import { PostStayPanel } from '@/components/guest-stay/post-stay-panel'
 import { buildJourneyView } from '@/lib/guest-journey'
+import { buildPostStayView } from '@/lib/guest-journey/post-stay'
+import {
+  UNDATED_GUEST_HOLD,
+  cancelledPortalView,
+  guestHoldView,
+  guestPortalPhase,
+  redactCancelledJourney,
+  type GuestHold,
+} from '@/lib/guest-journey/stay'
 import { GuestLinkRefusedError } from '@/lib/guest-portal'
 
 import { portalContext } from './_lib/portal'
@@ -70,6 +83,68 @@ export default async function GuestPortalPage({
   }
 
   const { session, journey, collection } = context
+  const now = new Date()
+
+  /**
+   * The portal has five shapes, and only one of them is the booking-in-progress
+   * screen below.
+   *
+   * Branching here rather than inside the sections is the whole point. A
+   * cancelled stay that fell through to the ordinary render would show an
+   * arrival link, a store and a confirm button for a booking that is not
+   * happening — and `redactCancelledJourney` strips the address and the door
+   * code from the data, but nothing would strip a call to action from the
+   * layout. So `cancelled` returns its own panel and never reaches the rest of
+   * this function.
+   *
+   * The ordering inside `guestPortalPhase` is load-bearing and is asserted in
+   * `stay.test.ts`: an early departure — checked out on the third night of
+   * five, so the calendar still says the stay is live — resolves to post-stay,
+   * which is what keeps the wifi password off a house they have left.
+   */
+  const phase = guestPortalPhase(journey, now)
+
+  if (phase === 'cancelled') {
+    return (
+      <CancelledPanel
+        token={token}
+        view={cancelledPortalView(redactCancelledJourney(journey))}
+      />
+    )
+  }
+
+  if (phase === 'hold') {
+    // `releasedAt` and `convertedToBookingId` are permanently null and that is
+    // correct rather than merely tolerated: a hold that was given back or
+    // turned into a booking has a different `bookings.status`, and the phase
+    // above resolves those before this branch runs. The expiry is the only one
+    // of the three the projection has to carry.
+    const hold: GuestHold = {
+      ...UNDATED_GUEST_HOLD,
+      expiresAt: journey.current.holdExpiresAt ?? null,
+    }
+    const view = guestHoldView(journey, hold, now)
+
+    return (
+      <HoldPanel
+        token={token}
+        view={view}
+        bookingVersion={journey.current.bookingVersion}
+      >
+        {view.expiresAt !== null ? (
+          <HoldCountdown
+            expiresAt={view.expiresAt}
+            initialRemainingMs={view.remainingMs ?? 0}
+          />
+        ) : null}
+      </HoldPanel>
+    )
+  }
+
+  if (phase === 'post_stay') {
+    return <PostStayPanel view={buildPostStayView(journey)} />
+  }
+
   const view = buildJourneyView(journey, collection)
 
   const confirmControl = (

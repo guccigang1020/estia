@@ -231,6 +231,19 @@ export type GuestJourneyTerms = {
   currency: string
   cancellationTerms: string | null
   inStay: boolean
+  /**
+   * When a held claim on these dates lapses, or null when there is no
+   * deadline to show.
+   *
+   * Optional on purpose, and the optionality is the sequencing rather than
+   * laxity: `bookings.option_expires_at` exists but `guest_portal_journey`
+   * does not project it yet, so a parser that demanded this field would refuse
+   * every journey until the migration that adds it lands. `guestHoldState`
+   * already answers `undated` for a null, which renders the honest sentence
+   * and no countdown — so absence degrades to the correct screen rather than
+   * to an error.
+   */
+  holdExpiresAt?: string | null
 }
 
 /**
