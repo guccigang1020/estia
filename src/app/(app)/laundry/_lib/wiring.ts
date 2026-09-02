@@ -22,6 +22,7 @@
  * the import graph and fails if it ever does.
  */
 
+import type { Actor } from '@/lib/authz/can'
 import {
   SupabaseAuditWriter,
   SupabaseIdempotencyStore,
@@ -29,14 +30,16 @@ import {
 } from '@/lib/persistence'
 import type { OperationServices } from '@/lib/service'
 import {
+  SupabaseLaundryRepository,
   defineLaundryOrderOperations,
+  laundryOperationPorts,
   type LaundryOperationPorts,
   type LaundryOrderOperations,
+  type LaundryRepository,
 } from '@/lib/laundry'
 import { createClient } from '@/lib/supabase/server'
 
 import { transactionRunner } from '../../_lib/wiring'
-import { loadOrder, propertyNames } from './queries'
 
 export type LaundryWiring = {
   db: Db
@@ -47,62 +50,53 @@ export type LaundryWiring = {
 }
 
 /**
- * The reads the operations perform, bound to this request.
+ * The adapter, bound to this request.
  *
- * `loadOrder` goes through the same query the screens use, so an operation can
- * never act on a row a screen could not have shown — row level security
- * narrows both identically because it is one query.
+ * It lives here rather than in `queries.ts` for a reason worth stating:
+ * `createClient` reaches `src/lib/env.ts`, which validates at module load and
+ * throws on a missing variable. A single import of it from `queries.ts` made
+ * the deliberately database-free unit suite demand a Supabase project and
+ * three secrets — `queries.test.ts` could not load at all. So `queries.ts`
+ * constructs nothing and is handed a repository; this file, which already
+ * builds clients and is never imported by a test, is where the construction
+ * belongs. `src/lib/persistence/client.ts` makes the same argument for the
+ * same reason.
  *
- * `messageContext` supplies everything the renderer needs that is not on the
- * order. Note what it does NOT supply: there is no guest, no booking and no
+ * Always the request-scoped client, never the admin one: reaching for the
+ * admin client because a read came back empty removes tenant isolation to fix
+ * a permissions bug.
+ */
+export async function laundryRepository(): Promise<LaundryRepository> {
+  return new SupabaseLaundryRepository(await createClient())
+}
+
+/**
+ * The reads the operations perform, bound to this request and this tenant.
+ *
+ * ── This function used to hold two unscoped queries of its own ────────────
+ *
+ * It read `laundry_providers` filtered only by `id`, and `laundry_settings`
+ * filtered only by `property_id is null` — which in an organization that is
+ * not the reader's returns another business's standing note, and in demo mode,
+ * where there is no policy engine at all, returns it to anybody. Both are gone.
+ * `SupabaseLaundryRepository.messageContext` performs the same three reads with
+ * `organization_id` in every one of them.
+ *
+ * `LaundryOperationPorts.loadOrder` takes an id and no organization, because
+ * the pipeline hands an operation a resource id and nothing else. So the tenant
+ * is closed over here, where the actor is known — which is the only place it
+ * can be closed over honestly. An adapter that read the tenant off the row it
+ * was about to return would be asking the row to vouch for itself.
+ *
+ * What `messageContext` still does NOT supply: no guest, no booking and no
  * price, because `MessageViewInput` has nowhere to put one. See the header of
  * `src/lib/laundry/message.ts`.
  */
-export function laundryPorts(organizationName: string): LaundryOperationPorts {
-  return {
-    async loadOrder(orderId) {
-      const { order } = await loadOrder(orderId)
-      return order
-    },
-
-    async messageContext(order) {
-      const supabase = await createClient()
-
-      // The provider's own contact details, read here rather than passed in,
-      // because only a caller holding `laundry.provider_manage` can read them
-      // and the send operation is gated on `laundry.order_send`. A person who
-      // may send but may not manage providers gets a message with no contact
-      // line rather than a failed send.
-      const { data } = order.providerId
-        ? await supabase
-            .from('laundry_providers')
-            .select('contact_name, phone')
-            .eq('id', order.providerId)
-            .maybeSingle()
-        : { data: null }
-
-      const contact = data as {
-        contact_name: string | null
-        phone: string | null
-      } | null
-
-      const { data: settings } = await supabase
-        .from('laundry_settings')
-        .select('standing_notes')
-        .is('property_id', null)
-        .maybeSingle()
-
-      return {
-        organizationName,
-        propertyNames: await propertyNames(),
-        contactName: contact?.contact_name ?? null,
-        contactPhone: contact?.phone ?? null,
-        standingNotes:
-          (settings as { standing_notes: string | null } | null)
-            ?.standing_notes ?? null,
-      }
-    },
-  }
+export function laundryPorts(db: Db, actor: Actor): LaundryOperationPorts {
+  return laundryOperationPorts(
+    new SupabaseLaundryRepository(db),
+    actor.organizationId,
+  )
 }
 
 /**
@@ -113,9 +107,7 @@ export function laundryPorts(organizationName: string): LaundryOperationPorts {
  * the report. Wiring a factory that needs an argument nobody has would mean
  * constructing an empty run, and an empty run is a silent zero-line order.
  */
-export async function laundryOperations(
-  organizationName: string,
-): Promise<LaundryWiring> {
+export async function laundryOperations(actor: Actor): Promise<LaundryWiring> {
   const db = await createClient()
   const { transactions, atomic } = transactionRunner(db)
 
@@ -123,7 +115,7 @@ export async function laundryOperations(
     db,
     operations: defineLaundryOrderOperations({
       db,
-      ports: laundryPorts(organizationName),
+      ports: laundryPorts(db, actor),
     }),
     services: {
       audit: new SupabaseAuditWriter(db),

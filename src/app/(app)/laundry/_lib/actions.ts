@@ -50,7 +50,7 @@ import type { LaundryChannel, LaundryStatus } from '@/lib/laundry'
 import { shellContext } from '../../_lib/context'
 import { auditActorFor } from '../../_lib/wiring'
 import { loadOrder } from './queries'
-import { laundryOperations, laundryPorts } from './wiring'
+import { laundryOperations, laundryPorts, laundryRepository } from './wiring'
 
 export type ActionResult<TData> =
   { ok: true; data: TData } | { ok: false; error: SafeErrorBody }
@@ -116,9 +116,7 @@ export async function adjustLineAction(
   try {
     assertCan(context.actor, 'laundry.order_create')
 
-    const { operations, services } = await laundryOperations(
-      context.workspace.name,
-    )
+    const { operations, services } = await laundryOperations(context.actor)
 
     const outcome = await operations.adjustLine.run({
       request: {
@@ -168,9 +166,7 @@ export async function submitForApprovalAction(
   try {
     assertCan(context.actor, 'laundry.order_create')
 
-    const { operations, services } = await laundryOperations(
-      context.workspace.name,
-    )
+    const { operations, services } = await laundryOperations(context.actor)
 
     const outcome = await operations.advanceOrder.run({
       request: {
@@ -228,7 +224,8 @@ export async function sendOrderAction(
   try {
     assertCan(context.actor, 'laundry.order_send')
 
-    const { order } = await loadOrder(orderId)
+    const repo = await laundryRepository()
+    const { order } = await loadOrder(repo, context.actor, orderId)
     if (!order) {
       return {
         ok: false,
@@ -239,9 +236,7 @@ export async function sendOrderAction(
       }
     }
 
-    const { operations, services } = await laundryOperations(
-      context.workspace.name,
-    )
+    const { db, operations, services } = await laundryOperations(context.actor)
 
     const channel =
       (formData.get('channel') as LaundryChannel | null) ?? order.channel
@@ -249,7 +244,7 @@ export async function sendOrderAction(
     // Rendered here, from the order. Never read from the form. See above.
     const body = await previewOrderMessage(
       order,
-      laundryPorts(context.workspace.name),
+      laundryPorts(db, context.actor),
       channel,
     )
 

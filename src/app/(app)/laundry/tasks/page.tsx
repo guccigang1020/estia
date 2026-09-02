@@ -59,7 +59,12 @@ export default async function LaundryTasksPage() {
     )
   }
 
-  const { orders, gap } = await loadOrders(view.propertyId, TASK_LIMIT)
+  const { orders, gap } = await loadOrders(
+    view.repo,
+    view.actor,
+    view.propertyId,
+    TASK_LIMIT,
+  )
 
   if (gap !== null) {
     return (

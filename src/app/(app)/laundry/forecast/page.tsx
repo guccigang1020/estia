@@ -86,7 +86,12 @@ export default async function LaundryForecastPage({
     settings.forecastHorizonDays,
   )
 
-  const { orders, gap } = await loadOrders(view.propertyId, FORECAST_LIMIT)
+  const { orders, gap } = await loadOrders(
+    view.repo,
+    view.actor,
+    view.propertyId,
+    FORECAST_LIMIT,
+  )
 
   if (gap !== null) {
     return (

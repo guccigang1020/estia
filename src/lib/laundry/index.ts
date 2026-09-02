@@ -130,3 +130,36 @@ export {
   type LaundryOrderOperations,
   type SendOrderInput,
 } from './operations'
+
+/**
+ * The Postgres adapter behind everything above.
+ *
+ * Exported here rather than from `src/lib/persistence` deliberately.
+ * `repository.ts` imports that barrel, so re-exporting it from there would
+ * make a cycle for no gain — and `SupabasePaymentPolicyRepository` already
+ * sets the precedent that a module's own adapter is published by the module's
+ * own barrel.
+ *
+ * Reaching this from a `"use client"` file is the outage `client-safety.test.ts`
+ * describes. Import the leaf — `@/lib/laundry/mode`, `@/lib/laundry/types` —
+ * or use `import type`.
+ */
+export {
+  LaundryLineDoesNotBelongError,
+  LaundryLineFrozenError,
+  SupabaseLaundryRepository,
+  laundryOperationPorts,
+  lineFromRow,
+  orderFromRow,
+  profileFromRow,
+  providerFromRow,
+  settingsFromRow,
+  type AdjustLineWrite,
+  type AdvanceOrderWrite,
+  type CreatedLaundryOrder,
+  type LaundryOrderDraft,
+  type LaundryOrderLineDraft,
+  type LaundryRepository,
+  type ListOrdersOptions,
+  type SendOrderWrite,
+} from './repository'

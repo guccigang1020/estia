@@ -28,6 +28,7 @@ import type { Entitlement } from '@/lib/plans/entitlements'
 import {
   hasSection,
   vocabularyFor,
+  type LaundryRepository,
   type LaundrySection,
   type LaundryVocabulary,
 } from '@/lib/laundry'
@@ -35,9 +36,20 @@ import {
 import { ALL_PROPERTIES, shellContext } from '../../_lib/context'
 import { requireLaundryGrant } from './gate'
 import { laundryContext, propertyNames, type LaundryContext } from './queries'
+import { laundryRepository } from './wiring'
 
 export type LaundryView = {
   actor: Actor
+  /**
+   * The tenant-scoped adapter, resolved once for the request.
+   *
+   * It lives on the view rather than being rebuilt per page so the seven
+   * routes share one client — and, more to the point, so that a screen cannot
+   * perform a laundry read without going through the thing that applies the
+   * `organization_id` filter. Reaching for `createClient()` inside a page is
+   * how the eight unscoped queries this replaced came to exist.
+   */
+  repo: LaundryRepository
   /** True when the grant held but the package does not carry the module. */
   locked: boolean
   entitlement: Entitlement | null
@@ -86,7 +98,8 @@ export async function laundryView(
       ? null
       : context.selectedPropertyId
 
-  const laundry = await laundryContext(access.actor, propertyId)
+  const repo = await laundryRepository()
+  const laundry = await laundryContext(repo, access.actor, propertyId)
   const mode = laundry.settings.settings.mode
 
   // A section this mode does not have is not a screen with nothing on it.
@@ -108,10 +121,11 @@ export async function laundryView(
     notFound()
   }
 
-  const properties = await propertyNames()
+  const properties = await propertyNames(repo, access.actor)
 
   return {
     actor: access.actor,
+    repo,
     locked: access.kind === 'locked',
     entitlement: access.kind === 'locked' ? access.entitlement : null,
     mayReachBilling: holdsGrant(access.actor, 'organization.billing.manage'),

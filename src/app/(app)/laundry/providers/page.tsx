@@ -67,7 +67,7 @@ export default async function LaundryProvidersPage() {
     )
   }
 
-  const { providers, gap } = await loadProviders(view.actor)
+  const { providers, gap } = await loadProviders(view.repo, view.actor)
 
   if (gap !== null) {
     return (

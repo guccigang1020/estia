@@ -96,8 +96,8 @@ export default async function LaundryPage() {
   }
 
   const [{ orders, gap }, { providers }] = await Promise.all([
-    loadOrders(view.propertyId, DASHBOARD_LIMIT),
-    loadProviders(view.actor),
+    loadOrders(view.repo, view.actor, view.propertyId, DASHBOARD_LIMIT),
+    loadProviders(view.repo, view.actor),
   ])
 
   if (gap !== null) {

@@ -89,8 +89,8 @@ export default async function LaundryOrderPage({
   }
 
   const [{ order, gap }, { providers }] = await Promise.all([
-    loadOrder(id),
-    loadProviders(view.actor),
+    loadOrder(view.repo, view.actor, id),
+    loadProviders(view.repo, view.actor),
   ])
 
   if (gap !== null) {

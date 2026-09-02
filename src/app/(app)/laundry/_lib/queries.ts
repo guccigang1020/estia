@@ -1,74 +1,72 @@
 /**
  * EXECUTION CONTEXT — SERVER ONLY. Every read the laundry screens perform.
  *
- * ── Row level security is the filter, and the application does not repeat it ──
+ * ── What this file used to be, and why it was wrong ───────────────────────
  *
- * Every query below asks broadly and lets the database narrow. `laundry_orders`
- * is behind `laundry.view` plus `property_in_scope`; `laundry_providers` is
- * behind `laundry.provider_manage`, which is how somebody can see what must be
- * clean by Friday and never learn who washes it or what it costs. Re-filtering
- * here would be a second copy of that rule, and the second copy is the one that
- * is wrong.
+ * It hand-rolled eight queries — `laundry_settings`, `laundry_item_profiles`,
+ * `laundry_orders` twice, `laundry_order_lines` twice, `laundry_providers` and
+ * `properties` — and not one of them named `organization_id`. Its own header
+ * argued that this was correct: row level security is the filter, and
+ * re-filtering here would be "a second copy of that rule, and the second copy
+ * is the one that is wrong".
  *
- * `loadProviders` is the one place that has to know the asymmetry, and it
- * handles it by returning `null` for "you may not see these" rather than an
- * empty array — a screen that cannot tell refusal from absence renders
- * "no providers configured" at somebody who simply may not look.
+ * That argument is wrong twice, and `src/lib/persistence/finance.ts` makes the
+ * case at length. RLS is the floor, never the plan. The policy is the
+ * enforcement; the filter is what stops a mistake in a query from becoming a
+ * cross-tenant read the first time it runs as `service_role`, which carries
+ * BYPASSRLS and is precisely the caller policies cannot stop.
  *
- * The person that actually happens to is the housekeeping supervisor: 0035
- * gives them `laundry.view`, `laundry.manage` and `laundry.order_create` and
- * withholds `laundry.order_send` and `laundry.provider_manage`. A cleaner holds
- * none of the five and is refused the section by the gate before any of this
- * runs.
+ * And the second reason is the one that is easy to forget: **demo mode has no
+ * row level security at all.** `src/lib/demo/client.ts` says so in its own
+ * header — there is no policy engine behind those arrays. Every laundry
+ * setting of every organization was readable in the demo, and the only thing
+ * concealing it was that the dataset ships one organization. The second one
+ * would not have been concealed.
  *
- * ── The demo dataset gap, reported rather than papered over ───────────────
+ * `loadOrder` was the sharpest edge. It fetched by primary key and let the
+ * policy decide, which is the classic insecure-direct-object-reference shape:
+ * correct in production, wide open in the demo, and one `service_role` client
+ * away from wrong in both. It filters in the query now.
  *
- * `src/lib/demo/dataset.ts` is the coordinator's file and the five laundry
- * tables are not yet declared in it. `DemoDatabase.rows` throws
- * `MissingDemoTable` for a key it has never heard of — deliberately, because
- * answering `[]` would render as "this business has no laundry", which is a
- * claim about the customer rather than about the wiring.
+ * ── So the signatures changed, and they had to ────────────────────────────
  *
- * So the reads below catch exactly that failure and report it as
- * `datasetGap`, and the screens render a panel naming the missing table and
- * what has to be added. That is not papering over the defect: it is the defect,
- * stated on the screen, with the fix in it. Every other failure propagates.
+ * `loadOrders` and `loadOrder` took no actor at all, so they *could not*
+ * scope — that is why this was never a one-line fix. Every function here now
+ * takes the actor whose organization the read belongs to, and hands it to an
+ * adapter that filters. `laundryContext` had the actor already and used it for
+ * nothing but a default.
+ *
+ * ── And the queries themselves are gone ───────────────────────────────────
+ *
+ * They lived here as raw `supabase.from(...)` chains with their own column
+ * lists and their own row mapping, duplicating `SupabaseLaundryRepository`
+ * almost line for line. Two copies of one mapping is two places for a column
+ * to be renamed and one place for it to be missed, so this file no longer maps
+ * anything: it resolves the request's repository, calls it, and translates the
+ * one failure the screens render specially.
+ *
+ * ── The demo dataset gap, kept because it is still reachable ──────────────
+ *
+ * `DemoDatabase.rows` throws `MissingDemoTable` for a key it has never heard
+ * of, deliberately, because answering `[]` would render as "this business has
+ * no laundry" — a claim about the customer rather than about the wiring. The
+ * five laundry tables are in the dataset now, so this should not fire; it is
+ * kept because the screens still render it and because a table added to this
+ * module tomorrow would reach it before the dataset caught up. Every other
+ * failure propagates.
  */
 
-import { createClient } from '@/lib/supabase/server'
-import type { Actor } from '@/lib/authz/can'
-import { holdsGrant } from '@/lib/authz/can'
-import {
-  asBoolean,
-  asNumber,
-  asNumberOrNull,
-  asString,
-  asStringOrNull,
-  toRow,
-  toRows,
-  type Row,
-} from '@/lib/persistence'
+import { holdsGrant, type Actor } from '@/lib/authz/can'
 import {
   defaultSettings,
   resolveSettings,
   type LaundryItemProfile,
   type LaundryOrder,
-  type LaundryOrderLine,
   type LaundryProvider,
-  type LaundrySettings,
+  type LaundryRepository,
   type ResolvedSettings,
 } from '@/lib/laundry'
-import type {
-  ExplanationStep,
-  LaundryChannel,
-  LaundryDispatchMode,
-  LaundryMode,
-  LaundryRoute,
-  LaundryStatus,
-  RequirementUnit,
-} from '@/lib/laundry'
-
-/* ------------------------------------------------------- the demo gap --- */
+/* -------------------------------------------------------- the demo gap --- */
 
 /**
  * The name of a table the demo dataset has never heard of.
@@ -102,144 +100,6 @@ async function tolerateDatasetGap<T>(
   }
 }
 
-/* ----------------------------------------------------------- mapping ---- */
-
-function toSettings(row: Row): LaundrySettings {
-  return {
-    organizationId: asString(row, 'organization_id'),
-    propertyId: asStringOrNull(row, 'property_id'),
-    mode: asString(row, 'mode') as LaundryMode,
-    dispatchMode: asString(row, 'dispatch_mode') as LaundryDispatchMode,
-    defaultChannel: asString(row, 'default_channel') as LaundryChannel,
-    defaultProviderId: asStringOrNull(row, 'default_provider_id'),
-    turnaroundHours: asNumber(row, 'turnaround_hours'),
-    pickupDays: numbers(row, 'pickup_days'),
-    deliveryDays: numbers(row, 'delivery_days'),
-    forecastHorizonDays: asNumber(row, 'forecast_horizon_days'),
-    standingNotes: asStringOrNull(row, 'standing_notes'),
-  }
-}
-
-/** A `smallint[]` column, as PostgREST renders it. */
-function numbers(row: Row, column: string): readonly number[] {
-  const value = row[column]
-  if (!Array.isArray(value)) return []
-  return value
-    .map((entry) => Number(entry))
-    .filter((entry) => Number.isFinite(entry))
-}
-
-function toProvider(row: Row): LaundryProvider {
-  return {
-    id: asString(row, 'id'),
-    organizationId: asString(row, 'organization_id'),
-    name: asString(row, 'name'),
-    contactName: asStringOrNull(row, 'contact_name'),
-    phone: asStringOrNull(row, 'phone'),
-    email: asStringOrNull(row, 'email'),
-    defaultChannel: asString(row, 'default_channel') as LaundryChannel,
-    turnaroundHours: asNumber(row, 'turnaround_hours'),
-    pickupDays: numbers(row, 'pickup_days'),
-    deliveryDays: numbers(row, 'delivery_days'),
-    minimumOrderUnits: asNumber(row, 'minimum_order_units'),
-    notes: asStringOrNull(row, 'notes'),
-    isActive: asBoolean(row, 'is_active'),
-  }
-}
-
-function toProfile(row: Row): LaundryItemProfile {
-  return {
-    organizationId: asString(row, 'organization_id'),
-    itemId: asString(row, 'item_id'),
-    label: asString(row, 'label'),
-    laundryManaged: asBoolean(row, 'laundry_managed'),
-    washable: asBoolean(row, 'washable'),
-    externalLaundryAllowed: asBoolean(row, 'external_laundry_allowed'),
-    route: (asStringOrNull(row, 'route') as LaundryRoute | null) ?? null,
-    defaultProviderId: asStringOrNull(row, 'default_provider_id'),
-    turnaroundHours: asNumberOrNull(row, 'turnaround_hours'),
-    unit: asString(row, 'unit') as RequirementUnit,
-    bundleSize: asNumber(row, 'bundle_size'),
-    minimumBuffer: asNumber(row, 'minimum_buffer'),
-  }
-}
-
-function toLine(row: Row): LaundryOrderLine {
-  const calculated = asNumber(row, 'calculated_quantity')
-  const adjustment = asNumber(row, 'adjustment_quantity')
-
-  return {
-    id: asString(row, 'id'),
-    organizationId: asString(row, 'organization_id'),
-    orderId: asString(row, 'order_id'),
-    propertyId: asString(row, 'property_id'),
-    itemId: asString(row, 'item_id'),
-    label: asString(row, 'label'),
-    unit: asString(row, 'unit') as RequirementUnit,
-    quantity: {
-      calculated,
-      adjustment,
-      // The database generates this column. Re-derived here from the same two
-      // inputs rather than read, so a row that somehow disagreed would show
-      // the arithmetic rather than the disagreement.
-      final: calculated + adjustment,
-      reason: asStringOrNull(row, 'adjustment_reason'),
-      adjustedByUserId: asStringOrNull(row, 'adjusted_by'),
-      adjustedAt: asStringOrNull(row, 'adjusted_at'),
-    },
-    requiredBy: asString(row, 'required_by'),
-    sourceBookingId: asStringOrNull(row, 'source_booking_id'),
-    explanation: explanationOf(row),
-    notes: asStringOrNull(row, 'notes'),
-  }
-}
-
-function explanationOf(row: Row): readonly ExplanationStep[] {
-  const value = row.explanation
-  if (!Array.isArray(value)) return []
-
-  return value.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) return []
-    const step = entry as Record<string, unknown>
-    if (typeof step.text !== 'string' || typeof step.value !== 'number') {
-      return []
-    }
-    return [
-      {
-        kind: String(step.kind ?? 'preparation') as ExplanationStep['kind'],
-        text: step.text,
-        value: step.value,
-      },
-    ]
-  })
-}
-
-function toOrder(row: Row, lines: readonly LaundryOrderLine[]): LaundryOrder {
-  const id = asString(row, 'id')
-  return {
-    id,
-    organizationId: asString(row, 'organization_id'),
-    propertyId: asStringOrNull(row, 'property_id'),
-    providerId: asStringOrNull(row, 'provider_id'),
-    status: asString(row, 'status') as LaundryStatus,
-    mode: asString(row, 'mode') as LaundryMode,
-    dispatchMode: asString(row, 'dispatch_mode') as LaundryDispatchMode,
-    channel: asString(row, 'channel') as LaundryChannel,
-    reference: asString(row, 'reference'),
-    requirementKey: asString(row, 'requirement_key'),
-    requiredBy: asString(row, 'required_by'),
-    pickupAt: asStringOrNull(row, 'pickup_at'),
-    expectedReturnAt: asStringOrNull(row, 'expected_return_at'),
-    returnedAt: asStringOrNull(row, 'returned_at'),
-    sentAt: asStringOrNull(row, 'sent_at'),
-    sentBody: asStringOrNull(row, 'sent_body'),
-    internalNotes: asStringOrNull(row, 'internal_notes'),
-    providerNotes: asStringOrNull(row, 'provider_notes'),
-    lines: lines.filter((line) => line.orderId === id),
-    version: asNumber(row, 'version'),
-  }
-}
-
 /* ------------------------------------------------------------- reads ---- */
 
 export type LaundryContext = {
@@ -254,22 +114,20 @@ export type LaundryContext = {
  * Resolved before anything else, because the mode decides which sections exist
  * at all and a screen that reads orders before knowing the mode has already
  * assumed there are orders.
+ *
+ * The settings rows are resolved by the domain rather than by a narrowing
+ * query — `resolveSettings` picks a property override, else the organization
+ * row, else the inert defaults, and says which of the three it was. That is
+ * why the read asks for the organization's rows rather than for one of them.
  */
 export async function laundryContext(
+  repo: LaundryRepository,
   actor: Actor,
   propertyId: string | null,
 ): Promise<LaundryContext> {
-  const supabase = await createClient()
-
-  const settingsRead = await tolerateDatasetGap(async () => {
-    const { data, error } = await supabase
-      .from('laundry_settings')
-      .select(
-        'organization_id, property_id, mode, dispatch_mode, default_channel, default_provider_id, turnaround_hours, pickup_days, delivery_days, forecast_horizon_days, standing_notes',
-      )
-    if (error) throw error
-    return toRows(data ?? []).map(toSettings)
-  })
+  const settingsRead = await tolerateDatasetGap(() =>
+    repo.listSettings(actor.organizationId),
+  )
 
   if (settingsRead.gap !== null) {
     return {
@@ -282,16 +140,9 @@ export async function laundryContext(
     }
   }
 
-  const profileRead = await tolerateDatasetGap(async () => {
-    const { data, error } = await supabase
-      .from('laundry_item_profiles')
-      .select(
-        'organization_id, item_id, label, laundry_managed, washable, external_laundry_allowed, route, default_provider_id, turnaround_hours, unit, bundle_size, minimum_buffer',
-      )
-      .order('label')
-    if (error) throw error
-    return toRows(data ?? []).map(toProfile)
-  })
+  const profileRead = await tolerateDatasetGap(() =>
+    repo.listItemProfiles(actor.organizationId),
+  )
 
   return {
     settings: resolveSettings(
@@ -312,89 +163,44 @@ export type OrdersRead = {
 /**
  * Orders with their lines, newest deadline first.
  *
- * Two queries rather than an embed. `laundry_order_lines` has its own row
- * level security narrowed by `property_in_scope`, and a PostgREST embed
- * evaluates the child policy too — which is right — but it also means a
- * consolidated order whose second property is out of scope comes back with a
- * partial line list and no indication that it is partial. Reading them
- * separately makes the same thing happen and makes it visible: the order's own
- * `property_id` is NULL and the lines that came back are the ones this person
- * may see.
+ * `propertyId` narrows without hiding a consolidated run: the adapter reads the
+ * property's own orders and the organization's consolidated ones and merges
+ * them, because an order that carries this property in its breakdown is
+ * exactly the one somebody narrowing to it wants to see.
+ *
+ * `limit` is required by the port and supplied by each screen. A dashboard's
+ * four and a history page's two hundred are different questions, and the
+ * adapter refuses to invent an answer to either.
  */
 export async function loadOrders(
+  repo: LaundryRepository,
+  actor: Actor,
   propertyId: string | null,
   limit: number,
 ): Promise<OrdersRead> {
-  const supabase = await createClient()
-
-  const read = await tolerateDatasetGap(async () => {
-    let query = supabase
-      .from('laundry_orders')
-      .select(
-        'id, organization_id, property_id, provider_id, status, mode, dispatch_mode, channel, reference, requirement_key, required_by, pickup_at, expected_return_at, returned_at, sent_at, sent_body, internal_notes, provider_notes, version',
-      )
-      .order('required_by', { ascending: false })
-      .limit(limit)
-
-    // A consolidated order carries NULL, so narrowing to one property must not
-    // hide the run that includes it. `or` is supported by the demo client for
-    // exactly this shape.
-    if (propertyId !== null) {
-      query = query.or(`property_id.eq.${propertyId},property_id.is.null`)
-    }
-
-    const { data, error } = await query
-    if (error) throw error
-
-    const orderRows = toRows(data ?? [])
-    if (orderRows.length === 0) return []
-
-    const ids = orderRows.map((row) => asString(row, 'id'))
-
-    const { data: lineData, error: lineError } = await supabase
-      .from('laundry_order_lines')
-      .select(
-        'id, organization_id, order_id, property_id, item_id, label, unit, calculated_quantity, adjustment_quantity, adjustment_reason, adjusted_by, adjusted_at, explanation, source_booking_id, required_by, notes',
-      )
-      .in('order_id', ids)
-
-    if (lineError) throw lineError
-
-    const lines = toRows(lineData ?? []).map(toLine)
-    return orderRows.map((row) => toOrder(row, lines))
-  })
+  const read = await tolerateDatasetGap(() =>
+    repo.listOrders(actor.organizationId, { limit, propertyId }),
+  )
 
   return { orders: read.data ?? [], gap: read.gap }
 }
 
+/**
+ * One order, by id AND by organization.
+ *
+ * Both filters are in the query. Fetching by primary key and then inspecting
+ * the row's organization is the shape that leaks: it reads the row before it
+ * decides, and in an environment with no policy engine — the demo — it never
+ * decides at all.
+ */
 export async function loadOrder(
+  repo: LaundryRepository,
+  actor: Actor,
   id: string,
 ): Promise<{ order: LaundryOrder | null; gap: DatasetGap | null }> {
-  const supabase = await createClient()
-
-  const read = await tolerateDatasetGap(async () => {
-    const { data, error } = await supabase
-      .from('laundry_orders')
-      .select(
-        'id, organization_id, property_id, provider_id, status, mode, dispatch_mode, channel, reference, requirement_key, required_by, pickup_at, expected_return_at, returned_at, sent_at, sent_body, internal_notes, provider_notes, version',
-      )
-      .eq('id', id)
-      .maybeSingle()
-
-    if (error) throw error
-    if (!data) return null
-
-    const { data: lineData, error: lineError } = await supabase
-      .from('laundry_order_lines')
-      .select(
-        'id, organization_id, order_id, property_id, item_id, label, unit, calculated_quantity, adjustment_quantity, adjustment_reason, adjusted_by, adjusted_at, explanation, source_booking_id, required_by, notes',
-      )
-      .eq('order_id', id)
-
-    if (lineError) throw lineError
-
-    return toOrder(toRow(data), toRows(lineData ?? []).map(toLine))
-  })
+  const read = await tolerateDatasetGap(() =>
+    repo.loadOrder(actor.organizationId, id),
+  )
 
   return { order: read.data ?? null, gap: read.gap }
 }
@@ -413,7 +219,10 @@ export async function loadOrder(
  * explicit that the demo has no RLS; this check is what makes the cleaner's
  * experience honest there too.
  */
-export async function loadProviders(actor: Actor): Promise<{
+export async function loadProviders(
+  repo: LaundryRepository,
+  actor: Actor,
+): Promise<{
   providers: readonly LaundryProvider[] | null
   gap: DatasetGap | null
 }> {
@@ -421,35 +230,20 @@ export async function loadProviders(actor: Actor): Promise<{
     return { providers: null, gap: null }
   }
 
-  const supabase = await createClient()
-
-  const read = await tolerateDatasetGap(async () => {
-    const { data, error } = await supabase
-      .from('laundry_providers')
-      .select(
-        'id, organization_id, name, contact_name, phone, email, default_channel, turnaround_hours, pickup_days, delivery_days, minimum_order_units, notes, is_active',
-      )
-      .is('deleted_at', null)
-      .order('name')
-
-    if (error) throw error
-    return toRows(data ?? []).map(toProvider)
-  })
+  const read = await tolerateDatasetGap(() =>
+    // Inactive providers included: only somebody holding `provider_manage`
+    // reaches this line, the providers screen is where one is switched back
+    // on, and a provider hidden from its own management screen cannot be.
+    repo.listProviders(actor.organizationId, { includeInactive: true }),
+  )
 
   return { providers: read.data ?? [], gap: read.gap }
 }
 
 /** Property id → name, for every property in the person's scope. */
-export async function propertyNames(): Promise<ReadonlyMap<string, string>> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('properties')
-    .select('id, name')
-    .is('deleted_at', null)
-
-  if (error || !data) return new Map()
-
-  return new Map(
-    toRows(data).map((row) => [asString(row, 'id'), asString(row, 'name')]),
-  )
+export async function propertyNames(
+  repo: LaundryRepository,
+  actor: Actor,
+): Promise<ReadonlyMap<string, string>> {
+  return repo.listPropertyNames(actor.organizationId)
 }
