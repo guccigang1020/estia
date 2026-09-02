@@ -352,6 +352,11 @@ function parseTerms(row: Json): GuestJourneyTerms {
     currency: text(row, 'currency') || 'ILS',
     cancellationTerms: orNull(row, 'cancellationTerms'),
     inStay: flag(row, 'inStay'),
+    // 0039 projects this, and projects it as JSON null rather than omitting
+    // the key when there is no deadline — so `orNull` distinguishes "no
+    // expiry" from "field missing" the same way, and `guestHoldState` turns
+    // both into `undated` rather than into a countdown from nothing.
+    holdExpiresAt: orNull(row, 'holdExpiresAt'),
   }
 }
 
