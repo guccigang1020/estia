@@ -232,7 +232,10 @@ src/lib/actor/**                              authz                write
 src/lib/persistence/actor.ts                  authz                write
 src/lib/persistence/agents.ts                 authz                write
 supabase/migrations/**                        authz                write
-supabase/tests/**                             authz                write
+# The SQL proofs, claimed with the migrations. isolation.sql proves 0001-0005
+# and eleven migrations have landed since, so roughly forty tables carry RLS
+# that nothing has ever proven isolates. Same territory as the schema itself.
+supabase/tests/**                             db-proofs            write
 
 # ── The write paths behind screens that already ship. ─────────────────────
 #
