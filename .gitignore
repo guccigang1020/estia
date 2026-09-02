@@ -49,3 +49,6 @@ next-env.d.ts
 
 # The demo server builds here so it can run beside the dev server.
 .next-demo/
+
+# The Supabase CLI's own version cache. Not ours, changes on every invocation.
+supabase/.temp/

@@ -185,6 +185,17 @@ supabase/migrations/0036_work_plan_facts.sql  preparation-chain    write
 src/app/g/[token]/layout.tsx                  coordinator          write
 src/lib/supabase/proxy.ts                     coordinator          write
 src/app/g/**                                  guest-journey        write
+# The second wave claims six files by name, above the broad rule below: the
+# six modules already there are finished and belong to guest-journey, and
+# these are new files beside them rather than edits to them.
+src/lib/guest-journey/settings.ts             journey-settings     write
+src/lib/guest-journey/settings.test.ts        journey-settings     write
+src/lib/guest-journey/presets.ts              journey-settings     write
+src/lib/guest-journey/presets.test.ts         journey-settings     write
+src/lib/guest-journey/stay.ts                 guest-stay           write
+src/lib/guest-journey/stay.test.ts            guest-stay           write
+src/lib/guest-journey/post-stay.ts            guest-stay           write
+src/lib/guest-journey/post-stay.test.ts       guest-stay           write
 src/lib/guest-journey/**                      guest-journey        write
 src/components/guest/**                       guest-journey        write
 # The demo's guest-journey functions. Its own file rather than a block inside
@@ -193,6 +204,17 @@ src/components/guest/**                       guest-journey        write
 # behaviour. That is knowledge, not typing, and it belongs with whoever wrote
 # the migration.
 src/lib/demo/functions-guest.ts               guest-journey        write
+
+# ── The guest journey, second wave ───────────────────────────────────────
+#
+# `guest_journey_settings` and `guest_journey_content` exist in 0034 and have
+# no screen at all — the whole guest portal is driven by rows nobody can
+# create through the product. Two workers, split so neither touches the six
+# finished modules under `src/lib/guest-journey/`.
+src/app/(app)/settings/guest-journey/**       journey-settings     write
+src/components/journey-settings/**            journey-settings     write
+
+src/components/guest-stay/**                  guest-stay           write
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
 src/lib/agents/**                             authz                write
