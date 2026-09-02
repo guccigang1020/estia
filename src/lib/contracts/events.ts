@@ -60,6 +60,20 @@ export const DOMAIN_EVENTS = [
   'guest.created',
   'guest.merged',
   'guest.request_submitted',
+  // The guest journey. A guest holds a capability URL rather than an account,
+  // so every one of these is an act by somebody outside the business — which
+  // is why they are named separately from the `booking.*` family rather than
+  // folded into it.
+  'guest.link_sent',
+  'guest.link_opened',
+  'guest.link_rotated',
+  'guest.link_revoked',
+  'guest.confirmed',
+  // The business changed the terms after the guest agreed to them. The old
+  // confirmation must not silently apply to the new price.
+  'guest.reconfirmation_required',
+  'guest.details_submitted',
+  'arrival.instructions_released',
   'lead.created',
   'lead.status_changed',
   'quote.sent',

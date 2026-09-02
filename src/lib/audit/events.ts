@@ -25,11 +25,31 @@
  * answer has to distinguish "an employee decided" from "the system generated,
  * and a named employee approved".
  */
-export type ActorType = 'user' | 'system' | 'ai_agent' | 'platform_staff'
+/**
+ * Who did the thing.
+ *
+ * `guest` is the newest and the one that needed an argument. A guest holds no
+ * membership, no role and no `auth.uid()` — they hold a capability URL — so a
+ * guest confirming their booking, signing a contract or asking for two extra
+ * towels produced no audit row at all, and the append-only tables carried the
+ * timestamp without the actor.
+ *
+ * Folding them into `system` was the obvious shortcut and is refused for the
+ * reason 0005 gives about AI agents: an action taken by somebody outside the
+ * business must never be indistinguishable from one the business took itself.
+ * In a dispute about what a guest agreed to, "system" is the wrong answer.
+ */
+export type ActorType =
+  'user' | 'system' | 'ai_agent' | 'platform_staff' | 'guest'
 
 export interface AuditActor {
   type: ActorType
-  /** Present for `user` and `platform_staff`; null for autonomous actions. */
+  /**
+   * Present for `user` and `platform_staff`; null for autonomous actions, and
+   * always null for a `guest` — they have no row in `auth.users` at all. What
+   * identifies them is the booking the action was taken against, which the
+   * event's own resource already carries.
+   */
   userId: string | null
   /**
    * How the actor is named in the timeline: a person's name, a job name
