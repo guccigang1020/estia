@@ -582,6 +582,19 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/settings/payments' },
       },
       {
+        id: 'guest-journey',
+        label: 'מסע האורח',
+        // `organization.settings.edit` and no plan entitlement, deliberately.
+        // Deciding whether a guest confirms, signs or pays before a booking is
+        // confirmed — and when an address is released — is core hospitality,
+        // not a paid feature.
+        requires: {
+          kind: 'grant',
+          anyOf: ['organization.settings.edit'],
+        },
+        destination: { status: 'ready', href: '/settings/guest-journey' },
+      },
+      {
         id: 'billing',
         label: 'חבילה וחיוב',
         requires: { kind: 'grant', anyOf: ['organization.billing.manage'] },

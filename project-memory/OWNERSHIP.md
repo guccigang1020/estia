@@ -113,13 +113,23 @@ supabase/migrations/0031_payment_collection.sql     payment-policy   write
 
 # The laundry domain: requirements from the canonical preparation output,
 # orders, providers, turnaround arithmetic, the forward demand curve.
+# The adapter the module never had. `npm run reality` found it: five tables
+# in 0029, rows in the demo dataset, ports declared — and nothing implementing
+# them against Postgres, so the screens work in the demo and would find
+# nothing in production.
+src/lib/laundry/index.ts                      laundry-persistence  write
+src/lib/laundry/repository.ts                 laundry-persistence  write
+src/lib/laundry/repository.test.ts            laundry-persistence  write
 src/lib/laundry/**                            laundry              write
 src/lib/demo/dataset-laundry.ts               laundry              write
 
 # The laundry screens — same owner as the domain, deliberately. A screen that
 # imports a module a different worker has not written yet is the exact failure
 # this register was created after.
-src/app/(app)/laundry/**                      laundry              write
+# The screens, reclaimed: their reads name no organization_id and two of the
+# loaders do not even take an actor, so they cannot. RLS would filter in
+# production and the demo has no RLS at all.  is not running.
+src/app/(app)/laundry/**                      laundry-persistence  write
 src/components/laundry/**                     laundry              write
 
 # The stock engine: circulation, reservation against future bookings, and the

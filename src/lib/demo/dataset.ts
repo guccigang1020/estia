@@ -432,6 +432,79 @@ const TABLES: DemoTables = {
   store_order_payments: STORE_ORDER_PAYMENT_ROWS,
   store_order_amendments: STORE_ORDER_AMENDMENT_ROWS,
   store_provider_requests: STORE_PROVIDER_REQUEST_ROWS,
+
+  // ── The guest journey's configuration ───────────────────────────────────
+  //
+  // 0034 created both of these and no screen wrote them, so the whole guest
+  // portal was driven by rows nobody could create through the product. The
+  // settings screen writes them now, and it needs somewhere to write.
+  //
+  // Seeded rather than left empty, deliberately. `functions-guest.ts` was
+  // reading these through a per-database side store precisely *because*
+  // `db.has(table)` was false, while the settings screen writes through
+  // `db.from(...)` — two different places, so a change made on the screen
+  // never reached the portal. Declaring the tables makes both use the same
+  // array, which is what closes that loop.
+  guest_journey_settings: [
+    {
+      id: 'a1c2e3f4-5b6d-4e7f-8a9b-0c1d2e3f4a5b',
+      organization_id: ORGANIZATION_ID,
+      // The organization default. A property override is a second row with a
+      // property_id, and the resolver prefers it — see `effectiveSettings`.
+      property_id: null,
+      // Every value below is the column's own default from 0034. A demo that
+      // configured something unusual would teach the unusual thing.
+      contract_mode: 'disabled',
+      require_guest_confirmation: true,
+      required_detail_fields: [],
+      optional_detail_fields: [],
+      arrival_release: 'after_confirmation',
+      arrival_release_hours: 24,
+      during_stay_topics: ['wifi', 'guide', 'access', 'checkout'],
+      requests_enabled: true,
+      request_categories: [
+        'towels',
+        'linen',
+        'cleaning',
+        'maintenance',
+        'equipment',
+        'other',
+      ],
+      checkout_declaration_enabled: true,
+      review_enabled: false,
+      review_url: null,
+      rebook_enabled: false,
+      reconfirmation_triggers: ['dates', 'guests', 'price', 'cancellation'],
+      version: 1,
+    },
+  ],
+
+  // Per property by definition — `property_id` is NOT NULL on this table,
+  // because a door code belongs to a door.
+  guest_journey_content: PROPERTY_ROWS.map((property, index) => ({
+    id: `b2d3f4a5-6c7e-4f80-9a1b-2c3d4e5f60${String(index).padStart(2, '0')}`,
+    organization_id: ORGANIZATION_ID,
+    property_id: property.id,
+    address_note: 'הבית האחרון ברחוב, שער עץ בהיר.',
+    directions: 'ביציאה מכביש 6 באליקים, ארבעה קילומטרים מזרחה.',
+    map_url: null,
+    access_instructions: 'הקוד נמצא בתיבה שמימין לשער.',
+    // Gated in SQL by `guest_arrival_released`, which since 0038 also refuses
+    // a cancelled or no-show booking. Seeded so the gate has something real
+    // to withhold — a gate tested against an empty value proves nothing.
+    access_code: '4821#',
+    parking: 'חניה פרטית לשני רכבים לפני השער.',
+    wifi_network: 'ESTIA-GUEST',
+    // Withheld until the stay actually begins, independently of the arrival
+    // gate. Two gates, and the demo can show that they are two.
+    wifi_password: 'olive2026',
+    property_guide:
+      'מזגן: שלט על השיש במטבח. דוד שמש: מתג בכניסה. פינוי אשפה: יום שלישי.',
+    emergency_contact: 'דנה — 052-0000000',
+    checkout_instructions:
+      'להשאיר את המפתח בתיבה, לכבות מזגנים ולסגור את השער.',
+    version: 1,
+  })),
 }
 
 export const DEMO_DATASET: DemoDataset = {
