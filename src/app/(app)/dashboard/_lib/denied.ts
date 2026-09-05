@@ -94,6 +94,12 @@ export const GRANT_CAPABILITY: Partial<Record<Grant, string>> = {
   'role.assign': 'ניהול תפקידים והרשאות',
   'site.view': 'צפייה באתר הישיר',
   'site.edit_content': 'עריכת תוכן האתר',
+  'site.edit_design': 'עיצוב האתר',
+  'site.manage_seo': 'הגדרות הקידום של האתר',
+  // Not 'ניהול האתר': this grant is the domain name and nothing else, and a
+  // person refused here is being told they cannot point a domain at the site,
+  // not that the site is closed to them.
+  'site.manage_domain': 'חיבור דומיין לאתר',
   'site.publish': 'פרסום האתר',
   'task.create': 'פתיחת משימה',
   'template.manage': 'ניהול תבניות',

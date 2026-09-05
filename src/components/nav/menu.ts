@@ -199,7 +199,11 @@ export const MENU: readonly MenuSectionDefinition[] = [
         id: 'direct-website',
         label: 'האתר הישיר',
         requires: { kind: 'grant', anyOf: ['site.view'] },
-        destination: { status: 'planned' },
+        destination: {
+          status: 'ready',
+          href: '/website/requests',
+          offersUpgrade: true,
+        },
       },
       {
         id: 'agents',
@@ -469,7 +473,13 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['site.edit_content', 'site.edit_design', 'site.publish'],
         },
-        destination: { status: 'planned' },
+        destination: {
+          status: 'ready',
+          href: '/website',
+          // Earned: every studio route holds a PlanLock on exactly the
+          // plan_does_not_include branch via requireSiteGrant.
+          offersUpgrade: true,
+        },
       },
       {
         id: 'automations',

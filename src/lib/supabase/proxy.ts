@@ -47,6 +47,18 @@ const PUBLIC_PREFIXES = [
   // still hands `anon` nothing but one hand-picked projection of one booking
   // — see migration 0033.
   '/g',
+  // The customer's own public website. A visitor reading a villa's page is a
+  // member of the public and there is nothing for them to sign in to; without
+  // this line every published site in production redirects to ESTIA's login,
+  // which is both broken and absurd — the page exists to be found by somebody
+  // who has never heard of ESTIA.
+  //
+  // Public here means the same narrow thing it means above. `anon` holds no
+  // privilege on any of the eleven website tables; the single door is
+  // `site_public_snapshot`, which reads the PUBLISHED version and joins to no
+  // draft table, so there is no query in which somebody could forget a filter
+  // and serve an unpublished page. See migration 0042.
+  '/s',
 ]
 
 /** Auth screens a signed-in visitor should be moved off. */
