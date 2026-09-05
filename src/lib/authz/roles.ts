@@ -385,6 +385,23 @@ const MARKETING_CORE: Grant[] = [
  */
 type ComposedRole = Exclude<SystemRole, 'organization_owner' | 'administrator'>
 
+/**
+ * Held by every role, without exception.
+ *
+ * One entry, and it earns the mechanism: a person's own notification inbox and
+ * their own channel preferences belong to them whatever they do for the
+ * business. Listing it twenty times would mean the twenty-first role forgets
+ * it, and the person who then cannot mute their own alerts is a cleaner being
+ * telephoned at midnight.
+ *
+ * Unioned in `grantsForSystemRole` rather than pasted into each preset, so
+ * `ALL_ORGANIZATION_GRANTS` — which the owner and the administrator derive
+ * from — already carries it and needs no special case.
+ */
+export const UNIVERSAL_GRANTS: readonly Grant[] = [
+  'notification.preferences.manage',
+]
+
 const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   general_manager: [
     ...BOOKING_DESK,
@@ -778,7 +795,11 @@ export function grantsForSystemRole(role: SystemRole): readonly Grant[] {
   if (role === 'administrator') {
     return ALL_ORGANIZATION_GRANTS.filter((g) => !OWNER_ONLY.includes(g))
   }
-  return COMPOSED_ROLE_GRANTS[role]
+  // The union, taken here so no preset can omit it and no future preset has
+  // to remember it.
+  return [
+    ...new Set<Grant>([...COMPOSED_ROLE_GRANTS[role], ...UNIVERSAL_GRANTS]),
+  ]
 }
 
 /** Union of the grants held across every role on a membership. */

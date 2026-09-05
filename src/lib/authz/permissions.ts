@@ -167,6 +167,13 @@ export const PERMISSIONS = [
   'incident.resolve',
 
   // ── Communication ───────────────────────────────────────────────────────
+  // Held by every role there is, including a cleaner and an external vendor.
+  // It governs a person's own inbox and their own channel preferences — not
+  // anybody else's — so withholding it would mean somebody who cannot mute
+  // their own SMS at midnight. It is the only grant in this catalogue that is
+  // universal by design, and the notification module's personal writes are
+  // ordinary operations because of it.
+  'notification.preferences.manage',
   'message.view',
   'message.send',
   'message.assign',

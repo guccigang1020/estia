@@ -490,11 +490,31 @@ export const MENU: readonly MenuSectionDefinition[] = [
       {
         id: 'insights',
         label: 'תובנות',
+        // OPEN PRODUCT DECISION, deliberately not taken here.
+        //
+        // Six of the twelve insights — occupancy direction, unsold nights,
+        // closed inventory, cancellations, lead time, booking pace — touch
+        // neither money nor automation, and today they sit behind the
+        // `automation` entitlement, which only Management carries. So every
+        // operational reader on Pro meets a plan lock on a screen that had
+        // plenty to tell them.
+        //
+        // Adding `availability.view` here would open it, and that is why it is
+        // not done: `availability.view` carries no entitlement and sits in the
+        // booking bundles, so adding it would hand the whole insights module
+        // to every package including Basic. That is a pricing decision about
+        // what ESTIA sells, not a bug to be fixed in a menu file.
         requires: {
           kind: 'grant',
           anyOf: ['automation.view', 'report.financial.view'],
         },
-        destination: { status: 'planned' },
+        // Earned: the plan branch renders the upgrade offer rather than
+        // redirecting, so a locked customer reaches the argument for buying.
+        destination: {
+          status: 'ready',
+          href: '/insights',
+          offersUpgrade: true,
+        },
       },
     ],
   },
@@ -580,6 +600,25 @@ export const MENU: readonly MenuSectionDefinition[] = [
         // map.
         requires: { kind: 'grant', anyOf: ['payment.policy_manage'] },
         destination: { status: 'ready', href: '/settings/payments' },
+      },
+      {
+        id: 'notifications',
+        label: 'התראות',
+        // A real grant rather than the membership escape hatch, and that
+        // distinction is the whole reason `notification.preferences.manage`
+        // exists. The inbox and the preference grid belong to whoever is
+        // signed in — a cleaner must be able to mute their own SMS — so the
+        // requirement had to be something everybody holds. `menu.test.ts`
+        // pins the escape hatch to one item and says growing it 'is worth a
+        // conversation rather than a passing test'; this was that
+        // conversation, and the answer was to widen the catalogue by one
+        // universal grant instead of widening the weakest requirement the
+        // product can state.
+        requires: {
+          kind: 'grant',
+          anyOf: ['notification.preferences.manage'],
+        },
+        destination: { status: 'ready', href: '/settings/notifications' },
       },
       {
         id: 'guest-journey',

@@ -22,6 +22,7 @@ import {
   OWNER_ONLY,
   PRICE_LEVELS,
   SYSTEM_ROLES,
+  UNIVERSAL_GRANTS,
   grantsForCalendarLevel,
   grantsForGuestDataLevel,
   grantsForPriceLevel,
@@ -333,20 +334,30 @@ describe('property_owner', () => {
 })
 
 describe('external_vendor', () => {
-  it('holds only task grants and nothing else', () => {
+  it('holds only task grants, plus the one every role holds', () => {
     const grants = grantsForSystemRole('external_vendor')
-    const nonTask = grants.filter((g) => !g.startsWith('task.'))
+    const nonTask = grants.filter(
+      (g) => !g.startsWith('task.') && !UNIVERSAL_GRANTS.includes(g),
+    )
 
     expect(nonTask, 'non-task grants held by an external vendor').toEqual([])
+
+    // `notification.preferences.manage` is deliberately universal: a
+    // contractor holding one job still owns their own inbox and still gets to
+    // decide whether they are telephoned at midnight. It governs nothing but
+    // their own rows, so it widens no reach into the business.
     expect([...grants].sort()).toEqual(
-      ['task.complete', 'task.update', 'task.view'].sort(),
+      ['task.complete', 'task.update', 'task.view', ...UNIVERSAL_GRANTS].sort(),
     )
   })
 
   it('denies an external vendor every grant outside the task family', () => {
     const vendor = actorInRole('external_vendor')
     const held = ALL_GRANTS.filter(
-      (g) => !g.startsWith('task.') && can(vendor, g, RESOURCE),
+      (g) =>
+        !g.startsWith('task.') &&
+        !UNIVERSAL_GRANTS.includes(g) &&
+        can(vendor, g, RESOURCE),
     )
 
     expect(held, 'grants an external vendor should not hold').toEqual([])
@@ -463,6 +474,10 @@ describe('referral_agent', () => {
         // Even the narrowest agent can ask. A cap that refuses outright ends
         // the conversation; one that raises an approval keeps the sale here.
         'approval.request',
+        // Universal, and the narrowest role in the product is where that is
+        // worth asserting: if it were ever dropped from the union, a referral
+        // agent would be the first person unable to mute their own alerts.
+        ...UNIVERSAL_GRANTS,
       ].sort(),
     )
   })
@@ -1133,8 +1148,8 @@ describe('administrator', () => {
    * specification asked for ten `store.*` grants; six of them already existed
    * as `product.*` and `order.*` and were reused rather than renamed.
    */
-  it('holds exactly 152 grants', () => {
-    expect(grantsForSystemRole('administrator')).toHaveLength(152)
+  it('holds exactly 153 grants', () => {
+    expect(grantsForSystemRole('administrator')).toHaveLength(153)
   })
 })
 
@@ -1165,8 +1180,8 @@ describe('organization_owner', () => {
     expect(held, 'platform grants held by an organization owner').toEqual([])
   })
 
-  it('holds exactly 156 grants — every non-platform permission and every field permission', () => {
-    expect(grantsForSystemRole('organization_owner')).toHaveLength(156)
+  it('holds exactly 157 grants — every non-platform permission and every field permission', () => {
+    expect(grantsForSystemRole('organization_owner')).toHaveLength(157)
   })
 
   it('holds the agent network, because running the sellers is the owner’s business', () => {
