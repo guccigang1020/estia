@@ -1346,6 +1346,180 @@ const CORE_FUNCTIONS: Record<string, DemoRpcFunction> = {
    * row would let a portal read fields production withholds and nobody would
    * find out until it was live.
    */
+  /**
+   * A guest placing an order, reproduced.
+   *
+   * What it mirrors is the part a screen depends on: the refusals, the
+   * idempotency, and — above all — that **no price comes from the payload**.
+   * Every figure is read from the demo's own catalogue rows, exactly as the
+   * SQL reads them from the tables, so a demo cannot demonstrate a guarantee
+   * production does not have.
+   *
+   * Added because the alternative was worse than the gap it closes. Without
+   * it, `guest_portal_place_order` is absent from this map, the checkout
+   * button throws `UnsupportedQuery`, and the demo shows a live control that
+   * fails — which is a worse thing to show somebody than the honest disabled
+   * button it replaced.
+   */
+  guest_portal_place_order(db, args) {
+    const token = String(args.p_token ?? '')
+    const booking = db.has('bookings')
+      ? db.rows('bookings').find((row) => looseEquals(row.guest_token, token))
+      : undefined
+
+    if (!booking) {
+      throw new DemoRpcError(
+        'guest_link_not_found',
+        'לא מצאנו את ההזמנה. ייתכן שהקישור הועתק חלקית.',
+      )
+    }
+
+    const lines = Array.isArray(args.p_lines)
+      ? (args.p_lines as Record<string, unknown>[])
+      : []
+
+    if (lines.length === 0) {
+      throw new DemoRpcError(
+        'store_order_empty',
+        'העגלה ריקה. הוסף פריט לפני השליחה.',
+      )
+    }
+
+    const settings = db.has('store_settings')
+      ? db
+          .rows('store_settings')
+          .find((row) =>
+            looseEquals(row.organization_id, booking.organization_id),
+          )
+      : undefined
+
+    if (!settings || settings.mode === 'off') {
+      throw new DemoRpcError(
+        'store_disabled',
+        'החנות אינה פעילה בבית האירוח הזה.',
+      )
+    }
+
+    const submissionKey = args.p_submission_key
+      ? String(args.p_submission_key)
+      : null
+
+    // Replay before anything is written, as the function does.
+    if (submissionKey !== null && db.has('store_orders')) {
+      const already = db
+        .rows('store_orders')
+        .find((row) => looseEquals(row.submission_key, submissionKey))
+      if (already) {
+        return {
+          id: already.id,
+          reference: already.reference,
+          replay: true,
+        }
+      }
+    }
+
+    const orderId = randomUuid()
+    const reference = `${settings.order_reference_prefix ?? 'S'}-${randomHex(3).toUpperCase()}`
+    let subtotal = 0
+
+    for (const line of lines) {
+      const item = db
+        .rows('store_items')
+        .find(
+          (row) =>
+            looseEquals(row.id, line.itemId) &&
+            row.status === 'active' &&
+            row.deleted_at == null,
+        )
+
+      if (!item) {
+        throw new DemoRpcError(
+          'store_item_unavailable',
+          'אחד הפריטים בעגלה אינו זמין יותר. רענן את הדף ונסה שוב.',
+        )
+      }
+
+      if (item.pricing_model === 'quote') {
+        throw new DemoRpcError(
+          'store_item_requires_quote',
+          'הפריט הזה נמכר לפי הצעת מחיר. פנה לבית האירוח.',
+        )
+      }
+
+      // THE PRICE, read from the catalogue and never from the payload.
+      const override = db.has('store_item_property_overrides')
+        ? db
+            .rows('store_item_property_overrides')
+            .find(
+              (row) =>
+                looseEquals(row.item_id, item.id) &&
+                looseEquals(row.property_id, booking.property_id),
+            )
+        : undefined
+
+      const unitPrice = Number(
+        override?.base_price_agorot ?? item.base_price_agorot ?? 0,
+      )
+      const quantity = Math.max(1, Number(line.quantity ?? 1))
+      subtotal += unitPrice * quantity
+
+      db.rows('store_order_lines').push({
+        id: randomUuid(),
+        organization_id: booking.organization_id,
+        order_id: orderId,
+        item_id: item.id,
+        item_name_snapshot: item.name,
+        item_type_snapshot: item.item_type,
+        pricing_model_snapshot: item.pricing_model,
+        unit_price_agorot: unitPrice,
+        options_agorot: 0,
+        addons_agorot: 0,
+        line_discount_agorot: 0,
+        quantity,
+        // The generated column, reproduced. See `GENERATED` above: the demo
+        // has no generated columns, and a line the adapter cannot read back
+        // is a booking that cannot be created.
+        line_total_agorot: unitPrice * quantity,
+        customization_answers: line.answers ?? {},
+        fulfilment_kind_snapshot: item.fulfilment_kind ?? 'none',
+        fulfilment_recipe_snapshot: item.fulfilment_recipe ?? {},
+        lead_time_hours_snapshot: item.lead_time_hours ?? 0,
+        cancellation_policy_snapshot: item.cancellation_policy ?? {},
+        provider_id: item.provider_id ?? null,
+        line_status: 'pending',
+        sort_order: 0,
+        version: 1,
+      })
+    }
+
+    db.rows('store_orders').push({
+      id: orderId,
+      organization_id: booking.organization_id,
+      property_id: booking.property_id,
+      booking_id: booking.id,
+      guest_id: booking.guest_id ?? null,
+      reference,
+      source: 'guest_portal',
+      // Always waiting for a human, exactly as the function writes it.
+      status: 'awaiting_approval',
+      payment_status: 'unpaid',
+      payment_mode: settings.default_payment_mode ?? 'with_booking',
+      currency: booking.currency ?? 'ILS',
+      subtotal_agorot: subtotal,
+      discount_agorot: 0,
+      tax_agorot: 0,
+      total_agorot: subtotal,
+      requested_for_date: args.p_requested_for ?? null,
+      guest_notes: args.p_notes ?? null,
+      submission_key: submissionKey,
+      amendment_count: 0,
+      metadata: {},
+      version: 1,
+    })
+
+    return { id: orderId, reference, totalAgorot: subtotal, replay: false }
+  },
+
   guest_portal_session(db, args) {
     return guestPortalProjection(db, String(args.p_token ?? ''))
   },

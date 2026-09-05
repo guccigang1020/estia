@@ -36,7 +36,7 @@
  * submit and silently fail.
  */
 
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -154,6 +154,18 @@ function serverSnapshot(): Cart {
   return EMPTY
 }
 
+/** Exactly the four fields the write path reads. No money crosses this. */
+export type SubmittableLine = {
+  itemId: string
+  quantity: number
+  optionValueIds: readonly string[]
+  answers: Readonly<Record<string, string | number>>
+}
+
+export type SubmitOutcome =
+  | { ok: true; reference: string; replay: boolean }
+  | { ok: false; message: string }
+
 export function GuestStore({
   bookingId,
   settings,
@@ -161,18 +173,30 @@ export function GuestStore({
   cards,
   /** Set on the owner's "preview as guest". Nothing may be added. */
   readOnly = false,
+  onSubmit,
 }: {
   bookingId: string
   settings: StoreSettings
   sections: readonly StoreSection[]
   cards: Readonly<Record<string, StoreCardView>>
   readOnly?: boolean
+  /**
+   * Sends the basket. Passed in rather than imported, so this component stays
+   * free of a server module and the owner's read-only preview can simply not
+   * supply one — a preview that could place a real order is the failure that
+   * matters here.
+   */
+  onSubmit?: (lines: readonly SubmittableLine[]) => Promise<SubmitOutcome>
 }) {
   const cart = useSyncExternalStore(
     useCallback((listener) => subscribe(bookingId, listener), [bookingId]),
     useCallback(() => snapshotOf(bookingId), [bookingId]),
     serverSnapshot,
   )
+
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
 
   function add(card: StoreCardView) {
     if (readOnly) return
@@ -381,16 +405,59 @@ export function GuestStore({
             {instruction.explanation}
           </p>
 
-          <Button disabled className="w-full">
-            {instruction.callToAction}
+          <Button
+            className="w-full"
+            disabled={!onSubmit || sending || sent !== null}
+            onClick={() => {
+              if (!onSubmit || sending || sent !== null) return
+              setSending(true)
+              setFailure(null)
+              void onSubmit(
+                cart.lines.map((line) => ({
+                  itemId: line.itemId,
+                  quantity: line.quantity,
+                  optionValueIds: line.optionValueIds,
+                  answers: line.answers,
+                })),
+              )
+                .then((outcome) => {
+                  if (outcome.ok) {
+                    setSent(outcome.reference)
+                    // The basket has become an order. Leaving it on screen
+                    // would invite a second one for the same thing.
+                    publish(bookingId, {
+                      lines: [],
+                      updatedAt: new Date().toISOString(),
+                    })
+                    return
+                  }
+                  setFailure(outcome.message)
+                })
+                .finally(() => setSending(false))
+            }}
+          >
+            {sending ? 'שולח…' : instruction.callToAction}
           </Button>
 
-          {/* Honest, and on screen rather than only in a comment: the button
-              is present and inert until the guest write path lands. */}
-          <p className="text-xs text-muted-foreground">
-            שליחת הבקשה מהמסך הזה עדיין אינה פעילה. אפשר להתקשר אלינו ונסדר את
-            זה — הפריטים שבחרתם נשמרים כאן בינתיים.
-          </p>
+          {sent !== null && (
+            <p className="rounded-lg border border-primary bg-surface-raised px-3 py-2 text-sm text-foreground">
+              הבקשה נשלחה{sent ? ` · ${sent}` : ''}. בית האירוח יאשר אותה ויחזור
+              אליכם.
+            </p>
+          )}
+
+          {failure !== null && (
+            <p className="rounded-lg border border-danger px-3 py-2 text-sm text-foreground">
+              {failure}
+            </p>
+          )}
+
+          {!onSubmit && (
+            <p className="text-xs text-muted-foreground">
+              שליחת הבקשה מהמסך הזה אינה זמינה כרגע. אפשר להתקשר אלינו ונסדר את
+              זה — הפריטים שבחרתם נשמרים כאן בינתיים.
+            </p>
+          )}
         </aside>
       )}
 

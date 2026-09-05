@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 
 import { GuestStore } from '@/components/store/guest-store'
+import { placeGuestOrderAction } from './_lib/actions'
 import { toSafeResponse } from '@/lib/errors'
 import { loadGuestSession } from '@/lib/guest-portal'
 import {
@@ -96,6 +97,25 @@ export default async function GuestStorePage({
       settings={view.settings}
       sections={view.sections}
       cards={view.cards}
+      onSubmit={async (lines) => {
+        'use server'
+        // The submission key is the booking and the basket, so two taps on the
+        // same basket dedupe and a genuinely different basket does not. It is
+        // minted here rather than in the browser because a client-held key
+        // survives a reload and would silently swallow a real second order.
+        const submissionKey = `${bookingId}:${lines
+          .map((line) => `${line.itemId}x${line.quantity}`)
+          .sort()
+          .join('|')}`
+
+        return placeGuestOrderAction({
+          token,
+          lines,
+          requestedForDate: null,
+          guestNotes: null,
+          submissionKey,
+        })
+      }}
     />
   )
 }
