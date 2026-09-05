@@ -225,6 +225,35 @@ src/app/(app)/settings/guest-journey/**       journey-settings     write
 src/components/journey-settings/**            journey-settings     write
 
 src/components/guest-stay/**                  guest-stay           write
+# ── Wave: the four capabilities the status picture named as absent ────────
+#
+# Each is new territory. None overlaps the other Claude session's claims —
+# `supabase/tests/**`, `src/lib/guest-journey/**`,
+# `src/app/(app)/settings/guest-journey/**`, `src/components/guest-stay/**`
+# and `src/components/journey-settings/**` are theirs and appear nowhere here.
+# The messaging channel between the two sessions is closed, so the register is
+# the only coordination left and it must be read as binding rather than as
+# advice.
+supabase/migrations/0041_platform_admin.sql    platform-admin   write
+src/app/(platform)/**                          platform-admin   write
+src/lib/platform/**                            platform-admin   write
+src/components/platform/**                     platform-admin   write
+
+supabase/migrations/0042_website_studio.sql    website-studio   write
+src/app/(app)/website/**                       website-studio   write
+src/app/s/**                                   website-studio   write
+src/lib/website/**                             website-studio   write
+src/components/website/**                      website-studio   write
+
+supabase/migrations/0043_notifications.sql     notifications    write
+src/lib/notifications/**                       notifications    write
+src/app/(app)/settings/notifications/**        notifications    write
+src/components/notifications/**                notifications    write
+
+src/app/(app)/insights/**                      insights         write
+src/lib/insights/**                            insights         write
+src/components/insights/**                     insights         write
+
 # ── The authorization floor. Read by everyone, written by one. ────────────
 src/lib/authz/**                              authz                write
 src/lib/agents/**                             authz                write
@@ -255,12 +284,10 @@ src/app/(app)/properties/**                   domain-writes        write
 # above. Both halves of an invitation are one act and now have one writer.
 
 # ── The one block with no domain at all, not merely no screen. ─────────────
-src/app/(app)/website/**                      ai-website           write
+# website and insights moved to website-studio / insights for this wave — see
+# the block above. `ai-website` built automations and templates; those stay.
 src/app/(app)/automations/**                  ai-website           write
 src/app/(app)/templates/**                    ai-website           write
-src/app/(app)/insights/**                     ai-website           write
-src/components/website/**                     ai-website           write
-src/lib/website/**                            ai-website           write
 src/lib/automation/**                         ai-website           write
 
 # ── The preparation chain: intake, policy, plan. ──────────────────────────

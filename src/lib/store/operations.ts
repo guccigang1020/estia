@@ -38,6 +38,7 @@ import {
 } from '../contracts/states'
 import { BusinessRuleError } from '../errors'
 import {
+  asNumberOrNull,
   asString,
   clientFor,
   recordWrite,
@@ -81,6 +82,12 @@ const PRODUCT_INPUT = s.object({
   requiresApproval: s.nullable(s.boolean({ label: 'דורש אישור' })),
 })
 
+const PRICE_INPUT = s.object({
+  itemId: s.uuid({ label: 'מוצר' }),
+  pricingModel: s.enumOf(STORE_PRICING_MODELS, { label: 'אופן התמחור' }),
+  basePriceAgorot: s.nullable(s.agorot({ label: 'מחיר' })),
+})
+
 export type ProductDraft = {
   name: string
   slug: string
@@ -94,6 +101,18 @@ export type ProductDraft = {
 }
 
 export type CreatedProduct = { id: string; name: string; slug: string }
+
+export type ProductPriceChange = {
+  itemId: string
+  pricingModel: (typeof STORE_PRICING_MODELS)[number]
+  basePriceAgorot: number | null
+}
+
+export type RepricedProduct = {
+  id: string
+  name: string
+  basePriceAgorot: number | null
+}
 
 const ORDER_LINE_INPUT = s.object({
   itemId: s.uuid({ label: 'מוצר' }),
@@ -203,6 +222,7 @@ function mintOrderReference(prefix: string, now: Date): string {
 
 export type StoreOperations = {
   createProduct: Operation<ProductDraft, null, CreatedProduct>
+  changeProductPrice: Operation<ProductPriceChange, null, RepricedProduct>
   createOrder: Operation<OrderDraft, null, CreatedOrder>
   approveOrder: Operation<{ orderId: string }, StoreOrder, { id: string }>
   recordPayment: Operation<
@@ -1039,8 +1059,130 @@ export function defineStoreOperations(options: { db: Db }): StoreOperations {
     },
   )
 
+  /* --------------------------------------------------------- repricing -- */
+
+  /**
+   * Changing what a product costs.
+   *
+   * A product could be created with a price and never move it again — there
+   * was no operation for it anywhere, so an owner who mispriced a שולחן שוק
+   * had to archive it and create a second one. It is also why the price
+   * snapshot, the loudest guarantee this module makes, could only ever be
+   * shown by a test: nothing in the product could make the catalogue and a
+   * placed order disagree.
+   *
+   * ── What it cannot do, rather than must not ──────────────────────────────
+   *
+   * Move an order. `store_order_lines.unit_price_agorot` is written when the
+   * guest buys and this operation writes to `store_items`. A table sold at
+   * ₪1,500 stays ₪1,500 after the catalogue goes to ₪1,800, because nothing
+   * reads the catalogue to price a line that already exists. That is not a
+   * rule enforced here — it is one this code is unable to break, which is the
+   * stronger arrangement.
+   *
+   * ── Why no history is written here ───────────────────────────────────────
+   *
+   * `tg_store_items_price_history` in 0032 already inserts a row whenever
+   * `base_price_agorot` or `pricing_model` changes, and skips when neither
+   * did. A second insert here would double every entry, and a hand-written
+   * one could be forgotten on some other path that touches the column. The
+   * trigger cannot be. `updated_by` is set so its `changed_by` names a
+   * person: a price change with no author is exactly the audit row somebody
+   * wants in a dispute.
+   */
+  const changeProductPrice = defineOperation<
+    ProductPriceChange,
+    null,
+    RepricedProduct
+  >({
+    name: 'store.product.reprice',
+    // Not `product.manage`. 0012 split the two so somebody may be trusted to
+    // write a description and not to move a price; this is the second only.
+    permission: 'product.price_manage',
+    resourceType: 'store_item',
+    input: PRICE_INPUT,
+
+    rule({ input }) {
+      // The same two refusals `createProduct` makes, so a person reads a
+      // sentence about the field they filled in rather than a CHECK's name.
+      if (input.pricingModel === 'quote' && input.basePriceAgorot !== null) {
+        throw new BusinessRuleError({
+          code: 'store_quote_has_price',
+          userMessage:
+            'מוצר שנמכר לפי הצעת מחיר אינו יכול לשאת מחיר קבוע. השאירו את שדה המחיר ריק.',
+          message: 'quote-priced item was given a base price',
+        })
+      }
+      if (input.pricingModel !== 'quote' && input.basePriceAgorot === null) {
+        throw new BusinessRuleError({
+          code: 'store_price_required',
+          userMessage:
+            'צריך לרשום מחיר. אם המחיר נקבע מול כל אורח בנפרד, בחרו ״לפי הצעת מחיר״.',
+          message: 'non-quote item was given no base price',
+        })
+      }
+    },
+
+    async execute({ input, context, tx }) {
+      const db = clientFor(tx, options.db)
+
+      const { data, error } = await db
+        .from('store_items')
+        .update({
+          base_price_agorot: input.basePriceAgorot,
+          pricing_model: input.pricingModel,
+          updated_by: context.actor.userId,
+        })
+        .eq('id', input.itemId)
+        // Named even though RLS scopes it too. The demo has no RLS, and a
+        // reprice crossing a tenant is the worst thing this column could do.
+        .eq('organization_id', context.actor.organizationId)
+        .select('id, name, base_price_agorot, pricing_model')
+        .maybeSingle()
+
+      if (error) throw error
+      if (!data) {
+        // Either the row is gone or the select policy refused it. Both are
+        // 'not found' from where the person is standing, and telling them
+        // apart would disclose that a product they cannot read exists.
+        throw new BusinessRuleError({
+          code: 'store_item_not_repriceable',
+          userMessage:
+            'המוצר לא נמצא, או שאין לך גישה אליו. רעננו את הדף ונסו שוב.',
+          message: 'store_items update matched no row this actor may read',
+        })
+      }
+
+      recordWrite(tx, 'store_items.reprice')
+
+      const row = toRow(data)
+
+      return {
+        id: asString(row, 'id'),
+        name: asString(row, 'name'),
+        basePriceAgorot: asNumberOrNull(row, 'base_price_agorot'),
+      }
+    },
+
+    audit({ input, result, context }) {
+      return {
+        resourceId: result.id,
+        after: {
+          basePriceAgorot: result.basePriceAgorot,
+          pricingModel: input.pricingModel,
+        },
+        summary:
+          `${context.auditActor.label} עדכן את המחיר של ${result.name} ל-` +
+          (result.basePriceAgorot === null
+            ? 'הצעת מחיר'
+            : `${result.basePriceAgorot / 100} ₪`),
+      }
+    },
+  })
+
   return {
     createProduct,
+    changeProductPrice,
     createOrder,
     approveOrder,
     recordPayment,

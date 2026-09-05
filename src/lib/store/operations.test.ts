@@ -276,6 +276,132 @@ describe('STEP 1 — the owner creates שולחן שוק at ₪1,500', () => {
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 
+describe('STEP 1b — the owner raises the price, and a placed order does not move', () => {
+  const EIGHTEEN_HUNDRED = 180_000
+
+  it('writes the new price to the catalogue and nothing else', async () => {
+    const db = new FakeSupabaseClient({
+      responses: {
+        'store_items:update': {
+          data: {
+            id: ITEM,
+            name: 'שולחן שוק',
+            base_price_agorot: EIGHTEEN_HUNDRED,
+            pricing_model: 'fixed',
+          },
+        },
+      },
+    })
+
+    const kit = services()
+    const outcome = await defineStoreOperations({
+      db: db.asDb(),
+    }).changeProductPrice.run({
+      request: {
+        input: {
+          itemId: ITEM,
+          pricingModel: 'fixed',
+          basePriceAgorot: EIGHTEEN_HUNDRED,
+        },
+        idempotencyKey: 'reprice-market-table',
+      },
+      context: context(),
+      services: kit,
+    })
+
+    expect(outcome.data.basePriceAgorot).toBe(EIGHTEEN_HUNDRED)
+
+    // Exactly one table is written, and it is the catalogue. If a reprice ever
+    // touched `store_order_lines`, every historical order would silently
+    // restate itself and no test below this line would notice.
+    const written = db.queries
+      .filter((query) => query.verb === 'update')
+      .map((query) => query.table)
+    expect(written).toEqual(['store_items'])
+
+    const update = db.queriesFor('store_items')[0]
+    const payload = update.payload as Record<string, unknown>
+    expect(payload.base_price_agorot).toBe(EIGHTEEN_HUNDRED)
+
+    // Scoped by organization in the query, not only by policy. The demo has
+    // no RLS, and a reprice crossing a tenant is the worst thing this column
+    // could do.
+    expect(
+      update.filters.some(
+        (filter) =>
+          filter.column === 'organization_id' && filter.value === ORGANIZATION,
+      ),
+    ).toBe(true)
+
+    // A price change with no author is the one audit row somebody wants in a
+    // dispute.
+    expect(payload.updated_by).toBeTruthy()
+    expect(kit.audit.records).toHaveLength(1)
+    expect(kit.audit.records[0].summary).toContain('שולחן שוק')
+  })
+
+  it('refuses a reprice from somebody holding only product.manage', async () => {
+    const db = new FakeSupabaseClient({ responses: {} })
+
+    await expect(
+      defineStoreOperations({ db: db.asDb() }).changeProductPrice.run({
+        request: {
+          input: {
+            itemId: ITEM,
+            pricingModel: 'fixed',
+            basePriceAgorot: EIGHTEEN_HUNDRED,
+          },
+          idempotencyKey: 'reprice-refused',
+        },
+        context: {
+          ...context(),
+          actor: owner(
+            OWNER_GRANTS.filter((grant) => grant !== 'product.price_manage'),
+          ),
+        },
+        services: services(),
+      }),
+    ).rejects.toThrow()
+
+    // Refused before anything was written, not after.
+    expect(db.queriesFor('store_items')).toHaveLength(0)
+  })
+
+  it('refuses to put a fixed price on a quote product, and the reverse', async () => {
+    const db = new FakeSupabaseClient({ responses: {} })
+
+    await expect(
+      defineStoreOperations({ db: db.asDb() }).changeProductPrice.run({
+        request: {
+          input: {
+            itemId: ITEM,
+            pricingModel: 'quote',
+            basePriceAgorot: EIGHTEEN_HUNDRED,
+          },
+          idempotencyKey: 'reprice-quote-with-price',
+        },
+        context: context(),
+        services: services(),
+      }),
+    ).rejects.toMatchObject({ code: 'store_quote_has_price' })
+
+    await expect(
+      defineStoreOperations({ db: db.asDb() }).changeProductPrice.run({
+        request: {
+          input: {
+            itemId: ITEM,
+            pricingModel: 'fixed',
+            basePriceAgorot: null,
+          },
+          idempotencyKey: 'reprice-fixed-without-price',
+        },
+        context: context(),
+        services: services(),
+      }),
+    ).rejects.toMatchObject({ code: 'store_price_required' })
+  })
+})
+
 describe('STEP 2 — an order is placed, and the price is SNAPSHOTTED onto the line', () => {
   function orderDb() {
     return new FakeSupabaseClient({
