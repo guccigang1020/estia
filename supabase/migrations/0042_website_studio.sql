@@ -436,6 +436,46 @@ create trigger site_pages_touch
 -- exact shape a fabricated fact arrives in when somebody writes the row by
 -- hand or an import goes wrong.
 
+-- ============================================================================
+-- The claims predicate
+-- ============================================================================
+-- A CHECK constraint cannot contain a subquery, and there is no way to walk a
+-- jsonb array without one. So the law lives in an IMMUTABLE function and the
+-- constraint calls it: still refused at write time, still "cannot be stored"
+-- rather than "is caught by a test".
+--
+-- Guards the array shape itself rather than trusting the sibling constraint —
+-- CHECK constraints have no evaluation order, and `jsonb_array_elements` on an
+-- object raises instead of returning false.
+
+create or replace function public.site_claims_are_sourced(p_claims jsonb)
+returns boolean
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $fn$
+  select case
+    when jsonb_typeof(p_claims) <> 'array' then false
+    else not exists (
+      select 1
+      from jsonb_array_elements(p_claims) as element
+      where jsonb_typeof(element) <> 'object'
+         or coalesce(length(btrim(element ->> 'key')), 0) = 0
+         or coalesce(length(btrim(element ->> 'text')), 0) = 0
+         or (element ->> 'source') is null
+         or (element ->> 'source') not in (
+              'organization', 'property', 'unit', 'amenity',
+              'pricing', 'availability', 'media', 'authored'
+            )
+         or coalesce(length(btrim(element ->> 'sourceId')), 0) = 0
+    )
+  end;
+$fn$;
+
+comment on function public.site_claims_are_sourced(jsonb) is
+  'The website module''s one law. Every claim carries a non-empty key, a non-empty text, a source in the vocabulary and a non-empty sourceId — authored included, because a sentence nobody is signed to is as unaccountable as an invented one. Called by site_sections_claims_sourced, which cannot hold the subquery itself.';
+
 create table if not exists public.site_sections (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations (id) on delete cascade,
@@ -485,31 +525,20 @@ create table if not exists public.site_sections (
   -- ══ THE MODULE'S LAW, AS A CHECK CONSTRAINT ════════════════════════════
   --
   -- Every element must be an object carrying a non-empty `key`, a non-empty
-  -- `text` and a `source` in the enum — and, unless that source is
-  -- `authored`, a non-null `sourceId`.
+  -- `text`, a `source` in the enum and a non-empty `sourceId` — including
+  -- when the source is `authored`, because an authored claim with nobody
+  -- signed to it is exactly as unaccountable as a fabricated one.
+  --
+  -- Delegated to `site_claims_are_sourced` because a CHECK constraint may not
+  -- contain a subquery, and walking a jsonb array needs one. The law is
+  -- unchanged and still refuses the write; only where it is written moved.
   --
   -- A row asserting "the villa has a heated pool", tagged as coming from the
   -- property table, naming no property, cannot be stored. Not "is caught by a
   -- test": cannot be stored. `facts.ts` is the only constructor and this is
   -- the floor beneath it, for the day somebody writes the row another way.
-  constraint site_sections_claims_sourced check (
-    not exists (
-      select 1
-      from jsonb_array_elements(claims) as element
-      where jsonb_typeof(element) <> 'object'
-         or coalesce(length(btrim(element ->> 'key')), 0) = 0
-         or coalesce(length(btrim(element ->> 'text')), 0) = 0
-         or (element ->> 'source') is null
-         or (element ->> 'source') not in (
-              'organization', 'property', 'unit', 'amenity',
-              'pricing', 'availability', 'media', 'authored'
-            )
-         or ((element ->> 'source') <> 'authored'
-             and coalesce(length(btrim(element ->> 'sourceId')), 0) = 0)
-         or ((element ->> 'source') = 'authored'
-             and coalesce(length(btrim(element ->> 'sourceId')), 0) = 0)
-    )
-  )
+  constraint site_sections_claims_sourced
+    check (public.site_claims_are_sourced(claims))
 );
 
 comment on table public.site_sections is
@@ -1440,13 +1469,13 @@ create policy site_booking_requests_update on public.site_booking_requests
     organization_id in (select public.my_organizations())
     and (property_id is null
          or public.property_in_scope(property_id, organization_id))
-    and public.has_permission(organization_id, 'booking.manage')
+    and public.has_permission(organization_id, 'booking.update')
   )
   with check (
     organization_id in (select public.my_organizations())
     and (property_id is null
          or public.property_in_scope(property_id, organization_id))
-    and public.has_permission(organization_id, 'booking.manage')
+    and public.has_permission(organization_id, 'booking.update')
   );
 
 
@@ -1986,7 +2015,7 @@ begin
     ('site.rollback'), ('site.ai_generate'),
     -- Reading an enquiry is a booking grant, not a site one. Asserted here
     -- because the policy silently returns nothing if it is renamed.
-    ('booking.view'), ('booking.manage')
+    ('booking.view'), ('booking.update')
   ) as g(code)
   where not exists (
     select 1 from public.permissions where permissions.code = g.code
@@ -2022,6 +2051,22 @@ begin
   ) then
     raise exception
       'site_sections_claims_sourced is missing — a claim naming a canonical source with no row could be stored, and the module''s one rule is gone';
+  end if;
+
+  -- And that it BITES. A constraint that exists and accepts everything is the
+  -- more dangerous of the two failures, because it reads as enforcement.
+  if public.site_claims_are_sourced(
+       '[{"key":"k","text":"t","source":"property"}]'::jsonb
+     ) then
+    raise exception
+      'the claims predicate accepts a property claim naming no row — the module''s one law is not being enforced';
+  end if;
+
+  if not public.site_claims_are_sourced(
+       '[{"key":"k","text":"t","source":"property","sourceId":"x"}]'::jsonb
+     ) then
+    raise exception
+      'the claims predicate refuses a well-formed claim — every section write would fail';
   end if;
 
   -- ── THE PUBLIC PATH CANNOT REACH A DRAFT ────────────────────────────────
