@@ -585,6 +585,255 @@ export type ApprovalType = (typeof APPROVAL_TYPES)[number]
 
 // ── Pagination ────────────────────────────────────────────────────────────
 
+/* ------------------------------------------------------------ autopilot -- */
+
+/**
+ * Whether ESTIA the platform will let this customer near Autopilot at all.
+ *
+ * The workflow around the decision, not the decision itself. What the PRODUCT
+ * reads is the `autopilot` entitlement, exactly as it reads every other
+ * feature — `platform/capabilities.ts` argues at length that a second table
+ * answering "does this customer have X" is a second answer, and the day the
+ * two disagree nobody knows which one the customer is living in. So these
+ * states are the platform's record of WHY the entitlement is or is not there,
+ * and granting the entitlement is what actually opens the door.
+ */
+export const AUTOPILOT_CAPABILITY_STATES = [
+  /** Not offered. The default, and not a refusal — most customers are here. */
+  'not_available',
+  /** The plan would carry it; nobody has switched it on. */
+  'eligible',
+  /** Time-boxed, with an end date that is enforced rather than remembered. */
+  'trial',
+  'enabled',
+  /** Withdrawn by the platform, usually after a safety incident. Reversible. */
+  'suspended',
+  /** Withdrawn, and not coming back without a new decision. */
+  'disabled',
+] as const
+
+export type AutopilotCapabilityState =
+  (typeof AUTOPILOT_CAPABILITY_STATES)[number]
+
+/**
+ * How much the customer has decided to let ESTIA do — ordered, and the order
+ * is load-bearing.
+ *
+ * Each level is a superset of the one before it, so "at least assisted" is an
+ * ordinal comparison rather than a set membership test. `custom` sits outside
+ * that ladder deliberately: it means the policy matrix decides action by
+ * action, and it is last so no comparison accidentally reads it as the
+ * highest rung.
+ */
+export const AUTOPILOT_LEVELS = [
+  /** Nothing beyond the workflows ESTIA already runs. */
+  'off',
+  /** Detect and recommend. Never act. */
+  'advisory',
+  /** Prepare the action; a person confirms it. */
+  'assisted',
+  /** Safe approved actions execute inside the guardrails. */
+  'autopilot',
+  /** The matrix decides, action by action. */
+  'custom',
+] as const
+
+export type AutopilotLevel = (typeof AUTOPILOT_LEVELS)[number]
+
+/** The ladder without `custom`, for the comparisons that need an order. */
+export const AUTOPILOT_LADDER = [
+  'off',
+  'advisory',
+  'assisted',
+  'autopilot',
+] as const
+
+/**
+ * What class of harm an action can do if it fires when it should not have.
+ *
+ * Ascending, and the whole safety engine is an ordinal comparison against it.
+ * The names carry the meaning rather than the 0..4 of the brief, because a
+ * column holding `3` is a column nobody can read during an incident.
+ */
+export const ACTION_SAFETY_LEVELS = [
+  /** Says something. Changes nothing. */
+  'information',
+  /** Internal, reversible, invisible outside the business. */
+  'safe_internal',
+  /** Leaves the building — a guest, a provider or a cleaner reads it. */
+  'external_communication',
+  /** Changes what the business charges, offers or promises. */
+  'business_impact',
+  /** Money, access, or the loss of a booking. Never automatic by default. */
+  'money_access_cancellation',
+] as const
+
+export type ActionSafetyLevel = (typeof ACTION_SAFETY_LEVELS)[number]
+
+/** What Autopilot may do with one action kind — the cell of the matrix. */
+export const AUTOPILOT_DISPOSITIONS = [
+  /** Do not even raise it. */
+  'off',
+  /** Raise it; offer no prepared action. */
+  'suggest',
+  /** Prepare it; a person presses the button. */
+  'ask_approval',
+  /** Perform it. */
+  'auto',
+] as const
+
+export type AutopilotDisposition = (typeof AUTOPILOT_DISPOSITIONS)[number]
+
+/**
+ * The domains Autopilot triages, in the order it triages them.
+ *
+ * This tuple IS the priority order in the brief. A comparator reads the index
+ * rather than a switch statement somewhere restating it, so "what does ESTIA
+ * look at first" has exactly one answer and it is readable. Safety is first
+ * and optimization is last, and nothing reorders them per organization: a
+ * business that could put revenue above a guest being locked out is a
+ * business ESTIA should not help build.
+ */
+export const AUTOPILOT_DOMAINS = [
+  'safety',
+  'arrival_risk',
+  'guest_access',
+  'payment_risk',
+  'preparation',
+  'maintenance',
+  'inventory',
+  'laundry',
+  'staff',
+  'sales_opportunity',
+  'optimization',
+] as const
+
+export type AutopilotDomain = (typeof AUTOPILOT_DOMAINS)[number]
+
+/** How an arrival, a booking or a property is tracking. */
+export const AUTOPILOT_RISK_STATES = [
+  'ready',
+  'on_track',
+  'at_risk',
+  'critical',
+] as const
+
+export type AutopilotRiskState = (typeof AUTOPILOT_RISK_STATES)[number]
+
+/** Where an exception is in somebody's day. */
+export const AUTOPILOT_EXCEPTION_STATES = [
+  'new',
+  'acknowledged',
+  'in_progress',
+  'resolved',
+  'dismissed',
+] as const
+
+export type AutopilotExceptionState =
+  (typeof AUTOPILOT_EXCEPTION_STATES)[number]
+
+/**
+ * How sure Autopilot is. Low confidence never executes anything external or
+ * material. Deliberately three values: a percentage invites a threshold
+ * argument nobody can settle, and implies a precision that a heuristic over
+ * operational data does not have.
+ */
+export const AUTOPILOT_CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const
+
+export type AutopilotConfidence = (typeof AUTOPILOT_CONFIDENCE_LEVELS)[number]
+
+/**
+ * Whether this run may touch the world.
+ *
+ * `simulation` is not a debug flag. It is the rollout path: a business runs it
+ * for a fortnight, reads what ESTIA WOULD have done, and enables real
+ * automation having already seen it. Everything downstream reads this one
+ * value, so there is no path that forgets.
+ */
+export const AUTOPILOT_RUN_MODES = ['live', 'simulation'] as const
+
+export type AutopilotRunMode = (typeof AUTOPILOT_RUN_MODES)[number]
+
+/** What became of one planned action. */
+export const AUTOPILOT_ACTION_OUTCOMES = [
+  'planned',
+  'awaiting_approval',
+  'approved',
+  'executed',
+  /** Ran, and the audit write then failed. Rare, and exactly what to be told. */
+  'executed_unaudited',
+  'failed',
+  'retrying',
+  'needs_review',
+  /** A person or a policy said no. */
+  'suppressed',
+  /** Simulation only: what would have happened. */
+  'simulated',
+  /** Withdrawn before it ran. */
+  'cancelled',
+] as const
+
+export type AutopilotActionOutcome = (typeof AUTOPILOT_ACTION_OUTCOMES)[number]
+
+/** How one booking wants to be treated, overriding the organization. */
+export const AUTOPILOT_BOOKING_HANDLING = [
+  'normal',
+  /** Watch, report, and never act outward without a person. */
+  'high_attention',
+  /** Watch and report only. */
+  'manual_only',
+] as const
+
+export type AutopilotBookingHandling =
+  (typeof AUTOPILOT_BOOKING_HANDLING)[number]
+
+/**
+ * Why an action did not happen.
+ *
+ * A diagnostic vocabulary rather than a lifecycle, which is why the schema
+ * holds it as text and a new member needs no migration. It is exhaustive on
+ * purpose: "Autopilot did nothing" with no reason attached is the single
+ * fastest way to lose a customer's trust in it.
+ */
+export const AUTOPILOT_SUPPRESSION_REASONS = [
+  'level_too_low',
+  'policy_off',
+  'safety_level_forbidden',
+  'platform_rule',
+  'module_disabled',
+  'missing_permission',
+  'missing_entitlement',
+  'quiet_hours',
+  'paused',
+  'kill_switch',
+  'low_confidence',
+  'booking_manual_only',
+  'property_override',
+  'simulation',
+  'duplicate',
+] as const
+
+export type AutopilotSuppressionReason =
+  (typeof AUTOPILOT_SUPPRESSION_REASONS)[number]
+
+/**
+ * How far a pattern ESTIA noticed has got towards being a rule.
+ *
+ * An observed pattern is never a rule. These are the states of a PROPOSAL, and
+ * `adopted` is reachable only by a person with `autopilot.rules_manage`.
+ */
+export const AUTOPILOT_RULE_CANDIDATE_STATES = [
+  'observed',
+  'proposed',
+  'adopted',
+  'rejected',
+  /** Seen again after rejection; counted, never re-proposed. */
+  'muted',
+] as const
+
+export type AutopilotRuleCandidateState =
+  (typeof AUTOPILOT_RULE_CANDIDATE_STATES)[number]
+
 /**
  * How every list is read.
  *

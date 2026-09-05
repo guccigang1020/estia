@@ -42,6 +42,19 @@ const ADD_ON_ONLY: readonly Entitlement[] = [
   // list is the thing they have to edit and therefore the thing that reminds
   // them to price it.
   'api_access',
+
+  // Add-on-only BY DESIGN, and the one entry here that is a product decision
+  // rather than an unfinished one. Autopilot is a managed premium capability:
+  // the brief opens by saying it must not be available automatically to every
+  // organization, and putting it on a package is precisely how it would
+  // become available automatically to everyone who bought that package.
+  //
+  // It reaches a customer through `subscription.entitlementGrants`, written by
+  // the platform console when somebody moves that organization to `trial` or
+  // `enabled`. That is one deliberate decision per customer, which is what a
+  // capability that can send messages and spend money on their behalf should
+  // cost to switch on.
+  'autopilot',
 ]
 
 describe('every entitlement is actually for sale', () => {

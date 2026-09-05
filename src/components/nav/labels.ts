@@ -41,6 +41,7 @@ export const ENTITLEMENT_LABELS: Record<Entitlement, string> = {
   custom_roles: 'תפקידים מותאמים',
   multi_brand: 'ריבוי מותגים',
   api_access: 'API',
+  autopilot: 'טייס אוטומטי',
 }
 
 export function entitlementLabel(entitlement: string): string {

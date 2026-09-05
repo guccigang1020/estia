@@ -52,6 +52,7 @@ export const ENTITLEMENT_LABEL: Record<Entitlement, string> = {
   custom_roles: 'תפקידים מותאמים',
   multi_brand: 'ריבוי מותגים',
   api_access: 'גישת API',
+  autopilot: 'טייס אוטומטי',
 }
 
 export const QUOTA_LABEL: Record<QuotaKey, string> = {

@@ -198,6 +198,35 @@ export const DOMAIN_EVENTS = [
   'security.permission_escalated',
   'security.bulk_export',
   'security.payment_config_changed',
+
+  // Autopilot. The capability's own lifecycle, then one event per thing that
+  // happened to a decision — raised, prepared, approved, done, or refused with
+  // a reason. `action_suppressed` is not a failure and is not noise: the count
+  // of what Autopilot declined to do, and why, is the only honest answer to
+  // "what is it actually doing", and a customer who cannot see that will not
+  // trust it with anything that matters.
+  'autopilot.enabled',
+  'autopilot.disabled',
+  'autopilot.paused',
+  'autopilot.resumed',
+  'autopilot.policy_changed',
+  'autopilot.exception_raised',
+  'autopilot.exception_acknowledged',
+  'autopilot.exception_resolved',
+  'autopilot.exception_dismissed',
+  'autopilot.action_planned',
+  'autopilot.action_approval_requested',
+  'autopilot.action_approved',
+  'autopilot.action_executed',
+  'autopilot.action_failed',
+  'autopilot.action_suppressed',
+  'autopilot.action_simulated',
+  'autopilot.action_undone',
+  // A pattern was noticed, and separately a person turned one into a rule.
+  // Two events because they are two decisions, and only the second binds.
+  'autopilot.rule_candidate_observed',
+  'autopilot.rule_candidate_adopted',
+  'autopilot.brief_sent',
 ] as const
 
 export type DomainEventName = (typeof DOMAIN_EVENTS)[number]

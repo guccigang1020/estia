@@ -39,6 +39,12 @@ export const ENTITLEMENTS = [
   'custom_roles',
   'multi_brand',
   'api_access',
+  // The intelligent operations layer: risk detection, the decisions above it,
+  // and the safe automatic actions above those. Its own line rather than part
+  // of `automation`, because they are different purchases — `automation` is
+  // the customer writing WHEN/IF/THEN themselves, and this is ESTIA working
+  // out what needs doing and asking about the parts that need a person.
+  'autopilot',
 ] as const
 
 export type Entitlement = (typeof ENTITLEMENTS)[number]
@@ -62,6 +68,18 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   // AI drafting of copy, SEO and imagery is metered separately from the site
   // itself, so a customer can hold a website without paying for generation.
   'site.ai_generate': 'ai_content',
+
+  // Autopilot. Every grant, including the read-only ones: a customer without
+  // the feature should not be shown an empty activity log and left to wonder
+  // what it would have said. The screens offer the upgrade instead.
+  'autopilot.view': 'autopilot',
+  'autopilot.use': 'autopilot',
+  'autopilot.approve': 'autopilot',
+  'autopilot.configure': 'autopilot',
+  'autopilot.pause': 'autopilot',
+  'autopilot.activity_view': 'autopilot',
+  'autopilot.override': 'autopilot',
+  'autopilot.rules_manage': 'autopilot',
 
   // Team & access
   'user.invite': 'team',

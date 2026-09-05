@@ -212,6 +212,27 @@ export const PERMISSIONS = [
   'site.publish',
   'site.rollback',
   'site.ai_generate',
+
+  // ── Autopilot ───────────────────────────────────────────────────────────
+  // Eight, and the split is the point. Seeing what Autopilot noticed,
+  // approving one prepared action, and changing the rule that prepared it are
+  // three different amounts of authority — a shift manager who can approve a
+  // reminder must not thereby be able to set the whole business to automatic.
+  'autopilot.view',
+  /** Ask it to do something now: "sort out my day", resolve an exception. */
+  'autopilot.use',
+  /** Press the button on a prepared action. Never implies configure. */
+  'autopilot.approve',
+  'autopilot.configure',
+  /** The kill switch and the temporary pause. Separate because it is urgent: */
+  /** the person who must stop it at 23:00 is rarely the person who set it up. */
+  'autopilot.pause',
+  'autopilot.activity_view',
+  /** Override the disposition for one booking or one property. */
+  'autopilot.override',
+  /** Turn an observed pattern into a standing rule. */
+  'autopilot.rules_manage',
+
   'pricing.manage',
   'channel.manage',
 

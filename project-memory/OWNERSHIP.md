@@ -235,6 +235,12 @@ src/components/guest-stay/**                  guest-stay           write
 # the only coordination left and it must be read as binding rather than as
 # advice.
 supabase/migrations/0041_platform_admin.sql    platform-admin   write
+# Autopilot's platform console. Listed BEFORE the platform-admin catch-alls
+# because ownership is most-specific-first and these would otherwise never
+# match — which the checker said, on its first run, before anything was built.
+src/app/(platform)/autopilot/**                autopilot-platform write
+src/lib/platform/autopilot.ts                  autopilot-platform write
+
 src/app/(platform)/**                          platform-admin   write
 src/lib/platform/**                            platform-admin   write
 src/components/platform/**                     platform-admin   write
@@ -249,6 +255,29 @@ supabase/migrations/0043_notifications.sql     notifications    write
 src/lib/notifications/**                       notifications    write
 src/app/(app)/settings/notifications/**        notifications    write
 src/components/notifications/**                notifications    write
+
+# ── Autopilot wave ────────────────────────────────────────────────────────
+# The shared contract — states, events, grants, the action catalogue, the
+# stage types and 0046 — is the coordinator's and is already written. Six
+# agents build on top of it and none of them may edit it: a stage that widens
+# its own contract is a stage the other five stop compiling against.
+#
+# The territories are disjoint by construction. Each agent owns one directory
+# and writes nowhere else, so "did somebody overwrite my work" is answerable
+# by `npm run ownership -- --agent <name>` rather than by reading a diff.
+
+src/lib/autopilot/actions.ts                   coordinator      write
+src/lib/autopilot/types.ts                     coordinator      write
+src/lib/autopilot/index.ts                     coordinator      write
+supabase/migrations/0046_autopilot.sql         coordinator      write
+
+src/lib/autopilot/policy/**                    autopilot-core   write
+src/lib/autopilot/signals/**                   autopilot-signals write
+src/lib/autopilot/decide/**                    autopilot-decide write
+src/lib/autopilot/execute/**                   autopilot-execute write
+src/lib/autopilot/learning/**                  autopilot-learning write
+src/app/(app)/autopilot/**                     autopilot-screens write
+src/components/autopilot/**                    autopilot-screens write
 
 src/app/(app)/insights/**                      insights         write
 src/lib/insights/**                            insights         write

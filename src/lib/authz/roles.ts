@@ -398,6 +398,24 @@ type ComposedRole = Exclude<SystemRole, 'organization_owner' | 'administrator'>
  * `ALL_ORGANIZATION_GRANTS` — which the owner and the administrator derive
  * from — already carries it and needs no special case.
  */
+/**
+ * Working Autopilot day to day: read what it noticed, ask it to act, approve
+ * one prepared action, read the log, and stop it.
+ *
+ * `autopilot.configure`, `autopilot.override` and `autopilot.rules_manage`
+ * are deliberately NOT here. Those three change what the business does when
+ * nobody is watching, and they stay with the owner and the administrator until
+ * somebody hands them over on purpose. `autopilot.pause` IS here, because the
+ * person who has to stop it at 23:00 is rarely the person who set it up.
+ */
+const AUTOPILOT_OPERATOR: readonly Grant[] = [
+  'autopilot.view',
+  'autopilot.use',
+  'autopilot.approve',
+  'autopilot.pause',
+  'autopilot.activity_view',
+]
+
 export const UNIVERSAL_GRANTS: readonly Grant[] = [
   'notification.preferences.manage',
 ]
@@ -406,6 +424,12 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   general_manager: [
     ...BOOKING_DESK,
     ...OPERATIONS_CORE,
+    ...AUTOPILOT_OPERATOR,
+    // The one non-owner role that may change the policy matrix: running the
+    // business day to day is exactly the job that knows which reminders should
+    // send themselves.
+    'autopilot.configure',
+    'autopilot.override',
     'booking.override_price',
     'booking.override_availability',
     'booking.export',
@@ -476,6 +500,10 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   property_manager: [
     ...BOOKING_DESK,
     ...OPERATIONS_CORE,
+    ...AUTOPILOT_OPERATOR,
+    // May mark one booking as manual-only — a wedding, a returning VIP — but
+    // not change the organization's settings.
+    'autopilot.override',
     'booking.export',
     'booking.view_source',
     'unit.manage',
@@ -574,6 +602,10 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   finance_manager: [
     ...BOOKING_READ,
     ...FINANCE_CORE,
+    // Approves the payment reminders and the reconciliation prompts. Cannot
+    // configure, and — as everywhere else — cannot make Autopilot charge
+    // anybody: that is a platform safety rule, not a permission.
+    ...AUTOPILOT_OPERATOR,
     'guest.view_name',
     'guest.view_phone',
     'guest.view_email',
@@ -618,6 +650,7 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
   ],
 
   operations_manager: [
+    ...AUTOPILOT_OPERATOR,
     // `task.assign` is not repeated here: `OPERATIONS_CORE` carries it, and
     // this role's whole point is that it holds all of it.
     ...OPERATIONS_CORE,
