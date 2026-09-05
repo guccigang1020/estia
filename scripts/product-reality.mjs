@@ -127,12 +127,30 @@ function inspect(name) {
   // under a heading that said they had no screen. What the matrix is asking is
   // "does this module talk to the database", and a repository beside the
   // domain answers that just as well as one in the shared directory.
+  //
+  // And a third way, because the second was still a guess. `guest-journey`
+  // reads `bookings`, `guest_requests` and seven other tables directly and
+  // calls `guest_portal_journey` by RPC — it talks to the database as much as
+  // anything here does — and reported "no persistence adapter" forever because
+  // none of its files is *named* one. That is the same mistake as looking only
+  // in `src/lib/persistence`, made one level further in: a fact about naming
+  // standing in for a fact about behaviour.
+  //
+  // A module that selects from a named table or calls a named function is
+  // talking to the database, so that is what is asked. A pure-vocabulary
+  // module — `plans`, `hebrew-calendar`, `contracts` — has no such call and
+  // still answers no, which is what keeps the column worth reading.
+  const callsDatabase = sources
+    .filter((p) => !/\.test\.tsx?$/.test(p))
+    .some((p) => /\.from\(['"`]|\.rpc\(['"`]/.test(read(p)))
+
   const hasAdapter =
     (persistenceText.length > 0 &&
       walk(PERSISTENCE)
         .filter(isSource)
         .some((p) => adapterPattern.test(relative(PERSISTENCE, p)))) ||
-    sources.some((p) => /(repository|adapter|persistence)\.tsx?$/.test(p))
+    sources.some((p) => /(repository|adapter|persistence)\.tsx?$/.test(p)) ||
+    callsDatabase
 
   // Anything still refusing for want of a table is not wired, whatever exists.
   const blocked = (persistenceText.match(/SchemaNotProvisionedError/g) ?? [])
