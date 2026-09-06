@@ -132,6 +132,21 @@ src/lib/autopilot/runtime/**                   autopilot-runtime write
 src/lib/messaging/release.ts                   deferred-release write
 src/lib/notifications/release.ts               deferred-release write
 
+# ── P2 · Listing quality (third of the four) ───────────────────────────────
+# NO MIGRATION, and that is the design. A listing score is DERIVED from rows
+# that already exist — description, amenities, capacity, price, policies,
+# photos — and a stored score can drift from the data it describes. It is
+# computed on read, like src/lib/website/quality.ts, which is also the
+# precedent for its central law: a check with no real source reports
+# not_assessed rather than a number.
+#
+# It READS properties, units and amenities and writes none of them. The
+# domain-writes rows below keep every write path they own.
+
+src/lib/listing-quality/**                     listing-quality write
+src/app/(app)/listings/**                      listing-quality write
+src/components/listing-quality/**              listing-quality write
+
 # ── P2 · The unified inbox (second of the four) ────────────────────────────
 # A conversation spine. It sits ABOVE src/lib/messaging and does not replace
 # it: guest_messages already owns what the business SENT, so an outbound

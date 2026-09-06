@@ -745,6 +745,15 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/properties' },
       },
       {
+        id: 'listings',
+        label: 'איכות הליסטינג',
+        // `property.view`, matching the route. The screen writes nothing —
+        // every fix it names is made on /properties or /units — so it needs
+        // no edit grant, and giving it one would imply it edits.
+        requires: { kind: 'grant', anyOf: ['property.view'] },
+        destination: { status: 'ready', href: '/listings' },
+      },
+      {
         id: 'units',
         label: 'יחידות',
         // `property.view` sits beside `unit.manage` because the screen is a
