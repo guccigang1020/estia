@@ -585,6 +585,21 @@ const TABLES: DemoTables = {
   payment_schedule_instalments: [],
   work_plan_versions: [],
 
+  // 0050 · fiscal documents and the guest register
+  fiscal_settings: [],
+  fiscal_documents: [],
+  fiscal_reconciliation_runs: [],
+  guest_book_settings: [],
+  guest_book_entries: [],
+
+  // 0051 · the channel manager
+  channel_connections: [],
+  channel_listings: [],
+  channel_listing_mappings: [],
+  channel_reservations: [],
+  channel_sync_runs: [],
+  channel_exceptions: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

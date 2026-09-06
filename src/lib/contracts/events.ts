@@ -192,6 +192,26 @@ export const DOMAIN_EVENTS = [
   // Channels
   'channel.reservation_received',
   'channel.sync_failed',
+  'channel.connected',
+  'channel.disconnected',
+  'channel.listing_mapped',
+  'channel.mapping_activated',
+  'channel.mapping_suspended',
+  'channel.reservation_modified',
+  'channel.reservation_cancelled',
+  // The idempotent no-op, and it is not noise for the same reason
+  // `autopilot.action_suppressed` is not: the count of what the ingestion path
+  // DECLINED to do is the only honest answer to "is deduplication working",
+  // and without it a silent bug dropping real reservations is
+  // indistinguishable from a healthy day.
+  'channel.reservation_duplicate_ignored',
+  'channel.exception_raised',
+  'channel.exception_resolved',
+  'channel.sync_completed',
+  // A push that was never ATTEMPTED — the capability is unsupported or nothing
+  // is configured. A different event from one that failed, and it must not be
+  // counted as a failure.
+  'channel.push_refused',
 
   // Security — these exist so somebody can be told, not merely so it is logged
   'security.new_device_login',
@@ -305,6 +325,9 @@ export const ALERT_EVENTS: readonly DomainEventName[] = [
   'fiscal.payment_undocumented',
   'fiscal.reconciliation_difference_found',
   'channel.sync_failed',
+  // A reservation that did not become a booking is not a sync failure, and
+  // before this it reached nobody.
+  'channel.exception_raised',
   'inventory.shortage_detected',
   'task.overdue',
   'incident.opened',

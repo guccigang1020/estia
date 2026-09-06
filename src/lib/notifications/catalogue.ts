@@ -232,6 +232,20 @@ export const NOTIFICATION_CATALOGUE: Partial<
     body: 'ההשוואה מצאה הפרש בין מה שרשום כאן לבין מה שרשום אצל הספק. ההשוואה מדווחת ואינה מתקנת.',
     href: financeHref,
   },
+  // A channel exception is a guest who booked and may not have a room. It is
+  // routed at the operations family rather than money because the person who
+  // fixes a mapping is not the person who reconciles a payment.
+  'channel.exception_raised': {
+    category: 'booking',
+    severity: 'urgent',
+    requiredGrant: 'channel.manage',
+    family: 'operations',
+    audience: 'grant_holders',
+    escalates: true,
+    title: 'תקלה בערוץ הפצה',
+    body: 'משהו הגיע מהערוץ ולא הפך להזמנה, או שסנכרון נדחה. כל עוד זה פתוח, ייתכן שיש אורח עם אישור ובלי חדר.',
+    href: () => '/channels/exceptions',
+  },
   'commission.became_eligible': {
     category: 'money',
     severity: 'info',
