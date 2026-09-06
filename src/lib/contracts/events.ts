@@ -135,6 +135,13 @@ export const DOMAIN_EVENTS = [
   'task.assigned',
   'task.started',
   'task.completed',
+  // Raising a maintenance fault as an arrival approaches. Emitted as
+  // task.created until now, which reached no subscriber but said the wrong
+  // thing in the event log.
+  'task.priority_changed',
+  // The work on this task ended without being done. Distinct from completed,
+  // which the cancel path was borrowing.
+  'task.cancelled',
   'task.verified',
   'task.overdue',
   'incident.opened',
@@ -162,6 +169,9 @@ export const DOMAIN_EVENTS = [
   // The turnaround does not reach the arrival. Raised before anybody is
   // standing in an unmade bedroom.
   'laundry.deadline_risk',
+  // Asking a provider to bring a confirmed delivery forward. Emitted as
+  // deadline_risk until now — true, but not the event that happened.
+  'laundry.earlier_delivery_requested',
 
   // The store
   'store.order_created',

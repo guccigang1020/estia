@@ -115,6 +115,22 @@ export interface AutopilotActionSpec {
   domain: AutopilotDomain
   /** The grant a person would have needed to do this by hand. */
   grant: Grant
+  /**
+   * Further grants the WRITE needs, beyond the one that names the action.
+   *
+   * Two actions land in a table whose RLS insert policy checks a different
+   * permission from the one the action is about: asking somebody to count
+   * stock opens a task, and drafting a purchase raises an approval. An actor
+   * holding only `inventory.adjust` or `expense.create` passes every
+   * application check and is then refused by Postgres as a bare SQLSTATE —
+   * Autopilot planning work it cannot perform, and failing at the least
+   * legible possible moment.
+   *
+   * Found by the agent that built those two commands, which asserts both in
+   * its own `rule()` as well, so the refusal happens in the domain with a
+   * sentence rather than at the database with an error code.
+   */
+  alsoRequires?: readonly Grant[]
   /** How much harm a wrong one does. */
   safety: ActionSafetyLevel
   /**
@@ -215,6 +231,8 @@ export const AUTOPILOT_ACTIONS: Readonly<
     kind: 'stock_count.request',
     domain: 'inventory',
     grant: 'inventory.adjust',
+    // The request is an errand, and an errand is a task.
+    alsoRequires: ['task.create'],
     safety: 'safe_internal',
     requires: 'operations',
     command: 'inventory.requestCount',
@@ -406,6 +424,9 @@ export const AUTOPILOT_ACTIONS: Readonly<
     kind: 'procurement.draft',
     domain: 'inventory',
     grant: 'expense.create',
+    // A draft purchase is an approval somebody else has to decide, and
+    // approvals_no_self_approval in 0011 means Autopilot cannot decide its own.
+    alsoRequires: ['approval.request'],
     safety: 'business_impact',
     requires: 'operations',
     command: 'inventory.draftProcurement',

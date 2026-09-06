@@ -198,14 +198,21 @@ export function rule(
   /* d · The grant. Asked exactly as a click is asked — permission and package
    * as one question, through `holdsGrant`. An automation is not a way around
    * the authorization engine. */
-  if (!context.holdsGrant(spec.grant)) {
-    return refuse(
-      'missing_permission',
-      `לזהות שמפעילה את הטייס האוטומטי אין את ההרשאה ${spec.grant}, ` +
-        `ולכן "${spec.label}" לא בוצעה.`,
-    )
+  // Every grant the write needs, not merely the one that names the action.
+  // Two actions land in a table whose insert policy checks a different
+  // permission — see `alsoRequires` in the catalogue — and asking for only
+  // the first would let Autopilot plan work Postgres then refuses as a bare
+  // SQLSTATE, which is the least legible moment available to fail at.
+  for (const grant of [spec.grant, ...(spec.alsoRequires ?? [])]) {
+    if (!context.holdsGrant(grant)) {
+      return refuse(
+        'missing_permission',
+        `לזהות שמפעילה את הטייס האוטומטי אין את ההרשאה ${grant}, ` +
+          `ולכן "${spec.label}" לא בוצעה.`,
+      )
+    }
+    narrowing.note('grant', grant)
   }
-  narrowing.note('grant', spec.grant)
 
   /* e · How this one booking wants to be treated.
    *

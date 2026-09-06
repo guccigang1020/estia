@@ -87,4 +87,15 @@ export {
   type ParseResult,
 } from './import'
 
+export {
+  defineInventoryCommands,
+  type CommandItem,
+  type CountTaskDraft,
+  type DraftProcurementInput,
+  type InventoryCommandPorts,
+  type InventoryCommands,
+  type ProcurementApprovalDraft,
+  type RequestCountInput,
+} from './commands'
+
 export * from './types'

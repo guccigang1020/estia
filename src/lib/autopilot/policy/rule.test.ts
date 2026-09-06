@@ -612,7 +612,15 @@ describe('every action in the catalogue', () => {
       const ruling = rule(kind, context({ safetyCeiling: SHIPPED_CEILING }))
       if (ruling.allowed) {
         expect(ruling.disposition).not.toBe('off')
-        expect(ruling.appliedFloors.length).toBe(11)
+        // Eleven layers, plus one extra note per additional grant: the grant
+        // layer records EVERY permission it asked for, and two actions need a
+        // second one because the table they land in checks a different
+        // permission from the one the action is named for. Written as
+        // arithmetic rather than as a floor, so declaring another extra grant
+        // without the layer actually asking for it still fails here.
+        expect(ruling.appliedFloors.length).toBe(
+          11 + (AUTOPILOT_ACTIONS[kind].alsoRequires?.length ?? 0),
+        )
       } else {
         expect(ruling.reason.length).toBeGreaterThan(0)
         expect(ruling.explanation.length).toBeGreaterThan(0)

@@ -131,6 +131,18 @@ export {
   type SendOrderInput,
 } from './operations'
 
+export {
+  EARLIER_DELIVERY_KEY,
+  LaundryAlreadyDeliveredError,
+  LaundryEarlierInThePastError,
+  LaundryNotEarlierError,
+  LaundryOrderNotSentError,
+  defineLaundryCommands,
+  type EarlierDeliveryRequest,
+  type LaundryCommands,
+  type RequestEarlierDeliveryInput,
+} from './commands'
+
 /**
  * The Postgres adapter behind everything above.
  *

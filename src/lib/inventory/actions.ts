@@ -107,8 +107,9 @@ export function buildActions(
       label: SHORTAGE_ACTION_LABEL.purchase_request,
       detail:
         `בקשת רכש של ${Math.max(1, row.shortage)} יחידות, שתגיע לפני ` +
-        `${row.date}. הבקשה נרשמת כמשימה ואינה מזמינה דבר בעצמה.`,
-      href: '/tasks',
+        `${row.date}. הבקשה נרשמת כאישור שממתין להחלטה ואינה מזמינה דבר ` +
+        `בעצמה.`,
+      href: '/approvals',
       requires: 'procurement',
     })
   }
