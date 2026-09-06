@@ -22,6 +22,7 @@ import { createClient } from '@/lib/supabase/server'
 import { ALL_PROPERTIES, shellContext } from '../_lib/context'
 import { requireGrant } from '../_lib/guard'
 import { loadReviewsScreen } from './_lib/queries'
+import { RecordReview } from './record-review'
 import { ReviewControls } from './review-controls'
 
 export const metadata: Metadata = { title: 'ביקורות · ESTIA' }
@@ -241,6 +242,7 @@ export default async function ReviewsPage() {
             ))}
           </RowList>
         )}
+        {canManage && <RecordReview stays={reviewableStays} />}
         <PanelNote>
           ביקורת שהגיעה בוואטסאפ נרשמת כאן ומסומנת כ״הוזנה ידנית״, כדי ששום דבר
           בהמשך לא יבלבל בינה לבין ביקורת שהאורח עצמו הגיש. הטופס של האורח עצמו
