@@ -8,6 +8,7 @@ import {
 } from '@/components/preparation/task-status'
 import { DomainGap, GrantCode } from '@/components/shell-screens/domain-gap'
 import {
+  FactRow,
   Panel,
   PanelNote,
   Row,
@@ -20,8 +21,13 @@ import { formatDayMonth, localDate } from '@/lib/booking/dates'
 import { toSafeResponse } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/server'
 
+import { AdoptButton } from '@/components/inbox/adopt-button'
+import { ThreadControls } from '@/components/inbox/thread-controls'
+import { hoursWaiting, isUnreadFor } from '@/lib/inbox'
+
 import { ALL_PROPERTIES, shellContext } from '../_lib/context'
 import { requireGrant } from '../_lib/guard'
+import { loadThreadScreen } from './_lib/threads'
 import {
   INBOX_PAGE_SIZE,
   MISSING_MESSAGING_TABLES,
@@ -91,11 +97,18 @@ export default async function InboxPage() {
     propertyId,
   }
 
-  const [guestNotes, requests, internalNotes] = await Promise.all([
+  const [guestNotes, requests, internalNotes, threads] = await Promise.all([
     settle(() => listGuestNotes(args, today)),
     settle(() => listRequestTasks(args)),
     settle(() => listInternalNotes(args, today)),
+    settle(() => loadThreadScreen(db, actor.organizationId, actor.userId)),
   ])
+
+  const now = new Date()
+  const inbox =
+    threads.ok && threads.value && threads.value.status === 'ready'
+      ? threads.value
+      : null
 
   return (
     <ScreenFrame
@@ -180,6 +193,96 @@ export default async function InboxPage() {
         />
       }
     >
+      {inbox !== null && (
+        <Panel
+          title="שיחות"
+          count={inbox.conversations.length}
+          description={
+            inbox.counts.waitingOnUs === 0
+              ? 'אין כרגע שיחה שממתינה לנו.'
+              : `${inbox.counts.waitingOnUs} ממתינות לנו · ${inbox.counts.unassigned} בלי אחראי · ${inbox.counts.unread} שלא קראת`
+          }
+        >
+          {inbox.conversations.length === 0 ? (
+            <PanelNote>
+              אין עדיין שיחות. אפשר לפתוח אחת מפנייה שממתינה למטה — רק אז המשפט
+              ״אין שיחות פתוחות״ יהיה נכון ולא הבטחה ריקה.
+            </PanelNote>
+          ) : (
+            <RowList>
+              {inbox.conversations.map((conversation) => {
+                const waiting = hoursWaiting(conversation, now)
+                const unread = isUnreadFor(conversation, inbox.marks)
+                return (
+                  <Row
+                    key={conversation.id}
+                    className="flex-col items-stretch gap-1.5"
+                  >
+                    <FactRow label={conversation.subject ?? 'שיחה'}>
+                      <span className="flex items-center gap-2">
+                        {unread && <Badge>לא נקרא</Badge>}
+                        <span className="text-xs text-muted-foreground">
+                          {conversation.party.contactName ??
+                            conversation.party.contactEmail ??
+                            conversation.party.contactPhone ??
+                            'אורח'}
+                        </span>
+                      </span>
+                    </FactRow>
+                    {waiting !== null && (
+                      <FactRow label="ממתין לנו">
+                        {waiting < 1
+                          ? 'פחות משעה'
+                          : `${Math.floor(waiting)} שעות`}
+                      </FactRow>
+                    )}
+                    <FactRow label="אחראי">
+                      {conversation.assignedToUserId === null
+                        ? 'אף אחד'
+                        : conversation.assignedToUserId === actor.userId
+                          ? 'אתה'
+                          : 'חבר צוות אחר'}
+                    </FactRow>
+                    <ThreadControls
+                      conversationId={conversation.id}
+                      expectedVersion={conversation.version}
+                      readerUserId={actor.userId}
+                      assignedToMe={
+                        conversation.assignedToUserId === actor.userId
+                      }
+                      unread={unread}
+                    />
+                  </Row>
+                )
+              })}
+            </RowList>
+          )}
+        </Panel>
+      )}
+
+      {inbox !== null && inbox.unthreaded.length > 0 && (
+        <Panel
+          title="פניות שעדיין לא הפכו לשיחה"
+          count={inbox.unthreaded.length}
+          description="הגיעו מהאתר או מהפורטל. פתיחת שיחה מאחדת אותן לחוט אחד."
+        >
+          <RowList>
+            {inbox.unthreaded.map((source) => (
+              <Row
+                key={`${source.kind}:${source.id}`}
+                className="flex-col items-stretch gap-1.5"
+              >
+                <FactRow label={source.who}>
+                  {source.kind === 'site_request' ? 'מהאתר' : 'מהפורטל'}
+                </FactRow>
+                {source.words !== '' && <PanelNote>{source.words}</PanelNote>}
+                <AdoptButton id={source.id} kind={source.kind} />
+              </Row>
+            ))}
+          </RowList>
+        </Panel>
+      )}
+
       {/* ------------------------------------------------- guest requests -- */}
       <Panel
         title="מה שהאורח כתב על ההזמנה"
