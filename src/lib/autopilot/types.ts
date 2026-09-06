@@ -261,6 +261,13 @@ export interface PlannedAction {
  * be told about — the same argument `automation/engine.ts` already makes.
  */
 export type ExecutionOutcome =
+  /**
+   * Recorded and deliberately not run. What a `suggest` disposition produces:
+   * the decision is real, it is on the screen, and nobody has been asked for
+   * anything. Distinct from `awaiting_approval`, which is a question already
+   * put to a person and waiting on them.
+   */
+  | { status: 'planned' }
   | { status: 'executed'; result: Readonly<Record<string, unknown>> }
   | { status: 'executed_unaudited'; result: Readonly<Record<string, unknown>> }
   | { status: 'awaiting_approval' }
