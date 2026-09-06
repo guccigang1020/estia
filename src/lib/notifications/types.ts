@@ -167,6 +167,16 @@ export const SUPPRESSION_REASONS = [
   'channel_disabled',
   /** The channel is enabled and nothing implements it. */
   'no_transport',
+  /**
+   * Deferred for so long that sending it now would be worse than not.
+   *
+   * A payment reminder released four days late, after the stay has ended,
+   * is not a late reminder — it is a wrong one. The release sweep asks this
+   * FIRST, before any gate, so a stale row is never recorded as
+   * `channel_disabled` and never sends somebody to fix a setting that was
+   * not the reason.
+   */
+  'stale_deferral',
 ] as const
 
 export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number]

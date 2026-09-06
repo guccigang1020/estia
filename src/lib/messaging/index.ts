@@ -98,3 +98,15 @@ export {
   type MessageOutcome,
   type OutcomeTally,
 } from './types'
+
+export {
+  planMessageRelease,
+  releaseDueMessages,
+  type DueGuestMessage,
+  type DueGuestMessageContext,
+  type GuestMessagePatch,
+  type GuestMessageReleaseDecision,
+  type GuestMessageReleasePlan,
+  type GuestMessageReleaseStore,
+  type GuestMessageReleaseSummary,
+} from './release'

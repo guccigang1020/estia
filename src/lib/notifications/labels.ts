@@ -91,6 +91,8 @@ export const SUPPRESSION_LABEL: Record<SuppressionReason, string> = {
   below_min_severity: 'רמת הדחיפות נמוכה מהסף שהוגדר לערוץ הזה.',
   channel_disabled: 'הערוץ כבוי ברמת הארגון.',
   no_transport: 'אין ערוץ מחובר — ההודעה נרשמה ולא נשלחה לאף מקום.',
+  stale_deferral:
+    'ההודעה הוחזקה זמן רב מדי, ושליחה באיחור כזה הייתה מזיקה יותר מלא לשלוח.',
 }
 
 /**

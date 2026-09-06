@@ -153,3 +153,16 @@ export {
 } from './types'
 
 export { isStillVisible, unreadCount, visibleTo } from './visibility'
+
+export {
+  STALE_DEFERRAL,
+  planDeliveryRelease,
+  releaseDueDeliveries,
+  type DeliveryPatch,
+  type DeliveryReleaseDecision,
+  type DeliveryReleasePlan,
+  type DeliveryReleaseStore,
+  type DeliveryReleaseSummary,
+  type DueDelivery,
+  type ReleaseSuppressionReason,
+} from './release'
