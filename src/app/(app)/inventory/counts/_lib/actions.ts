@@ -49,6 +49,7 @@ import { createClient } from '@/lib/supabase/server'
 import { shellContext } from '../../../_lib/context'
 import { auditActorFor, transactionRunner } from '../../../_lib/wiring'
 import { SupabaseCountRepository } from './repository'
+import { domainEventBus } from '../../../_lib/events'
 
 export type ActionResult<TData> =
   { ok: true; data: TData } | { ok: false; error: SafeErrorBody }
@@ -90,6 +91,7 @@ async function ready() {
     operations: defineCountOperations(repository),
     services: {
       audit: new SupabaseAuditWriter(supabase),
+      events: domainEventBus(supabase),
       idempotency: new SupabaseIdempotencyStore(supabase),
       transactions,
       onEventError(error: unknown) {

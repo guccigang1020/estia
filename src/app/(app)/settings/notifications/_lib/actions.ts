@@ -49,6 +49,7 @@ import { createClient } from '@/lib/supabase/server'
 
 import { shellContext } from '../../../_lib/context'
 import { auditActorFor, transactionRunner } from '../../../_lib/wiring'
+import { domainEventBus } from '../../../_lib/events'
 
 export type ActionResult<TData> =
   { ok: true; data: TData } | { ok: false; error: SafeErrorBody }
@@ -152,6 +153,7 @@ export async function saveNotificationSettingsAction(
       },
       services: {
         audit: new SupabaseAuditWriter(db),
+        events: domainEventBus(db),
         idempotency: new SupabaseIdempotencyStore(db),
         transactions,
       },

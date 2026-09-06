@@ -54,6 +54,7 @@ import { createClient } from '@/lib/supabase/server'
 import { auditActorFor, transactionRunner } from '../../_lib/wiring'
 import { shellContext } from '../../_lib/context'
 import { validateGuest, type CreateGuestInput } from './schema'
+import { domainEventBus } from '../../_lib/events'
 
 export type ActionResult<TData> =
   { ok: true; data: TData } | { ok: false; error: SafeErrorBody }
@@ -167,6 +168,7 @@ export async function createGuestAction(
       },
       services: {
         audit: new SupabaseAuditWriter(supabase),
+        events: domainEventBus(supabase),
         idempotency: new SupabaseIdempotencyStore(supabase),
         transactions,
         onEventError(error) {

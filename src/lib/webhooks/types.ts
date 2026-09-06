@@ -97,9 +97,12 @@ export interface WebhookDelivery {
   readonly organizationId: string
   readonly endpointId: string
   readonly eventName: DomainEventName
-  /** The id of the domain event, so a receiver can deduplicate across
-   *  retries. Retries reuse it; that is the whole point. */
-  readonly eventId: string
+  /** The event's payload, stored so a retry sends the same body a week
+   *  later. The alternative — re-deriving it at send time — would deliver
+   *  today's answer under yesterday's event, which is worse than not
+   *  delivering. */
+  readonly eventPayload: unknown
+  readonly propertyId: string | null
   /** The same id as the operation, the audit row and the log line. */
   readonly correlationId: string | null
   readonly status: WebhookDeliveryStatus

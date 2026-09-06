@@ -42,6 +42,7 @@ import {
 import type { OperationServices } from '@/lib/service'
 import { createClient } from '@/lib/supabase/server'
 import type { User } from '@supabase/supabase-js'
+import { domainEventBus } from '../../_lib/events'
 
 export type FinanceWiring = {
   db: Db
@@ -105,6 +106,7 @@ export async function financeWiring(): Promise<FinanceWiring> {
     operations: defineFinanceOperations(repository),
     services: {
       audit: new SupabaseAuditWriter(db),
+      events: domainEventBus(db),
       idempotency: new SupabaseIdempotencyStore(db),
       transactions,
       onEventError(error) {

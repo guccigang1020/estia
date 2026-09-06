@@ -41,6 +41,7 @@ import {
 import { createClient } from '@/lib/supabase/server'
 
 import { transactionRunner } from '../../_lib/wiring'
+import { domainEventBus } from '../../_lib/events'
 
 export type BookingWiring = {
   db: Db
@@ -72,6 +73,7 @@ export async function bookingWiring(): Promise<BookingWiring> {
     operations: defineBookingOperations(repository),
     services: {
       audit: new SupabaseAuditWriter(db),
+      events: domainEventBus(db),
       idempotency: new SupabaseIdempotencyStore(db),
       transactions,
       onEventError(error) {

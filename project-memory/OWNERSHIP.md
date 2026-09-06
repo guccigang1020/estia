@@ -138,13 +138,18 @@ src/lib/notifications/release.ts               deferred-release write
 # credential and is deliberately NOT started here — §164 says one at a time,
 # and a read API without webhooks is a slower version of the screens.
 #
+# The delivery sweep sits at /api/sweep/webhooks, not /api/webhooks: the
+# proxy exempts /api/sweep from the session redirect and nothing else under
+# /api, so the first location answered 404 to the scheduler. It is a sweep by
+# every other measure too — same guard, same secret, same caller.
+#
 # This block sits ABOVE the sweep-runtime rows on purpose. The register is
 # FIRST MATCH WINS, not most-specific-wins — src/app/api/** would otherwise
 # swallow src/app/api/webhooks/**, and the checker says so in those words.
 # Placed here, sweep-runtime keeps every path under src/app/api but this one.
 
 src/lib/webhooks/**                            webhooks write
-src/app/api/webhooks/**                        webhooks write
+src/app/api/sweep/webhooks/**                  webhooks write
 src/app/(app)/settings/webhooks/**             webhooks write
 src/components/webhooks/**                     webhooks write
 

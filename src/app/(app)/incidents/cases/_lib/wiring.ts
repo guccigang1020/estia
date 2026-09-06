@@ -43,6 +43,7 @@ import {
 import type { OperationServices } from '@/lib/service'
 import { createClient } from '@/lib/supabase/server'
 import type { User } from '@supabase/supabase-js'
+import { domainEventBus } from '../../../_lib/events'
 
 export type CaseWiring = {
   db: Db
@@ -89,6 +90,7 @@ export async function caseWiring(): Promise<CaseWiring> {
     operations: defineIncidentOperations({ db }),
     services: {
       audit: new SupabaseAuditWriter(db),
+      events: domainEventBus(db),
       idempotency: new SupabaseIdempotencyStore(db),
       transactions,
       onEventError(error) {

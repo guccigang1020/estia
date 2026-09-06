@@ -40,6 +40,7 @@ import {
 import { createClient } from '@/lib/supabase/server'
 
 import { transactionRunner } from '../../_lib/wiring'
+import { domainEventBus } from '../../_lib/events'
 
 export type LaundryWiring = {
   db: Db
@@ -119,6 +120,7 @@ export async function laundryOperations(actor: Actor): Promise<LaundryWiring> {
     }),
     services: {
       audit: new SupabaseAuditWriter(db),
+      events: domainEventBus(db),
       idempotency: new SupabaseIdempotencyStore(db),
       transactions,
       onEventError: (error) => {

@@ -870,6 +870,18 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/settings/guest-guide' },
       },
       {
+        id: 'webhooks',
+        label: 'Webhooks',
+        // `integration.manage`, matching the route's own requireGrant and the
+        // RLS on all three tables. Deliberately not split into a view grant:
+        // there is nothing useful to see here without the ability to change
+        // it, and a read-only integrations role would be one that can read a
+        // delivery log full of business events while being trusted with
+        // nothing.
+        requires: { kind: 'grant', anyOf: ['integration.manage'] },
+        destination: { status: 'ready', href: '/settings/webhooks' },
+      },
+      {
         id: 'billing',
         label: 'חבילה וחיוב',
         requires: { kind: 'grant', anyOf: ['organization.billing.manage'] },

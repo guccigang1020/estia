@@ -41,6 +41,7 @@ import {
 } from '@/lib/persistence'
 import { createClient } from '@/lib/supabase/server'
 import type { User } from '@supabase/supabase-js'
+import { domainEventBus } from '../../_lib/events'
 
 export type AgentWiring = {
   db: Db
@@ -97,6 +98,7 @@ export async function agentWiring(): Promise<AgentWiring> {
     operations: defineAgentOperations(repository),
     services: {
       audit: new SupabaseAuditWriter(db),
+      events: domainEventBus(db),
       idempotency: new SupabaseIdempotencyStore(db),
       transactions,
       onEventError(error) {
