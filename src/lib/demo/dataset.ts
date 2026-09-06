@@ -600,6 +600,13 @@ const TABLES: DemoTables = {
   channel_sync_runs: [],
   channel_exceptions: [],
 
+  // 0056 · the owner portal
+  property_owners: [],
+  property_ownerships: [],
+  owner_statements: [],
+  owner_statement_lines: [],
+  owner_payouts: [],
+
   // 0053 · outward guest messages
   guest_messages: [],
 
