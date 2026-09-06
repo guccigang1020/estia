@@ -192,7 +192,7 @@ export interface PolicyContext {
    * rule in at its safety level is correct only for a context built for that
    * one action and quietly wrong for a context built for many.
    */
-  safetyCeilingByAction?: Readonly<
+  safetyCeilingByAction: Readonly<
     Partial<Record<AutopilotActionKind, AutopilotDisposition>>
   >
   /** What this customer's package actually includes. */
