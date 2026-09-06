@@ -8,9 +8,14 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { COMMISSION_BASE_LABEL } from '@/lib/contracts/states'
 import { formatDayMonthYear, localDate } from '@/lib/booking'
-import { formatIsraeliPhone } from '@/lib/agents'
+import { agencyResource, formatIsraeliPhone } from '@/lib/agents'
+import { can } from '@/lib/authz/can'
 import { toSafeResponse } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/server'
+
+import { AgencyContactForm } from './_components/agency-contact-form'
+import { AgencyStatusControl } from './_components/agency-status-control'
+import { AgencyTermsForm } from './_components/agency-terms-form'
 
 import { shellContext } from '../_lib/context'
 import { requireDistributionGrant } from '../agents/_lib/gate'
@@ -71,6 +76,30 @@ export const metadata: Metadata = { title: 'סוכנויות' }
  * asked again per read inside the query, and the money is narrowed a second time
  * per commission row with `family: 'finance'`, which is what makes the figure
  * true for whoever is reading it rather than true for an owner.
+ *
+ * ── THE SCREEN CAN NOW WRITE, AND WHAT IT REFUSES IT EXPLAINS ─────────────
+ *
+ * Until `0070_agencies_write_path.sql` this screen was read-only with no stated
+ * reason, over a table nothing in the product could insert into. It now creates
+ * an agency, corrects its details, sets its commission terms and ends the
+ * relationship — through the operations in `src/lib/agents/agency-operations.ts`
+ * and no other path.
+ *
+ * Three controls are conditional, and each absence is a sentence rather than a
+ * gap:
+ *
+ *   · **Editing the details** appears only for an agency **nobody from the
+ *     agency manages**. `agencies_update` says so, and it says so for a reason
+ *     worth keeping: an agency is not this business's sub-record, and once a
+ *     real manager exists the details are theirs. A business that pressed a
+ *     hidden button would have met an UPDATE matching zero rows, which
+ *     succeeds — the worst possible failure.
+ *   · **The terms form** needs `agent_agreement.manage` to write and
+ *     `agent_agreement.view` to read the eligibility conditions it would
+ *     otherwise overwrite with a default. Without the second it is hidden, not
+ *     pre-filled with a guess.
+ *   · **Ending the relationship** appears where there is a live agreement, and
+ *     reopening where there is an ended one and no live one in the way.
  */
 export default async function AgenciesPage() {
   const [access, context] = await Promise.all([
@@ -119,6 +148,15 @@ export default async function AgenciesPage() {
     agency.agreements.some((agreement) => agreement.live),
   ).length
 
+  // Creating an agency writes two rows and needs the grant for each: the agency
+  // itself, and the agreement that makes it visible. Naming both here is what
+  // keeps a control on screen from promising something the operation refuses.
+  const mayWriteTerms = can(
+    actor,
+    'agent_agreement.manage',
+    agencyResource(actor.organizationId),
+  )
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
       <header className="flex flex-col gap-2">
@@ -134,6 +172,23 @@ export default async function AgenciesPage() {
         </p>
       </header>
 
+      {mayWriteTerms ? (
+        <Disclosure summary="הוסף סוכנות">
+          <p className="mb-4 text-sm text-muted-foreground">
+            סוכנות נרשמת פעם אחת ומוכרת עבור כמה עסקים. מה שמקשר אותה אליך הוא
+            ההסכם, ולכן היא נוצרת יחד איתו — רשומה בלי הסכם אינה גלויה לאף אחד,
+            כולל לך.
+          </p>
+          <AgencyContactForm mode="create" />
+        </Disclosure>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          אפשר לצפות בסוכנויות ולא להוסיף אחת: הקמת סוכנות כותבת גם את ההסכם
+          איתה, וזו הרשאת <code dir="ltr">agent_agreement.manage</code> — מי
+          שקובע את מחיר המכירה.
+        </p>
+      )}
+
       {failure ? (
         <ActionError error={failure.error} />
       ) : agencies.length === 0 ? (
@@ -145,7 +200,11 @@ export default async function AgenciesPage() {
       ) : (
         <div className="flex flex-col gap-5">
           {agencies.map((agency) => (
-            <AgencyCard key={agency.id} agency={agency} />
+            <AgencyCard
+              key={agency.id}
+              agency={agency}
+              mayWriteTerms={mayWriteTerms}
+            />
           ))}
         </div>
       )}
@@ -153,10 +212,51 @@ export default async function AgenciesPage() {
   )
 }
 
+/**
+ * A control that is closed until somebody wants it.
+ *
+ * `<details>` rather than a dialog or a state hook: it works before hydration,
+ * it is a disclosure to a screen reader without a single aria attribute, and it
+ * keeps this file a server component. The marker is moved to the inline end,
+ * which is the left edge in Hebrew.
+ */
+function Disclosure({
+  summary,
+  children,
+}: {
+  summary: string
+  children: React.ReactNode
+}) {
+  return (
+    <details className="rounded-xl border border-border bg-surface">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground marker:content-none">
+        {summary}
+      </summary>
+      <div className="border-t border-border p-4">{children}</div>
+    </details>
+  )
+}
+
 /* --------------------------------------------------------------- parts -- */
 
-function AgencyCard({ agency }: { agency: AgencyListItem }) {
+function AgencyCard({
+  agency,
+  mayWriteTerms,
+}: {
+  agency: AgencyListItem
+  mayWriteTerms: boolean
+}) {
   const live = agency.agreements.some((agreement) => agreement.live)
+
+  // The agreement the terms form edits: the one that is not over. `live` is
+  // computed against today's date and can honestly be false for an active
+  // agreement whose window has not opened — that one is still the row to edit,
+  // which is why this looks at the stored status and not at `live`.
+  const openAgreement =
+    agency.agreements.find((agreement) => agreement.status === 'active') ?? null
+  const endedAgreement = agency.agreements.some(
+    (agreement) => agreement.status === 'terminated',
+  )
 
   return (
     <Card>
@@ -257,6 +357,102 @@ function AgencyCard({ agency }: { agency: AgencyListItem }) {
           {agency.note}
         </p>
       )}
+
+      {agency.status === 'inactive' && agency.deactivationReason !== null && (
+        <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
+          סומנה כלא פעילה. נימוק: {agency.deactivationReason}
+        </p>
+      )}
+
+      {/* ------------------------------------------------- what can change -- */}
+      <section className="mt-6 flex flex-col gap-3 border-t border-border pt-5">
+        {!agency.visible ? (
+          <p className="text-sm text-muted-foreground">
+            רשומת הסוכנות עצמה אינה גלויה לך, ולכן אי אפשר לערוך אותה מכאן.
+            ההסכם שלך איתה קיים והעמלות שנרשמו תחתיו עומדות בעינן.
+          </p>
+        ) : (
+          <>
+            {agency.unclaimed ? (
+              <Disclosure summary="ערוך את פרטי הסוכנות">
+                <AgencyContactForm
+                  mode="edit"
+                  agencyId={agency.id}
+                  version={agency.version}
+                  initial={{
+                    name: agency.name,
+                    taxId: agency.taxId ?? '',
+                    // As typed, not the generated E.164 key: putting the
+                    // normalised form back in the field would rewrite what a
+                    // person entered the first time they touched an unrelated
+                    // field.
+                    contactPhone: agency.contactPhone ?? '',
+                    contactEmail: agency.contactEmail ?? '',
+                    addressLine1: agency.addressLine1 ?? '',
+                    city: agency.city ?? '',
+                    country: agency.country,
+                    note: agency.note ?? '',
+                  }}
+                />
+              </Disclosure>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                לסוכנות הזו יש מנהל משלה, ולכן פרטי הקשר שלה נערכים על ידה. זו
+                אינה רשומה של העסק שלך — היא מוכרת גם עבור אחרים, ומה ששייך לך
+                הוא ההסכם.
+              </p>
+            )}
+
+            {mayWriteTerms &&
+              (agency.eligibility === null ? (
+                <p className="text-sm text-muted-foreground">
+                  אינך רשאי לקרוא את כללי העמלה, ולכן טופס התנאים מוסתר. שמירה
+                  בלי לראות את תנאי הזכאות הקיימים הייתה מוחקת אותם לטובת ברירת
+                  מחדל — וזה ההבדל בין תשלום על שהיות שהתקיימו לבין תשלום על
+                  שהיות שאולי לא יתקיימו.
+                </p>
+              ) : openAgreement === null ? (
+                <p className="text-sm text-muted-foreground">
+                  אין הסכם פתוח שאפשר לעדכן את תנאיו. אפשר להחזיר את ההסכם
+                  האחרון לתוקף ואז לעדכן.
+                </p>
+              ) : (
+                <Disclosure summary="עדכן את תנאי העמלה">
+                  <AgencyTermsForm
+                    agencyId={agency.id}
+                    agencyName={agency.name}
+                    version={openAgreement.version}
+                    initial={{
+                      kind: openAgreement.rule?.kind ?? 'none',
+                      percent:
+                        openAgreement.rule?.kind === 'percentage'
+                          ? openAgreement.rule.percent
+                          : null,
+                      amountAgorot:
+                        openAgreement.rule?.kind === 'fixed'
+                          ? openAgreement.rule.amountAgorot
+                          : null,
+                      base: openAgreement.base,
+                      eligibility: agency.eligibility,
+                      activeFrom: openAgreement.activeFrom,
+                      activeUntil: openAgreement.activeUntil,
+                      paymentTermsDays: openAgreement.paymentTermsDays,
+                      note: openAgreement.note,
+                    }}
+                  />
+                </Disclosure>
+              ))}
+
+            <AgencyStatusControl
+              agencyId={agency.id}
+              agencyName={agency.name}
+              hasLiveAgreement={openAgreement !== null}
+              isInactive={agency.status === 'inactive'}
+              canReactivate={openAgreement === null && endedAgreement}
+            />
+          </>
+        )}
+      </section>
     </Card>
   )
 }

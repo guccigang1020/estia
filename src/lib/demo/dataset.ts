@@ -680,6 +680,12 @@ const TABLES: DemoTables = {
   // deployment actually starts with.
   message_templates: [],
 
+  // 0067 · which automation rules this business switched on. Empty, and that
+  // is the product default: the library ships every rule OFF, and a demo
+  // showing rules already enabled would show a state no new customer starts
+  // in — and would imply the runner exists, which it does not.
+  automation_rules: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

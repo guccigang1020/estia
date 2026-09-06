@@ -245,18 +245,21 @@ export function terminateAgreement(
 }
 
 /**
- * ── A note for whoever owns `supabase/migrations/` ────────────────────────
+ * ── Where these three records live now ────────────────────────────────────
  *
- * None of these three records has a table. `agencies`, `agency_memberships`
- * and `agency_agreements` are all absent from 0001–0011, and `bookings` and
- * `commissions` both carry an `agency_id` that references nothing — it is a
- * bare `uuid` column with no foreign key, which the migration for `commissions`
- * is explicit about.
+ * This file once ended with a note asking for tables. `0015_agent_network.sql`
+ * built them — `agencies`, `agency_memberships` and `agency_agreements` — and
+ * closed the bare `agency_id` columns on `bookings` and `commissions` with real
+ * foreign keys, `on delete restrict`, because attribution is what a commission
+ * argument is settled from. `agencies` carries no `organization_id`, which
+ * makes it the one table in this database whose RLS policy is written by hand
+ * rather than copied.
  *
- * That is workable while agencies are unused and becomes a real problem the
- * first time one exists: an `agency_id` pointing at no row cannot be joined,
- * cannot be constrained, and cannot be prevented from naming an agency that
- * belongs to a different tenant. `agencies` in particular is the one table in
- * this module that must **not** carry `organization_id`, which makes it the one
- * table whose RLS policy has to be written by hand rather than copied.
+ * What 0015 did **not** give it was a way to write one. `0070_agencies_write_path.sql`
+ * and `agency-operations.ts` are that path: creating an agency, correcting its
+ * details, setting its commission terms and ending the relationship. Read the
+ * header of either before adding a second way to touch these rows — in
+ * particular, `agencies.deleted_at` is now refused by trigger, and deactivation
+ * is `status` plus a terminated agreement, so that an agency owed money on a
+ * stay in August is still nameable after it stopped selling in March.
  */

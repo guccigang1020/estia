@@ -163,6 +163,34 @@ export {
 } from './commission'
 
 export {
+  DEFAULT_AGENCY_ELIGIBILITY,
+  agencyResource,
+  defineAgencyOperations,
+  describeRule,
+  toCommissionRule,
+  type AgencyContactInput,
+  type AgencyDeactivated,
+  type AgencyOperations,
+  type AgencyStatusInput,
+  type AgencyTermsInput,
+  type CommissionRuleInput,
+  type CreateAgencyInput,
+  type EditAgencyContactInput,
+  type SetAgencyTermsInput,
+} from './agency-operations'
+
+export type {
+  AgencyAgreementRecord,
+  AgencyContactDraft,
+  AgencyRecord,
+  AgencyStore,
+  AgencyTermsTarget,
+  CreateAgencyRequest,
+  DeactivateResult,
+  SaveTermsRequest,
+} from './agency-store'
+
+export {
   activeAgreementFor,
   agencyReachesOrganization,
   isAgreementActive,

@@ -60,7 +60,7 @@ describe('adoptionSteps', () => {
         'החבילה כוללת אוטומציות',
         'התפקיד שלך מרשה את הפעולות',
         'האירוע נושא את הנתונים שהתנאי בודק',
-        'העתקת הכלל לארגון',
+        'הפעלת הכלל לארגון שלכם',
       ])
     }
   })
@@ -146,8 +146,14 @@ describe('adoptionSteps', () => {
           entry.rule,
         ),
       )
+      // Still `null` — the step never claims success or failure. What changed
+      // with 0067 is WHY: the storage now exists and the rule can be switched
+      // on at /automations, but no runner fires it, so enabling records intent.
+      // The step must keep pointing at the honest remaining gap rather than at
+      // a missing table it would now be wrong about.
       expect(steps[3].met).toBeNull()
-      expect(steps[3].detail).toContain('אינה קיימת במוצר')
+      expect(steps[3].detail).toContain('מריץ')
+      expect(steps[3].detail).not.toContain('אינה קיימת במוצר')
     }
   })
 })

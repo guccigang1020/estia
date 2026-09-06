@@ -20,6 +20,9 @@ import { toLogEntry } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/server'
 
 import { requireGrant } from '../_lib/guard'
+import { MemberTeamPicker } from './_components/member-team-picker'
+import { TeamsPanel } from './_components/teams-panel'
+import { listTeams, type TeamListItem } from './_lib/teams'
 import {
   EMPLOYMENT_TYPE_LABEL,
   MEMBERSHIP_STATUS_LABEL,
@@ -32,6 +35,7 @@ import {
 } from './_lib/labels'
 import {
   listMembers,
+  listScopeChoices,
   membersNeedingAttention,
   type MemberListItem,
 } from './_lib/queries'
@@ -83,22 +87,34 @@ export default async function TeamPage() {
   const actor = await requireGrant('user.view')
 
   let members: readonly MemberListItem[] = []
+  let teams: readonly TeamListItem[] = []
+  let properties: readonly { id: string; name: string }[] = []
   let failure: unknown = null
   const correlationId = crypto.randomUUID()
 
   try {
     const db = await createClient()
-    members = await listMembers({
-      db,
-      actor,
-      organizationId: actor.organizationId,
-    })
+    const [roster, crews, choices] = await Promise.all([
+      listMembers({ db, actor, organizationId: actor.organizationId }),
+      listTeams(db, actor.organizationId),
+      listScopeChoices(db, actor.organizationId),
+    ])
+    members = roster
+    teams = crews
+    properties = choices.properties
   } catch (error) {
     console.error(toLogEntry(error, correlationId))
     failure = error
   }
 
   const attention = membersNeedingAttention(members)
+  // The crews panel and the per-row picker are both `team.manage`, which is
+  // what `teams_insert` and `assign_membership_to_team` demand. A general
+  // manager and an operations manager hold it; reception does not.
+  const mayManageTeams = holdsGrant(actor, 'team.manage')
+  const liveTeams = teams
+    .filter((team) => team.archivedAt === null)
+    .map((team) => ({ id: team.id, name: team.name }))
   // The control is offered only when the route behind it would admit them.
   const mayInvite = holdsGrant(actor, 'user.invite')
   const maySeeContact = holdsGrant(actor, 'user.edit')
@@ -172,6 +188,8 @@ export default async function TeamPage() {
                 key={member.membershipId}
                 member={member}
                 maySeeContact={maySeeContact}
+                teams={liveTeams}
+                mayManageTeams={mayManageTeams}
               />
             ))}
           </DataTable>
@@ -198,6 +216,18 @@ export default async function TeamPage() {
           </Notice>
         </>
       )}
+
+      {/* Outside the roster branch on purpose. The crews are a separate fact
+          about the organization, and an empty roster — which can only mean
+          nobody is within this reader's reach — is not a reason to hide the
+          teams they may still be managing. */}
+      {!failure && (
+        <TeamsPanel
+          teams={teams}
+          properties={properties}
+          canManage={mayManageTeams}
+        />
+      )}
     </div>
   )
 }
@@ -207,9 +237,13 @@ export default async function TeamPage() {
 function MemberRow({
   member,
   maySeeContact,
+  teams,
+  mayManageTeams,
 }: {
   member: MemberListItem
   maySeeContact: boolean
+  teams: readonly { id: string; name: string }[]
+  mayManageTeams: boolean
 }) {
   const joined = hebrewDate(member.joinedAt)
   const lastActive = hebrewMoment(member.lastActiveAt)
@@ -284,7 +318,21 @@ function MemberRow({
       </Cell>
 
       <Cell className="text-muted-foreground">
-        {member.teamName ?? '—'}
+        {/* The picker replaces the label rather than sitting beside it: two
+            controls saying the same thing is how one of them goes stale. A
+            removed membership keeps the label, because assigning a crew to
+            somebody who left is refused by the operation anyway and offering
+            the control would be offering a refusal. */}
+        {mayManageTeams && member.status !== 'removed' ? (
+          <MemberTeamPicker
+            membershipId={member.membershipId}
+            teamId={member.teamId}
+            teams={teams}
+            label={member.fullName ?? 'חבר צוות'}
+          />
+        ) : (
+          (member.teamName ?? '—')
+        )}
         {member.defaultPropertyName && (
           <span className="block text-xs">
             נוחת ב{member.defaultPropertyName}

@@ -123,6 +123,17 @@ export type MemberListItem = {
   employmentType: string | null
   roles: readonly MemberRole[]
   scope: MemberScope
+  /**
+   * The raw `memberships.team_id`, beside the name.
+   *
+   * The name alone was enough while the column was read-only. It is not enough
+   * now that the roster carries a control which writes the column: a picker
+   * needs the id it is currently set to, and matching on a Hebrew name would
+   * break the moment two crews are renamed to the same thing in different
+   * properties — which `teams_organization_name_idx` allows once one of them
+   * is archived.
+   */
+  teamId: string | null
   teamName: string | null
   defaultPropertyName: string | null
   /** Who admitted them. Null for the founder, who was admitted by nobody. */
@@ -231,6 +242,7 @@ export async function listMembers(
       employmentType: asStringOrNull(row, 'employment_type'),
       roles: roles.get(membershipId) ?? [],
       scope: describeScope(scopes.get(membershipId) ?? null, teams, properties),
+      teamId,
       teamName: teamId === null ? null : (teams.get(teamId) ?? null),
       defaultPropertyName:
         defaultPropertyId === null

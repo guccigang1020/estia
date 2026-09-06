@@ -26,7 +26,7 @@ import {
   templateById,
   templatesFor,
 } from './library'
-import { AUTOMATION_ACTIONS } from './types'
+import { AUTOMATION_ACTIONS, reachesOutsideTheBusiness } from './types'
 
 describe('every trigger is a member of the frozen catalogue', () => {
   it('names no event the product does not raise', () => {
@@ -66,22 +66,37 @@ describe('every action is a permission the catalogue defines', () => {
 })
 
 describe('the defaults are a decision, not an accident', () => {
-  const GUEST_FACING = new Set([
-    'message_guest',
-    'request_review',
-    'send_payment_link',
-    'issue_invoice',
-  ])
-
-  it('ships every guest-facing or money-spending rule off', () => {
+  // The set this used to keep for itself now lives in `types.ts` as
+  // `EXTERNALLY_VISIBLE_ACTIONS`, because the screens ask the same question
+  // before offering a switch — "is this one a business should read the wording
+  // of first" — and two copies of that list would answer it differently within
+  // a release.
+  it('ships every rule that reaches outside the business off', () => {
     for (const entry of AUTOMATION_TEMPLATES) {
-      const touchesGuest = entry.rule.actions.some((action) =>
-        GUEST_FACING.has(action.kind),
-      )
-      if (touchesGuest) {
+      if (reachesOutsideTheBusiness(entry.rule)) {
         expect(
           entry.rule.enabled,
           `${entry.rule.id} is enabled by default`,
+        ).toBe(false)
+      }
+    }
+  })
+
+  /**
+   * The other direction, which is the half that actually catches something.
+   *
+   * "Guest-facing rules ship off" passes trivially for a library where
+   * everything ships off. What must also hold is that a rule shipping ON has
+   * no action anybody outside the business would notice — so a template that
+   * grows a `message_guest` action next year and keeps its `enabled: true`
+   * fails here rather than messaging somebody's customers on upgrade day.
+   */
+  it('ships nothing on that somebody outside the business would notice', () => {
+    for (const entry of AUTOMATION_TEMPLATES) {
+      if (entry.rule.enabled) {
+        expect(
+          reachesOutsideTheBusiness(entry.rule),
+          `${entry.rule.id} ships on and reaches outside the business`,
         ).toBe(false)
       }
     }

@@ -151,6 +151,39 @@ export function actionGrant(kind: AutomationActionKind): Grant {
 }
 
 /**
+ * Actions somebody outside the business would notice.
+ *
+ * `library.ts` states the dividing line in prose — anything that speaks to a
+ * guest, spends money or issues a document ships **off**, anything that tells
+ * the business's own staff something ships **on** — and until now that was a
+ * sentence a human had to apply by hand to each new template. It is a
+ * predicate now, so a template that messages a guest and ships enabled is a
+ * failing test rather than an apology.
+ *
+ * `request_approval` is deliberately NOT here: an approval request goes to a
+ * colleague, and a redundant one costs a click. `block_availability` is,
+ * because a date that stops being sellable is visible to every channel the
+ * business sells through.
+ */
+export const EXTERNALLY_VISIBLE_ACTIONS: ReadonlySet<AutomationActionKind> =
+  new Set<AutomationActionKind>([
+    'message_guest',
+    'request_review',
+    'send_payment_link',
+    'issue_invoice',
+    'block_availability',
+  ])
+
+/** Would switching this rule on be noticed outside the business? */
+export function reachesOutsideTheBusiness(rule: {
+  actions: readonly AutomationAction[]
+}): boolean {
+  return rule.actions.some((action) =>
+    EXTERNALLY_VISIBLE_ACTIONS.has(action.kind),
+  )
+}
+
+/**
  * One THEN clause.
  *
  * `note` is Hebrew and is what the audit summary says happened. It is required:

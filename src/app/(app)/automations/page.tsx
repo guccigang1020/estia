@@ -2,6 +2,14 @@ import type { Metadata } from 'next'
 
 import { ActionError } from '@/components/booking/action-error'
 import { Button } from '@/components/ui/button'
+import {
+  parametersFor,
+  reachesOutsideTheBusiness,
+  resolveRules,
+  type ResolvedRule,
+} from '@/lib/automation'
+import { mayManageAutomation } from '@/lib/automation/operations'
+import { AutomationRuleRepository } from '@/lib/automation/repository'
 import { holdsGrant } from '@/lib/authz/can'
 import { toSafeResponse } from '@/lib/errors'
 
@@ -10,13 +18,14 @@ import { financeRepository } from '../finance/_lib/wiring'
 import { DryRunPanel } from './_components/dry-run-panel'
 import { AutomationPlanLock } from './_components/plan-lock'
 import { RuleCard } from './_components/rule-card'
+import { RuleSwitch } from './_components/rule-switch'
 import { candidateEvents, simulate, type Candidate } from './_lib/dry-run'
 import { requireAutomationGrant } from './_lib/gate'
 import { loadDryRunInputs, type DryRunInputs } from './_lib/queries'
 import {
+  configuredRules,
   headline,
   ruleViews,
-  shippedRules,
   type DryRunHeadline,
   type RuleView,
 } from './_lib/rules'
@@ -67,14 +76,23 @@ const MODULE_INCLUDES = [
  * number is measured on the customer's own rows. Nothing the module would have
  * *done* happens here, and nothing a permission withholds is shown either.
  *
- * ── There is no toggle, and the screen says why ───────────────────────────
+ * ── There ARE toggles now, and the screen says what they do not do ────────
  *
- * No migration creates an `automation_rules` table and `library.ts` says so in
- * its own header: a template is a definition that gets copied, and
- * per-organization enablement needs storage this deployment does not have. So
- * the rules are the shipped set in the shipped state, and the absence of a
- * switch is stated once rather than rendered as a control that would forget
- * itself on reload.
+ * `0067_automation_rules.sql` gives per-organization state, so the rules below
+ * are the library laid under whatever this business decided — and the dry run
+ * runs over THAT set rather than over the shipped one, because a preview that
+ * ignored the customer's own switches would be a preview of somebody else's
+ * product.
+ *
+ * What a switch still does not do is start anything. Nothing in this
+ * deployment hands `runAutomations` a live event: `(app)/_lib/events.ts`
+ * publishes domain events to webhooks and says in its own header that
+ * automations are one `subscribers` entry away and deliberately not turned on,
+ * and no performer exists behind any of the eight action kinds. So enabling
+ * records intent, the banner below says so in Hebrew, and the switch itself
+ * says it again where the decision is actually made. A screen that let a
+ * toggle imply an engine would be the one dishonest thing in a module built
+ * entirely around telling a zero from a silence.
  */
 export default async function AutomationsPage() {
   const [access, context] = await Promise.all([
@@ -105,6 +123,8 @@ export default async function AutomationsPage() {
   const linkTemplates = holdsGrant(actor, 'template.manage')
   const mayReachBilling = holdsGrant(actor, 'organization.billing.manage')
 
+  const mayManage = mayManageAutomation(actor, propertyId)
+
   let inputs: DryRunInputs | null = null
   let views: readonly RuleView[] = []
   let totals: DryRunHeadline | null = null
@@ -112,14 +132,28 @@ export default async function AutomationsPage() {
 
   try {
     const { db, repo } = await financeRepository()
+
+    // Read first, and never fall back to the shipped set if it fails. A screen
+    // that renders switches from rules it could not read the state of would
+    // show every rule at its default and invite somebody to "fix" one that was
+    // already correct — and the write behind that click would be a real change
+    // made on the strength of a wrong picture.
+    const resolved = resolveRules(
+      await new AutomationRuleRepository(db).stored(actor.organizationId),
+      propertyId,
+    )
+    const states = new Map<string, ResolvedRule>(
+      resolved.map((entry) => [entry.rule.id, entry]),
+    )
+
     inputs = await loadDryRunInputs({ db, repo, actor, propertyId })
     const candidates: readonly Candidate[] = candidateEvents(
       actor.organizationId,
       inputs.rows,
       new Date(),
     )
-    const dryRun = await simulate(actor, shippedRules(), candidates)
-    views = ruleViews(actor, dryRun, candidates)
+    const dryRun = await simulate(actor, configuredRules(resolved), candidates)
+    views = ruleViews(actor, dryRun, candidates, states)
     totals = headline(views, dryRun)
   } catch (cause) {
     // A dry run that failed must not render as a dry run that found nothing.
@@ -171,17 +205,63 @@ export default async function AutomationsPage() {
                   : `${views.length} הכללים שהמערכת מכירה`}
               </h2>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                אלה הכללים ש-ESTIA מגיעה איתם, במצב שבו הם מגיעים: כל מה שמדבר
-                אל אורח, מוציא כסף או מפיק מסמך מגיע כבוי עד שמאשרים את הנוסח.
-                עריכה וכיבוי לכל ארגון בנפרד דורשים אחסון שעדיין אינו קיים
-                במוצר, ולכן אין כאן מתגים — מתג שלא נשמר גרוע ממתג שאינו קיים.
+                אלה הכללים ש-ESTIA מגיעה איתם, במצב שבו הם נמצאים כאן: כל מה
+                שמדבר אל אורח, מוציא כסף או מפיק מסמך מגיע כבוי עד שמאשרים את
+                הנוסח, וכל שינוי שעשיתם מוצג כאן במקום ברירת המחדל.{' '}
+                {propertyName
+                  ? `המתגים למטה נכתבים לנכס ״${propertyName}״ בלבד.`
+                  : 'המתגים למטה נכתבים לכל הנכסים בארגון.'}
+              </p>
+
+              {/* The absence, once, in full, before the first switch. The
+                  switch says it again — the belief is formed at the click. */}
+              <p className="rounded-lg border border-border-strong bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">
+                <span className="font-semibold">
+                  מה שמתג כאן עושה, ומה שהוא עדיין לא עושה:
+                </span>{' '}
+                ההחלטה איזה כלל דולק נשמרת, נרשמת ביומן הפעילות עם השם והזמן,
+                וההרצה היבשה שלמעלה מתחשבת בה. מה שאין עדיין הוא מנוע שמריץ את
+                הכללים על אירועים חיים — אף רכיב במוצר לא מזין את מנוע
+                האוטומציות באירועים, ולאף אחת משמונה הפעולות אין מבצע. כלל שדולק
+                כאן הוא הכוונה שתירשם, ולא פעולה שמתחילה עכשיו.
               </p>
             </div>
 
             <ul className="flex flex-col gap-4">
               {views.map((view) => (
                 <li key={view.rule.id}>
-                  <RuleCard view={view} />
+                  <RuleCard
+                    view={view}
+                    control={
+                      // No switch under a plan lock, and deliberately not a
+                      // disabled one: `mayManageAutomation` answers false for
+                      // a missing package exactly as it does for a missing
+                      // permission, and the switch's own refusal line names
+                      // the role. Showing it here would send an owner whose
+                      // role is perfectly correct to an administrator who
+                      // cannot help — the one sentence `_lib/gate.ts` exists
+                      // to stop this screen saying. The lock panel above
+                      // already says the true one.
+                      view.state === null || locked ? null : (
+                        <RuleSwitch
+                          templateId={view.rule.id}
+                          ruleName={view.rule.name}
+                          enabled={view.rule.enabled}
+                          source={view.state.source}
+                          storedVersion={view.state.stored?.version ?? null}
+                          propertyId={propertyId}
+                          propertyName={propertyName}
+                          parameters={parametersFor(view.rule.id)}
+                          values={view.state.parameters}
+                          overrideCount={
+                            view.state.overriddenAtProperties.length
+                          }
+                          canManage={mayManage}
+                          reachesGuest={reachesOutsideTheBusiness(view.rule)}
+                        />
+                      )
+                    }
+                  />
                 </li>
               ))}
             </ul>

@@ -35,7 +35,7 @@
  * last quarter's stays would produce a number that disagrees with the ledger.
  */
 
-import { can, holdsGrant, type Actor, type Resource } from '@/lib/authz/can'
+import { can, holdsGrant, type Actor } from '@/lib/authz/can'
 import {
   COMMISSION_BASES,
   COMMISSION_STATUSES,
@@ -44,8 +44,11 @@ import {
 } from '@/lib/contracts/states'
 import { sumAgorot } from '@/lib/finance'
 import {
+  COMMISSION_CONDITIONS,
+  agencyResource,
   isAgreementActive,
   type AgencyAgreement,
+  type CommissionCondition,
   type CommissionRule,
 } from '@/lib/agents'
 import {
@@ -76,10 +79,13 @@ export const AGENCY_PAGE_SIZE = 100
  * of inventory and not a financial document. No property is carried: an agency
  * agreement is organization-wide, so a property-scoped membership does not reach
  * it, which is the correct answer and the reason `can()` is asked at all.
+ *
+ * It is now defined once, in `src/lib/agents/agency-operations.ts`, and
+ * imported here. It was declared in both when only the read side existed; two
+ * copies of the resource a write is authorized against and the resource a read
+ * is authorized against is exactly the pair that must never come apart.
  */
-function agencyResource(organizationId: string): Resource {
-  return { organizationId, family: 'team' }
-}
+export { agencyResource }
 
 /* ------------------------------------------------------------ the shapes -- */
 
@@ -114,6 +120,14 @@ export type AgreementTerms = {
    * screen renders both.
    */
   live: boolean
+  /**
+   * The row's own version, for optimistic locking on `agency.set_terms`.
+   *
+   * The *agreement's*, never the agency's: the agreement is the row that
+   * operation edits, and locking against the wrong one would let two people
+   * overwrite each other's commission rates while the check passed.
+   */
+  version: number
 }
 
 export type AgencyMember = {
@@ -129,10 +143,55 @@ export type AgencyListItem = {
   id: string
   name: string
   taxId: string | null
+  /**
+   * As typed, beside the normalised key.
+   *
+   * The edit form has to round-trip what a person wrote. `contact_phone_e164`
+   * is a generated column and cannot be written, so putting it back in the
+   * field would silently rewrite `03-555-0000` as `+9723555000` the first time
+   * anybody touched an unrelated field on the form.
+   */
+  contactPhone: string | null
   contactPhoneE164: string | null
   contactEmail: string | null
+  addressLine1: string | null
+  city: string | null
+  country: string
   status: string
+  /** Why it was marked inactive, in the words of whoever did it. */
+  deactivationReason: string | null
   note: string | null
+  /** For optimistic locking on `agency.edit_contact`. */
+  version: number
+  /**
+   * False when the agency row itself could not be read.
+   *
+   * An agreement naming an agency this reader cannot see is a real agreement
+   * with an unnameable counterparty — a row somebody should look at, not one to
+   * drop silently. Every editable control is hidden when this is false, because
+   * a form pre-filled with placeholders would save the placeholders.
+   */
+  visible: boolean
+  /**
+   * True while nobody from the agency manages its own record.
+   *
+   * `agencies_update` in 0070 lets a business edit only an unclaimed record:
+   * the stub it typed in during a telephone call is its to correct, and the
+   * moment a real manager exists the record belongs to the agency. Derived from
+   * `members`, which on this screen is never `null` — reaching this code at all
+   * required `agency.manage`, which is what would have made it null.
+   */
+  unclaimed: boolean
+  /**
+   * What the commission rule the *resolver* reads waits for, or `null` when
+   * this reader may not see commission rules at all.
+   *
+   * `null` and `[]` are different answers and the screen treats them
+   * differently: an empty list is "eligible immediately", a real arrangement,
+   * and `null` is "you cannot see this" — on which the terms form is hidden,
+   * because saving it would write a default over conditions nobody could read.
+   */
+  eligibility: readonly CommissionCondition[] | null
   agreements: readonly AgreementTerms[]
   /**
    * The people selling under this agency's banner, or `null` when this reader
@@ -195,10 +254,11 @@ export async function listAgencies(args: {
   ]
   if (agencyIds.length === 0) return []
 
-  const [agencyRows, members, money] = await Promise.all([
+  const [agencyRows, members, money, eligibility] = await Promise.all([
     agencyRecords(db, agencyIds),
     agencyMembers(db, actor, organizationId, agencyIds),
     agencyMoney(db, actor, organizationId, agencyIds),
+    agencyEligibility(db, actor, organizationId, agencyIds),
   ])
 
   return agencyIds
@@ -209,21 +269,41 @@ export async function listAgencies(args: {
       // somebody should look at rather than one to drop silently.
       const name = record === undefined ? null : asString(record, 'name')
       const totals = money?.get(agencyId) ?? null
+      const people = members === null ? null : (members.get(agencyId) ?? [])
 
       const item: AgencyListItem = {
         id: agencyId,
         name: name ?? 'סוכנות שאינה גלויה לך',
         taxId: record ? asStringOrNull(record, 'tax_id') : null,
+        contactPhone: record ? asStringOrNull(record, 'contact_phone') : null,
         contactPhoneE164: record
           ? asStringOrNull(record, 'contact_phone_e164')
           : null,
         contactEmail: record ? asStringOrNull(record, 'contact_email') : null,
+        addressLine1: record ? asStringOrNull(record, 'address_line1') : null,
+        city: record ? asStringOrNull(record, 'city') : null,
+        country: record ? asString(record, 'country') : 'IL',
         status: record ? asString(record, 'status') : 'unknown',
+        deactivationReason: record
+          ? asStringOrNull(record, 'deactivation_reason')
+          : null,
         note: record ? asStringOrNull(record, 'note') : null,
+        version: record ? asNumber(record, 'version') : 0,
+        visible: record !== undefined,
+        // A reader who cannot see the people cannot be told the record is
+        // unclaimed — the absence of a manager they may not see is not
+        // evidence there is none.
+        unclaimed:
+          people !== null &&
+          !people.some(
+            (member) => member.role === 'manager' && member.status === 'active',
+          ),
+        eligibility:
+          eligibility === null ? null : (eligibility.get(agencyId) ?? []),
         agreements: agreementRows
           .filter((row) => asString(row, 'agency_id') === agencyId)
           .map((row) => toTerms(row, on)),
-        members: members === null ? null : (members.get(agencyId) ?? []),
+        members: people,
         owedAgorot: totals?.owedAgorot ?? null,
         unpaidAgorot: totals?.unpaidAgorot ?? null,
         commissionCount: totals?.count ?? 0,
@@ -300,6 +380,7 @@ function toTerms(row: Row, on: string): AgreementTerms {
     terminationReason: asStringOrNull(row, 'termination_reason'),
     note: asStringOrNull(row, 'note'),
     live: isAgreementActive(agreement, on),
+    version: agreement.version,
   }
 }
 
@@ -370,7 +451,10 @@ async function agencyRecords(
 ): Promise<ReadonlyMap<string, Row>> {
   const { data, error } = await db
     .from('agencies')
-    .select('id, name, tax_id, contact_phone_e164, contact_email, status, note')
+    .select(
+      'id, name, tax_id, contact_phone, contact_phone_e164, contact_email, ' +
+        'address_line1, city, country, status, deactivation_reason, note, version',
+    )
     .in('id', [...agencyIds])
 
   if (error) throw error
@@ -430,6 +514,75 @@ async function agencyMembers(
     })
     byAgency.set(agencyId, list)
   }
+  return byAgency
+}
+
+/**
+ * What each agency's **default commission rule** waits for.
+ *
+ * Read from `agent_commission_rules` and not from the agreement, because the
+ * agreement has no such column and because that table is the one
+ * `selectCommissionRule` actually resolves — the agreement's `rule` is the
+ * commercial document and nothing computes money from it. The terms form has to
+ * start from the row that pays.
+ *
+ * `null` without `agent_agreement.view`, and the distinction is load-bearing:
+ * `agent_commission_rules_select` hides the row from such a reader, so an empty
+ * result would be indistinguishable from "no rule yet". Writing terms on the
+ * strength of that guess would replace real eligibility conditions with a
+ * default — which is the difference between paying on completed stays and
+ * paying on stays that have not happened. The screen hides the form instead.
+ *
+ * The filters are the definition of "the agency's default": this agency, no
+ * named agent, and no property, unit, rate-plan or period narrowing. They match
+ * `agent_commission_rules_agency_default_idx` in 0070 exactly.
+ */
+async function agencyEligibility(
+  db: Db,
+  actor: Actor,
+  organizationId: string,
+  agencyIds: readonly string[],
+): Promise<ReadonlyMap<string, readonly CommissionCondition[]> | null> {
+  if (!holdsGrant(actor, 'agent_agreement.view')) return null
+
+  const { data, error } = await db
+    .from('agent_commission_rules')
+    .select('agency_id, eligibility_conditions')
+    .eq('organization_id', organizationId)
+    .in('agency_id', [...agencyIds])
+    .is('agent_user_id', null)
+    .is('property_ids', null)
+    .is('unit_ids', null)
+    .is('rate_plan_ids', null)
+    .is('period_from', null)
+    .is('period_to', null)
+    .is('deleted_at', null)
+
+  if (error) throw error
+
+  const known = new Set<string>(COMMISSION_CONDITIONS)
+  const byAgency = new Map<string, readonly CommissionCondition[]>()
+
+  for (const row of toRows(data)) {
+    const agencyId = asStringOrNull(row, 'agency_id')
+    if (agencyId === null) continue
+
+    const raw = row.eligibility_conditions
+    // A condition the code has no branch for is dropped rather than rendered
+    // as an unfamiliar word beside a live agreement — and dropping it here
+    // cannot widen anything, because the pipeline validates what is written
+    // back against the same list.
+    byAgency.set(
+      agencyId,
+      Array.isArray(raw)
+        ? raw.filter(
+            (value): value is CommissionCondition =>
+              typeof value === 'string' && known.has(value),
+          )
+        : [],
+    )
+  }
+
   return byAgency
 }
 

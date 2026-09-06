@@ -3,10 +3,16 @@
  *
  * ── Why a path and not a button ───────────────────────────────────────────
  *
- * There is no `automation_rules` table in any migration, and `library.ts` is
- * explicit that a template is a definition to be copied rather than a row to be
- * toggled. So "adopt" is not a write this deployment can perform, and a button
- * offering it would be the worst kind of lie — one that appears to work.
+ * `0067_automation_rules.sql` gave the library per-organization state, so a
+ * rule CAN now be switched on — at `/automations`, which owns that control.
+ * What still does not exist is a runner: enabling records intent and nothing
+ * fires by itself yet.
+ *
+ * This screen therefore still offers no button. Not because the write is
+ * impossible, but because the write lives one screen away and duplicating it
+ * here would be two controls for one piece of state. What it answers is the
+ * question somebody actually has — would this rule do anything for me — and
+ * the last step now points at where to act rather than at a missing table.
  *
  * What the product *can* do honestly is answer the question a person actually
  * has, which is not "may I click this" but "would this do anything for me". The
@@ -88,10 +94,10 @@ export function adoptionSteps(
           : `התנאי נשען על ${facts.map(factLabel).join(', ')}. אם האירוע לא יישא את הנתון, התנאי ייחשב כלא־מתקיים והכלל לא יפעל — כך המנוע נכשל לצד הבטוח.`,
     },
     {
-      title: 'העתקת הכלל לארגון',
+      title: 'הפעלת הכלל לארגון שלכם',
       met: null,
       detail:
-        'העתקה, עריכה וכיבוי לכל ארגון בנפרד דורשים טבלת כללים שעדיין אינה קיימת במוצר. עד אז הכלל רץ במצב שבו הוא נשלח, וההרצה היבשה במסך האוטומציות מראה מה הוא היה עושה על הנתונים שלך.',
+        'הפעלה וכיבוי לכל ארגון בנפרד נעשים במסך האוטומציות. מה שעדיין אין הוא מריץ — הפעלה נרשמת ככוונה, ואף כלל אינו פועל מעצמו עדיין. ההרצה היבשה שם מראה מה הכלל היה עושה על הנתונים שלכם.',
     },
   ]
 }

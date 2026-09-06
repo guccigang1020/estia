@@ -26,11 +26,21 @@
  *
  * ── What a template is not ────────────────────────────────────────────────
  *
- * It is not an installed rule. This file is a catalogue of definitions, in the
- * spirit of `plans/catalog.ts` — a starting point that is copied, not a table
- * that is read at run time. Per-organization enablement, ordering and editing
- * need storage this deployment does not have; the screens say so rather than
- * pretending a toggle here would persist.
+ * It is not an installed rule, and `enabled` here is not this organization's
+ * answer. This file is a catalogue of definitions, in the spirit of
+ * `plans/catalog.ts` — the state ESTIA ships, which stands until a business
+ * decides otherwise.
+ *
+ * Where that decision lives is `automation_rules` (0067) and how it is laid
+ * over this file is `state.ts`, whose one rule is worth repeating here: **an
+ * absent row is not a disabled rule**. A business that has never opened the
+ * automation screen has no rows, and the five internal alerts below are on for
+ * it — which is the whole reason they ship on.
+ *
+ * Editing a rule's shape is still not offered and is not an oversight: a
+ * customer chooses among these and tunes the numbers `parameters.ts` declares.
+ * Authoring conditions over arbitrary facts is a scripting language nobody can
+ * audit, which `types.ts` opens by refusing.
  */
 
 import type { DomainEventName } from '../contracts/events'

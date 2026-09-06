@@ -1,9 +1,10 @@
 /**
  * PURE. One rule, everything the screen knows about it, in one object.
  *
- * Three modules already answer three different questions about a rule, and no
- * screen wants three lists that have to be zipped together by hand:
+ * Four modules already answer four different questions about a rule, and no
+ * screen wants four lists that have to be zipped together by hand:
  *
+ *   · `resolveRules`  — did this business switch it on, and with what numbers?
  *   · `ruleReadiness` — could this run, for this person, on this package?
  *   · `simulate`      — what would it have done to the rows in this database?
  *   · `candidateEvents` — is its trigger even reconstructible from those rows?
@@ -26,9 +27,10 @@
 
 import {
   AUTOMATION_ENTITLEMENT,
-  AUTOMATION_TEMPLATES,
+  effectiveRules,
   ruleReadiness,
   type AutomationRule,
+  type ResolvedRule,
   type RuleReadiness,
 } from '@/lib/automation'
 import type { Actor } from '@/lib/authz/can'
@@ -45,23 +47,23 @@ import {
 /* --------------------------------------------------------- the rule set --- */
 
 /**
- * The rules this organization has.
+ * The rules this organization has, as it configured them.
  *
- * They are the library's, and that is a statement about the deployment rather
- * than a shortcut. `library.ts` says it in its own header: a template is a
- * definition that gets copied, per-organization enablement and editing need
- * storage this deployment does not have, and there is no `automation_rules`
- * table in any migration. So the honest answer to "which rules does this
- * business have" is "the ones ESTIA ships, in the state ESTIA ships them", and
- * the screen says exactly that instead of rendering switches that would forget
- * themselves on reload.
+ * This used to be `AUTOMATION_TEMPLATES.map(t => t.rule)` with a paragraph
+ * explaining that per-organization enablement needed storage the deployment did
+ * not have. `0067_automation_rules.sql` is that storage, so the honest answer
+ * is no longer "the ones ESTIA ships": it is the library laid under whatever
+ * this organization decided, which is what `resolveRules` produces and what the
+ * dry run below must therefore run over. A preview that ignored the customer's
+ * own switches would be a preview of somebody else's product.
  *
- * `enabled` is therefore the library's decision — anything that speaks to a
- * guest, spends money or issues a document ships off — and it is read, not
- * overridden here.
+ * A rule nobody has decided about keeps the library's `enabled` — an absent row
+ * is not a disabled rule, which is the whole argument in `state.ts`.
  */
-export function shippedRules(): readonly AutomationRule[] {
-  return AUTOMATION_TEMPLATES.map((template) => template.rule)
+export function configuredRules(
+  resolved: readonly ResolvedRule[],
+): readonly AutomationRule[] {
+  return effectiveRules(resolved)
 }
 
 /* ------------------------------------------------------------- the facts -- */
@@ -188,6 +190,16 @@ export interface RuleView {
   triggerSimulated: boolean
   absentFacts: readonly string[]
   blockers: readonly Blocker[]
+  /**
+   * What this organization decided about the rule, and who decided it.
+   *
+   * Null when the stored state was not read at all — a caller that has no
+   * database, which is every test in this directory. Null is therefore "not
+   * known here" and never "nobody has configured it"; that second state is
+   * `state.source === 'shipped'`, and the two must not be confused on a screen
+   * whose whole job is to tell absence from a decision.
+   */
+  state: ResolvedRule | null
 }
 
 /**
@@ -202,6 +214,7 @@ export function ruleViews(
   actor: Actor,
   dryRun: DryRun,
   candidates: readonly Candidate[],
+  states: ReadonlyMap<string, ResolvedRule> = new Map(),
 ): readonly RuleView[] {
   return dryRun.rules
     .map((simulation) => {
@@ -216,6 +229,7 @@ export function ruleViews(
         triggerSimulated,
         absentFacts,
         blockers: blockersFor(readiness, absentFacts, triggerSimulated),
+        state: states.get(simulation.rule.id) ?? null,
       }
     })
     .sort(byInterest)

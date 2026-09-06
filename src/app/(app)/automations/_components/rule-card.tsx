@@ -148,8 +148,35 @@ export function RuleClauses({
 
 /* ---------------------------------------------------------------- card --- */
 
-export function RuleCard({ view }: { view: RuleView }) {
+/**
+ * `control` is a slot rather than a component this file imports.
+ *
+ * The switch is a client component that calls three server actions; the card
+ * is values-in-markup-out and is rendered by `/templates` as well, which has no
+ * write path and must not acquire one by importing this file. The page that
+ * owns the wiring passes the control in, and a caller with nothing to pass —
+ * a reader without `automation.manage`, or the templates screen — renders a
+ * card with no switch rather than a switch that would be refused.
+ *
+ * ── The default badge is about the LIBRARY, not about this organization ────
+ *
+ * "כבויה כברירת מחדל" is a statement about how ESTIA ships the rule. Once a
+ * business has decided for itself, that sentence is no longer the interesting
+ * one and the switch below states the real one, so the badge stands down. A
+ * card that said "off by default" beside a switch reading "דולק" would be two
+ * true sentences arranged to read as a contradiction.
+ */
+export function RuleCard({
+  view,
+  control,
+}: {
+  view: RuleView
+  control?: ReactNode
+}) {
   const { rule, readiness, simulation } = view
+
+  const showsShippedDefault =
+    view.state === null ? !rule.enabled : view.state.source === 'shipped'
 
   return (
     <article className="flex flex-col gap-5 rounded-xl border border-border bg-surface p-5 shadow-soft sm:p-6">
@@ -163,7 +190,9 @@ export function RuleCard({ view }: { view: RuleView }) {
               anything that speaks to a guest, spends money or issues a document
               is off until somebody approves the wording. A card that hid that
               would make a deliberate decision look like a bug. */}
-          {!rule.enabled && <Badge tone="neutral">כבויה כברירת מחדל</Badge>}
+          {!rule.enabled && showsShippedDefault && (
+            <Badge tone="neutral">כבויה כברירת מחדל</Badge>
+          )}
         </div>
         <p className="text-sm leading-relaxed text-muted-foreground">
           {rule.description}
@@ -171,6 +200,8 @@ export function RuleCard({ view }: { view: RuleView }) {
       </header>
 
       <RuleClauses rule={rule} readiness={readiness} />
+
+      {control}
 
       {/* The dry run for this rule. Placed inside the card rather than in a
           separate table so the numbers cannot be read against the wrong rule. */}

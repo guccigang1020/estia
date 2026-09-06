@@ -54,6 +54,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { resolveActor } from '@/lib/actor'
+import { resolveRules } from '@/lib/automation'
 import type { Actor } from '@/lib/authz/can'
 import { createDemoClient } from '@/lib/demo/client'
 import { DEMO_DATASET, DEMO_PERSONAS, DEMO_PLANS } from '@/lib/demo/dataset'
@@ -67,7 +68,7 @@ import { SEED_PLANS } from '@/lib/plans/catalog'
 
 import { candidateEvents, simulate } from './dry-run'
 import { loadDryRunInputs, type DryRunInputs } from './queries'
-import { headline, ruleViews, shippedRules, type RuleView } from './rules'
+import { configuredRules, headline, ruleViews, type RuleView } from './rules'
 
 const ORGANIZATION = DEMO_DATASET.organizationId
 
@@ -145,7 +146,15 @@ async function walk(
     propertyId: null,
   })
   const candidates = candidateEvents(ORGANIZATION, inputs.rows, now)
-  const dryRun = await simulate(actor, shippedRules(), candidates)
+  // No stored rows: the demo client has no `automation_rules` table, and an
+  // organization that has never opened the screen has no rows either. Both are
+  // the same input, and `resolveRules` answers the library's own state for it —
+  // which is what every assertion below was written against.
+  const dryRun = await simulate(
+    actor,
+    configuredRules(resolveRules([], null)),
+    candidates,
+  )
   const views = ruleViews(actor, dryRun, candidates)
 
   return { actor, inputs, views, totals: headline(views, dryRun) }
