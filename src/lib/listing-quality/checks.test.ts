@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  GOOD_RATING,
   GUESTS_PER_BED,
   MIN_AMENITIES,
   MIN_DESCRIPTION_CHARS,
@@ -23,6 +24,9 @@ const property = (over: Partial<ListingProperty> = {}): ListingProperty => ({
   coverImageUrl: 'https://example.com/cover.jpg',
   amenityCount: 12,
   photoCount: 9,
+  reviewCount: 0,
+  reviewAverage: null,
+  reviewsHidden: 0,
   ...over,
 })
 
@@ -189,5 +193,49 @@ describe('every unmeasurable check weighs nothing', () => {
         expect(check.observed, check.code).toBeNull()
       }
     }
+  })
+})
+
+describe('guest rating, now that there is a table behind it', () => {
+  it('is still not assessed with no reviews, and weighs nothing', () => {
+    // A business that opened last month is not a bad business.
+    const checks = checkProperty(property())
+    const rating = checks.find((c) => c.code === 'property.guest_rating')
+    expect(rating?.status).toBe('not_assessed')
+    expect(rating?.weight).toBe(0)
+  })
+
+  it('passes on a rating guests would filter for', () => {
+    const checks = checkProperty(
+      property({ reviewAverage: GOOD_RATING, reviewCount: 9 }),
+    )
+    const rating = checks.find((c) => c.code === 'property.guest_rating')
+    expect(rating?.status).toBe('pass')
+    expect(rating?.observed).toBe('4.3 מתוך 5 · 9 ביקורות')
+  })
+
+  it('warns just below the line, where bookings start being lost', () => {
+    const checks = checkProperty(
+      property({ reviewAverage: 4.2, reviewCount: 9 }),
+    )
+    expect(statusOf(checks, 'property.guest_rating')).toBe('warn')
+  })
+
+  it('reports hidden reviews as their own finding', () => {
+    // The average already excludes them. Without this line a business could
+    // hide its way to a good score and the report would agree with it.
+    const checks = checkProperty(
+      property({ reviewAverage: 5, reviewCount: 6, reviewsHidden: 4 }),
+    )
+    const hidden = checks.find((c) => c.code === 'property.reviews_hidden')
+    expect(hidden?.status).toBe('warn')
+    expect(hidden?.observed).toBe('4 מוסתרות')
+  })
+
+  it('says nothing when nothing is hidden', () => {
+    const checks = checkProperty(property({ reviewAverage: 5, reviewCount: 6 }))
+    expect(
+      checks.find((c) => c.code === 'property.reviews_hidden'),
+    ).toBeUndefined()
   })
 })

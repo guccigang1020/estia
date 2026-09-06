@@ -34,6 +34,7 @@ import {
   type ListingUnit,
 } from '@/lib/listing-quality'
 import { toRows, type Db, type Row } from '@/lib/persistence'
+import { summarise, type Review } from '@/lib/reviews'
 
 export type ListingsScreen =
   | { readonly status: 'not_provisioned' }
@@ -77,42 +78,57 @@ export async function loadListingsScreen(
   }
 
   try {
-    const [properties, units, propertyAmenities, unitAmenities, media] =
-      await Promise.all([
-        db
-          .from('properties')
-          .select(
-            'id, name, description, city, region, latitude, longitude, ' +
-              'house_rules, cancellation_policy_text, cover_image_url',
-          )
-          .eq('organization_id', organizationId)
-          .in('id', [...propertyIds])
-          .is('deleted_at', null),
-        db
-          .from('units')
-          .select(
-            'id, property_id, name, description, max_guests, bedrooms, ' +
-              'bathrooms, beds, size_sqm, base_price_agorot, ' +
-              'cleaning_fee_agorot, deposit_agorot, min_nights, cover_image_url',
-          )
-          .eq('organization_id', organizationId)
-          .in('property_id', [...propertyIds])
-          .is('deleted_at', null),
-        db
-          .from('property_amenities')
-          .select('property_id')
-          .eq('organization_id', organizationId)
-          .in('property_id', [...propertyIds]),
-        db
-          .from('unit_amenities')
-          .select('unit_id')
-          .eq('organization_id', organizationId)
-          .in('property_id', [...propertyIds]),
-        db
-          .from('site_media')
-          .select('bound_id')
-          .eq('organization_id', organizationId),
-      ])
+    const [
+      properties,
+      units,
+      propertyAmenities,
+      unitAmenities,
+      media,
+      reviews,
+    ] = await Promise.all([
+      db
+        .from('properties')
+        .select(
+          'id, name, description, city, region, latitude, longitude, ' +
+            'house_rules, cancellation_policy_text, cover_image_url',
+        )
+        .eq('organization_id', organizationId)
+        .in('id', [...propertyIds])
+        .is('deleted_at', null),
+      db
+        .from('units')
+        .select(
+          'id, property_id, name, description, max_guests, bedrooms, ' +
+            'bathrooms, beds, size_sqm, base_price_agorot, ' +
+            'cleaning_fee_agorot, deposit_agorot, min_nights, cover_image_url',
+        )
+        .eq('organization_id', organizationId)
+        .in('property_id', [...propertyIds])
+        .is('deleted_at', null),
+      db
+        .from('property_amenities')
+        .select('property_id')
+        .eq('organization_id', organizationId)
+        .in('property_id', [...propertyIds]),
+      db
+        .from('unit_amenities')
+        .select('unit_id')
+        .eq('organization_id', organizationId)
+        .in('property_id', [...propertyIds]),
+      db
+        .from('site_media')
+        .select('bound_id')
+        .eq('organization_id', organizationId),
+      // `status` comes back with the rest rather than being filtered in the
+      // query. `summarise` needs to COUNT the hidden ones — dropping them
+      // here would let a business hide its way to a better score, which is
+      // the one thing 0066 exists to prevent.
+      db
+        .from('guest_reviews')
+        .select('property_id, status, overall')
+        .eq('organization_id', organizationId)
+        .in('property_id', [...propertyIds]),
+    ])
 
     for (const result of [
       properties,
@@ -120,6 +136,7 @@ export async function loadListingsScreen(
       propertyAmenities,
       unitAmenities,
       media,
+      reviews,
     ]) {
       if (result.error) throw result.error
     }
@@ -131,10 +148,38 @@ export async function loadListingsScreen(
     const unitAmenityCount = tally(toRows(unitAmenities.data), 'unit_id')
     const photoCount = tally(toRows(media.data), 'bound_id')
 
+    // One `summarise` call per property rather than a hand-rolled average
+    // here: the rules about hidden reviews and about too few to average live
+    // in one place, and a second copy of them would drift.
+    const reviewsByProperty = new Map<string, Review[]>()
+    for (const row of toRows(reviews.data)) {
+      const propertyId = str(row, 'property_id')
+      const overall = num(row, 'overall')
+      const status = str(row, 'status')
+      if (propertyId === null || overall === null) continue
+
+      const list = reviewsByProperty.get(propertyId) ?? []
+      list.push({
+        id: '',
+        propertyId,
+        unitId: null,
+        bookingId: '',
+        status: status === 'hidden' ? 'hidden' : 'published',
+        source: 'guest_portal',
+        overall,
+        dimensions: {},
+        comment: null,
+        hostReply: null,
+        stayedAt: '',
+      })
+      reviewsByProperty.set(propertyId, list)
+    }
+
     const listingProperties = new Map<string, ListingProperty>()
     for (const row of toRows(properties.data)) {
       const id = str(row, 'id')
       if (id === null) continue
+      const reviewSummary = summarise(reviewsByProperty.get(id) ?? [])
       listingProperties.set(id, {
         id,
         name: str(row, 'name') ?? id,
@@ -148,6 +193,9 @@ export async function loadListingsScreen(
         coverImageUrl: str(row, 'cover_image_url'),
         amenityCount: propertyAmenityCount.get(id) ?? 0,
         photoCount: photoCount.get(id) ?? 0,
+        reviewCount: reviewSummary.counted,
+        reviewAverage: reviewSummary.average,
+        reviewsHidden: reviewSummary.hidden,
       })
     }
 

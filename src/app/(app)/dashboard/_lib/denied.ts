@@ -103,6 +103,7 @@ export const GRANT_CAPABILITY: Partial<Record<Grant, string>> = {
   'quote.create': 'כתיבת הצעת מחיר',
   'quote.view': 'צפייה בהצעות המחיר',
   'report.financial.view': 'צפייה בדוח הכספי',
+  'review.view': 'צפייה בביקורות אורחים',
   'role.assign': 'ניהול תפקידים והרשאות',
   'site.view': 'צפייה באתר הישיר',
   'site.edit_content': 'עריכת תוכן האתר',

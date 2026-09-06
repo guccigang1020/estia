@@ -16,6 +16,9 @@ const property = (over: Partial<ListingProperty> = {}): ListingProperty => ({
   coverImageUrl: 'https://example.com/cover.jpg',
   amenityCount: 12,
   photoCount: 9,
+  reviewCount: 0,
+  reviewAverage: null,
+  reviewsHidden: 0,
   ...over,
 })
 

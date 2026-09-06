@@ -731,6 +731,16 @@ export const MENU: readonly MenuSectionDefinition[] = [
         },
       },
       {
+        id: 'reviews',
+        label: 'ביקורות',
+        // `review.view` — the grant that had no table behind it until 0066.
+        // Reading is the entry; `review.manage` gates the reply and hide
+        // controls inside the screen rather than the route, because somebody
+        // who may read reviews and not answer them should still see them.
+        requires: { kind: 'grant', anyOf: ['review.view'] },
+        destination: { status: 'ready', href: '/reviews' },
+      },
+      {
         id: 'revenue',
         label: 'הכנסות',
         // `report.financial.view` alone, and deliberately not the wider

@@ -666,6 +666,14 @@ const TABLES: DemoTables = {
   conversation_messages: [],
   conversation_reads: [],
 
+  // 0066 · reviews. Empty, and this one is not a shrug either: a seeded review
+  // is a sentence attributed to a guest who never wrote it, and the demo
+  // would then show a rating that `listing-quality` reads and scores. The
+  // whole argument of that migration is that a rating nobody can fabricate is
+  // worth something and one anybody can is worth less than nothing — seeding
+  // three flattering reviews here would be the first person to break it.
+  guest_reviews: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

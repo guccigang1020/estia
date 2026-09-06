@@ -47,6 +47,20 @@ export const MIN_AMENITIES = 8
 /** Rounded up: two guests to a bed is the ordinary assumption. */
 export const GUESTS_PER_BED = 2
 
+/**
+ * 4.3 out of 5.
+ *
+ * Not an aspiration and not a school grade. On the channels a guest actually
+ * filters with, a listing below roughly this line drops out of the default
+ * sort — so the threshold marks where a rating starts costing bookings rather
+ * than where it stops being flattering.
+ *
+ * Ratings below `MIN_REVIEWS_TO_AVERAGE` never reach this comparison at all:
+ * `summarise` returns a null average and the check reports `not_assessed`.
+ * A new business is not a bad one.
+ */
+export const GOOD_RATING = 4.3
+
 function check(
   code: string,
   area: ListingCheck['area'],
@@ -158,11 +172,45 @@ export function checkProperty(
     ),
   )
 
-  // The three that cannot be sourced. Weight zero, so they neither help nor
-  // hurt — see `ListingScore`.
-  checks.push(
-    check('property.guest_rating', 'reputation', 'not_assessed', 0, null),
-  )
+  // Guest rating stopped being unsourceable when `0066_guest_reviews.sql`
+  // landed — this check is the reason that migration exists, and the reason
+  // the migration makes a review impossible to delete or edit. A rating a
+  // business could curate would make this number a lie told with real data.
+  //
+  // It still reports `not_assessed` twice over: with no reviews at all, and
+  // with too few to average. Neither is a quality failure and both weigh
+  // nothing, so a business that opened last month is not marked down for
+  // having opened last month.
+  if (property.reviewAverage === null) {
+    checks.push(
+      check('property.guest_rating', 'reputation', 'not_assessed', 0, null),
+    )
+  } else {
+    checks.push(
+      check(
+        'property.guest_rating',
+        'reputation',
+        property.reviewAverage >= GOOD_RATING ? 'pass' : 'warn',
+        2,
+        `${property.reviewAverage} מתוך 5 · ${property.reviewCount} ביקורות`,
+      ),
+    )
+  }
+
+  // Hidden reviews are their own finding rather than a footnote on the rating.
+  // The average above already excludes them, so without this line a business
+  // could hide its way to a good score and the report would agree.
+  if (property.reviewsHidden > 0) {
+    checks.push(
+      check(
+        'property.reviews_hidden',
+        'reputation',
+        'warn',
+        1,
+        `${property.reviewsHidden} מוסתרות`,
+      ),
+    )
+  }
 
   return checks
 }

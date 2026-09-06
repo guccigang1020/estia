@@ -115,6 +115,22 @@ export interface ListingProperty {
   readonly coverImageUrl: string | null
   readonly amenityCount: number
   readonly photoCount: number
+
+  /**
+   * Published reviews, and their mean.
+   *
+   * `reviewAverage` is null when there are none and also when there are too
+   * few to average — `reviews/summary.ts` decides which, and the difference
+   * does not matter here because both mean the same thing to a report: this
+   * cannot be judged yet, and not judging it is not a mark against anybody.
+   *
+   * `reviewsHidden` is separate and is never folded into the average. A
+   * business that hid its bad reviews must not be able to show the same
+   * number as one that did not.
+   */
+  readonly reviewCount: number
+  readonly reviewAverage: number | null
+  readonly reviewsHidden: number
 }
 
 /** The subset of a unit this module reads. */
