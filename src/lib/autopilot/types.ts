@@ -104,10 +104,16 @@ export interface Signal {
   warnAt?: string
   criticalAt?: string
   /**
-   * The signal this one is downstream of, by `dedupeKey`. A laundry delay
-   * causes a shortage causes a preparation risk causes an arrival risk: four
-   * signals, one incident, and the screen shows the root with the rest
-   * beneath it rather than four alarms that look unrelated at 06:00.
+   * The IMMEDIATE cause of this signal, by `dedupeKey` — its parent, never
+   * the ultimate root and never itself.
+   *
+   * A laundry delay causes a shortage causes a preparation risk causes an
+   * arrival risk: four signals, one incident, and the screen shows the chain
+   * rather than four alarms that look unrelated at 06:00. Immediate-parent
+   * edges are what make that chain reconstructable; if every signal pointed
+   * at the root instead, the four-level chain would flatten into a star and
+   * the depth — the part a person reads to understand what to fix first —
+   * would be gone.
    */
   causedBy?: string
 }
@@ -170,8 +176,25 @@ export interface PolicyContext {
   bookingHandling: 'normal' | 'high_attention' | 'manual_only'
   /** From `autopilot_policies`, already narrowed to this property. */
   dispositions: Readonly<Partial<Record<AutopilotActionKind, AutopilotDisposition>>>
-  /** The platform ceiling. A customer can go lower and never higher. */
+  /**
+   * The platform ceiling by safety level — the blanket rules, which are the
+   * ones that matter: money, access and cancellation are never automatic for
+   * anybody.
+   */
   safetyCeiling: Readonly<Partial<Record<ActionSafetyLevel, AutopilotDisposition>>>
+  /**
+   * The platform ceiling for ONE named action, when such a rule exists.
+   *
+   * `autopilot_safety_rules.action_kind` is nullable precisely so ESTIA can
+   * cap a single action without capping its whole safety level — the shape a
+   * rule takes after an incident with one specific thing. Kept separate from
+   * `safetyCeiling` rather than folded into it, because folding a per-action
+   * rule in at its safety level is correct only for a context built for that
+   * one action and quietly wrong for a context built for many.
+   */
+  safetyCeilingByAction?: Readonly<
+    Partial<Record<AutopilotActionKind, AutopilotDisposition>>
+  >
   /** What this customer's package actually includes. */
   entitlements: readonly Entitlement[]
   /** Whether the acting identity holds each action's grant. */

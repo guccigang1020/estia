@@ -212,6 +212,21 @@ class FakeQueryBuilder implements PromiseLike<FakeResponse> {
     return this.filter('in', column, value)
   }
 
+  /**
+   * PostgREST's `or`, which takes one filter STRING rather than a column and
+   * a value — `property_id.is.null,property_id.eq.<uuid>`.
+   *
+   * Recorded under the column name 'or' so an assertion can read it back the
+   * same way it reads every other filter. It exists because some reads are
+   * genuinely one read: a policy matrix assembled from the organization's
+   * rows and the property's rows fetched a second apart is a matrix nobody
+   * configured, and a test that cannot express the real query cannot catch
+   * that.
+   */
+  or(filters: string): this {
+    return this.filter('or', 'or', filters)
+  }
+
   order(column: string, options?: unknown): this {
     return this.filter('order', column, options)
   }
