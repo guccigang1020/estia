@@ -125,6 +125,16 @@ export interface TaskDraft {
   /** ISO instant, or `null`. */
   dueAt: string | null
   actorUserId: string | null
+  /**
+   * What opened this task, for the caller that needs to find its way back.
+   *
+   * `tasks.metadata` has existed since 0011 and this draft had no field for
+   * it, so a task opened by a stock-count request could not be tied to the
+   * item that prompted it — the count came back and nothing knew what it
+   * was counting. Deliberately open: it is the OPENER’s note about its own
+   * reason, not a second place to keep task state.
+   */
+  metadata?: Readonly<Record<string, unknown>>
 }
 
 /**

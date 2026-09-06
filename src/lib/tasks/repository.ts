@@ -239,6 +239,7 @@ export class SupabaseTaskRepository implements TaskRepository {
         description: draft.description,
         assigned_to_user_id: draft.assignedToUserId,
         due_at: draft.dueAt,
+        metadata: draft.metadata ?? {},
         created_by: draft.actorUserId,
         updated_by: draft.actorUserId,
       })

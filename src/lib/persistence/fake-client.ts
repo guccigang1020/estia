@@ -213,6 +213,17 @@ class FakeQueryBuilder implements PromiseLike<FakeResponse> {
   }
 
   /**
+   * Inclusive upper bound. Its absence was not cosmetic: a release sweep
+   * reading "everything due at or before now" had to be rewritten as a
+   * half-open `lt` to stay testable, and an adapter that genuinely needs the
+   * inclusive form could not be unit-tested at all.
+   */
+  lte(column: string, value: unknown): this {
+    return this.filter('lte', column, value)
+  }
+
+
+  /**
    * PostgREST's `or`, which takes one filter STRING rather than a column and
    * a value — `property_id.is.null,property_id.eq.<uuid>`.
    *
