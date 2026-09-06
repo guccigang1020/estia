@@ -175,6 +175,16 @@ export const MENU: readonly MenuSectionDefinition[] = [
         requires: { kind: 'grant', anyOf: ['guest.view'] },
         destination: { status: 'ready', href: '/guests' },
       },
+      // The register, which is a different question from the guest list: an
+      // accountant needs the history without today's cards, and a receptionist
+      // needs today's cards without five years of history. Hence its own
+      // grant and its own entry.
+      {
+        id: 'guest-book',
+        label: 'ספר אורחים',
+        requires: { kind: 'grant', anyOf: ['guest_book.view'] },
+        destination: { status: 'ready', href: '/guest-book' },
+      },
       {
         id: 'leads',
         label: 'לידים',
@@ -255,6 +265,99 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: {
           status: 'ready',
           href: '/channels',
+          offersUpgrade: true,
+        },
+      },
+    ],
+  },
+
+  // ── The store ───────────────────────────────────────────────────────────
+  // Ten screens that were reachable only by typing the URL. The module is
+  // complete — products, services, packages, orders, promotions, the guest
+  // store in the booking portal, price history, the lot — and it had no menu
+  // entry, so a customer who had bought `commerce` could not find the thing
+  // they bought. Found by comparing every page.tsx against every href here.
+  {
+    id: 'store',
+    label: 'חנות ושירותים',
+    icon: 'store',
+    items: [
+      {
+        id: 'store-products',
+        label: 'מוצרים',
+        requires: { kind: 'grant', anyOf: ['product.view'] },
+        destination: { status: 'ready', href: '/store', offersUpgrade: true },
+      },
+      {
+        id: 'store-services',
+        label: 'שירותים',
+        requires: { kind: 'grant', anyOf: ['product.view'] },
+        destination: {
+          status: 'ready',
+          href: '/store/services',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'store-packages',
+        label: 'חבילות',
+        requires: { kind: 'grant', anyOf: ['product.view'] },
+        destination: {
+          status: 'ready',
+          href: '/store/packages',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'store-orders',
+        label: 'הזמנות מהחנות',
+        requires: { kind: 'grant', anyOf: ['order.view'] },
+        destination: {
+          status: 'ready',
+          href: '/store/orders',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'store-promotions',
+        label: 'מבצעים בחנות',
+        requires: { kind: 'grant', anyOf: ['product.manage'] },
+        destination: {
+          status: 'ready',
+          href: '/store/promotions',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'store-availability',
+        label: 'זמינות שירותים',
+        requires: { kind: 'grant', anyOf: ['product.manage'] },
+        destination: {
+          status: 'ready',
+          href: '/store/availability',
+          offersUpgrade: true,
+        },
+      },
+      // What the guest actually sees. Its own entry because "what does my
+      // store look like to a guest" is a question people ask before they
+      // publish, and hunting for it inside settings is how they stop asking.
+      {
+        id: 'store-preview',
+        label: 'תצוגת האורח',
+        requires: { kind: 'grant', anyOf: ['product.view'] },
+        destination: {
+          status: 'ready',
+          href: '/store/preview',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'store-settings',
+        label: 'הגדרות חנות',
+        requires: { kind: 'grant', anyOf: ['product.manage'] },
+        destination: {
+          status: 'ready',
+          href: '/store/settings',
           offersUpgrade: true,
         },
       },
@@ -413,6 +516,16 @@ export const MENU: readonly MenuSectionDefinition[] = [
         label: 'חשבוניות',
         requires: { kind: 'grant', anyOf: ['invoice.view'] },
         destination: { status: 'ready', href: '/finance/invoices' },
+      },
+      // Documents an external accounting vendor issued, and the queue of the
+      // ones that did not go out. Separate from ESTIA's own invoices above,
+      // because payment truth and fiscal truth are separate and the whole
+      // module exists to keep them that way.
+      {
+        id: 'fiscal',
+        label: 'מסמכים חשבונאיים',
+        requires: { kind: 'grant', anyOf: ['invoice.view'] },
+        destination: { status: 'ready', href: '/settings/fiscal' },
       },
       {
         id: 'expenses',
@@ -664,6 +777,15 @@ export const MENU: readonly MenuSectionDefinition[] = [
         label: 'פרטי הארגון',
         requires: { kind: 'grant', anyOf: ['organization.settings.edit'] },
         destination: { status: 'ready', href: '/settings/organization' },
+      },
+      // Bringing another system's history in. Gated on `migration.view`, which
+      // reads the dry run; running the import needs `migration.apply`, and the
+      // screen shows that difference rather than offering a button that fails.
+      {
+        id: 'migration',
+        label: 'ייבוא ממערכת אחרת',
+        requires: { kind: 'grant', anyOf: ['migration.view'] },
+        destination: { status: 'ready', href: '/migration' },
       },
       {
         id: 'payment-collection',

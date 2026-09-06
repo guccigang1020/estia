@@ -117,6 +117,30 @@ supabase/migrations/0031_payment_collection.sql     payment-policy   write
 # in 0029, rows in the demo dataset, ports declared — and nothing implementing
 # them against Postgres, so the screens work in the demo and would find
 # nothing in production.
+# ── Domain commands wave ──────────────────────────────────────────────────
+# Autopilot's decision layer is complete and 18 of its 33 actions resolve to
+# no operation at all — the largest functional gap in the product. These
+# agents build the missing commands in the modules that own the data.
+#
+# Each writes into a module a FINISHED prior-wave agent owns, so the claims
+# below are placed ABOVE those rows and are scoped to new files plus the
+# module's operations file. The register is most-specific-first, so this is
+# a deliberate transfer for this wave and not a collision.
+#
+# access.issueCode and access.revokeCode are NOT here. The only access_code
+# in the schema is a column on the other session's guest-journey table, and
+# building them would mean writing into territory that is off limits. They
+# stay recorded as unavailable.
+
+src/lib/tasks/**                               tasks-domain     write
+src/lib/messaging/**                           messaging-domain write
+src/lib/inventory/commands.ts                  ops-inventory    write
+src/lib/laundry/commands.ts                    ops-inventory    write
+src/lib/store/commands.ts                      ops-store        write
+src/lib/agents/commands.ts                     ops-store        write
+src/lib/booking/holds-commands.ts              ops-store        write
+src/lib/payments/requests.ts                   ops-store        write
+
 src/lib/laundry/index.ts                      laundry-persistence  write
 src/lib/laundry/repository.ts                 laundry-persistence  write
 src/lib/laundry/repository.test.ts            laundry-persistence  write

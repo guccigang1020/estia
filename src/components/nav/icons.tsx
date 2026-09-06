@@ -36,6 +36,13 @@ const PATHS = {
     'M3 7.5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z',
     'M3 10.5h18M6.5 15h4',
   ],
+  // A shopfront awning over a counter. The store section needed an icon and
+  // borrowing `finance` would have given two different sections the same
+  // mark — the one thing a sidebar icon exists to prevent.
+  store: [
+    'M4 9.5h16l-1 9.5a1.5 1.5 0 0 1-1.5 1.3h-11A1.5 1.5 0 0 1 5 19Z',
+    'M3.5 9.5 5 4.2h14l1.5 5.3M9 13.5h6',
+  ],
   spark: [
     'M12 3.2 13.7 8l4.8 1.7-4.8 1.7L12 16.2 10.3 11.4 5.5 9.7l4.8-1.7Z',
     'M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7Z',

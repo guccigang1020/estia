@@ -173,6 +173,7 @@ describe('buildMenu', () => {
       'main',
       'bookings',
       'distribution',
+      'store',
       'operations',
       'finance',
       'ai',
