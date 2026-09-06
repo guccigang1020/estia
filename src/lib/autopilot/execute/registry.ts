@@ -168,7 +168,7 @@ export const COMMAND_BINDINGS: Readonly<Record<string, CommandBinding>> = {
 
   'tasks.createTask': {
     operation: 'task.create',
-    note: "src/lib/tasks. The operation moved out of the tasks route unchanged; the factory takes the permission as a parameter, so incident.create runs the same definition.",
+    note: 'src/lib/tasks. The operation moved out of the tasks route unchanged; the factory takes the permission as a parameter, so incident.create runs the same definition.',
   },
   // Not an action in the catalogue: undo.ts names it as the reversal for
   // tasks.createTask, and without an entry here that undo path resolved as
@@ -179,74 +179,74 @@ export const COMMAND_BINDINGS: Readonly<Record<string, CommandBinding>> = {
   },
   'tasks.assignTask': {
     operation: 'task.assign',
-    note: "src/lib/tasks. Reassignment keeps the old row and stamps it rather than overwriting.",
+    note: 'src/lib/tasks. Reassignment keeps the old row and stamps it rather than overwriting.',
   },
   'tasks.changePriority': {
     operation: 'task.priority.change',
-    note: "src/lib/tasks.",
+    note: 'src/lib/tasks.',
   },
   'preparation.publishWorkPlan': {
     operation: null,
-    note: "Deliberately unbound. preparation.plan.build was investigated and rejected on three grounds: it is already bound to preparation.generateRequirements, so the activity feed would report publishing for work that built requirements; it throws preparation_plan_exists exactly when a plan already exists, which is when publishing is meaningful; and its grant is task.create while this action declares task.update. There is also no publish step in the model — work_plans has no status column and a built plan is already readable.",
+    note: 'Deliberately unbound. preparation.plan.build was investigated and rejected on three grounds: it is already bound to preparation.generateRequirements, so the activity feed would report publishing for work that built requirements; it throws preparation_plan_exists exactly when a plan already exists, which is when publishing is meaningful; and its grant is task.create while this action declares task.update. There is also no publish step in the model — work_plans has no status column and a built plan is already readable.',
   },
   'inventory.requestCount': {
     operation: 'inventory.count.request',
-    note: "src/lib/inventory/commands. There is no stock-count table, so the request opens a task: counting the linen cupboard on Thursday is an errand a person performs. The task deliberately does not state what the ledger believes, because a stocktake shown the expected answer returns it.",
+    note: 'src/lib/inventory/commands. There is no stock-count table, so the request opens a task: counting the linen cupboard on Thursday is an errand a person performs. The task deliberately does not state what the ledger believes, because a stocktake shown the expected answer returns it.',
   },
   'laundry.requestEarlierDelivery': {
     operation: 'laundry.order.request_earlier_delivery',
-    note: "src/lib/laundry/commands. Appends to the order metadata and never touches the deadline, the status or the sent body; the original expected return is kept beside the requested one, because what the provider committed to is evidence.",
+    note: 'src/lib/laundry/commands. Appends to the order metadata and never touches the deadline, the status or the sent body; the original expected return is kept beside the requested one, because what the provider committed to is evidence.',
   },
   'messaging.sendGuestMessage': {
     operation: 'messaging.guest_message.send',
-    note: "src/lib/messaging. With no transport configured it records not_configured and publishes no event — a payment.instructions_sent raised for a message nobody received would tell every subscriber the guest was told.",
+    note: 'src/lib/messaging. With no transport configured it records not_configured and publishes no event — a payment.instructions_sent raised for a message nobody received would tell every subscriber the guest was told.',
   },
   'messaging.notifyAssignee': {
     operation: 'messaging.assignee.notify',
-    note: "src/lib/messaging, over the notifications engine from 0043 — route() and dispatch(), not a second delivery mechanism.",
+    note: 'src/lib/messaging, over the notifications engine from 0043 — route() and dispatch(), not a second delivery mechanism.',
   },
   'notifications.notifyTeam': {
     operation: 'messaging.team.notify',
-    note: "src/lib/messaging, over the notifications engine from 0043.",
+    note: 'src/lib/messaging, over the notifications engine from 0043.',
   },
   'store.chaseProvider': {
     operation: 'store.provider.chase',
-    note: "src/lib/store/commands. Moves the request to unconfirmed, which store.provider_unconfirmed already routes to a person.",
+    note: 'src/lib/store/commands. Moves the request to unconfirmed, which store.provider_unconfirmed already routes to a person.',
   },
   'store.offerUpsell': {
     operation: 'store.upsell.offer',
-    note: "src/lib/store/commands. PREPARES an offer and delivers nothing: it runs the real eligibility check — catalogue, property override, availability, day capacity, party, lead time — and returns sent: false.",
+    note: 'src/lib/store/commands. PREPARES an offer and delivers nothing: it runs the real eligibility check — catalogue, property override, availability, day capacity, party, lead time — and returns sent: false.',
   },
   'agents.sendReminder': {
     operation: 'agent.reminder.prepare',
-    note: "src/lib/agents/commands. PREPARES and delivers nothing. Supports an expiring hold only; there is no quote entity anywhere, so a quote reminder could verify nothing.",
+    note: 'src/lib/agents/commands. PREPARES and delivers nothing. Supports an expiring hold only; there is no quote entity anywhere, so a quote reminder could verify nothing.',
   },
   'agents.publishOpportunity': {
     operation: 'agent.opportunity.prepare',
-    note: "src/lib/agents/commands. PREPARES and publishes nothing. Runs the real availability check and refuses nights that are not empty, without forwarding blockers — a hold blocker would announce to the network that a rival is mid-deal.",
+    note: 'src/lib/agents/commands. PREPARES and publishes nothing. Runs the real availability check and refuses nights that are not empty, without forwarding blockers — a hold blocker would announce to the network that a rival is mid-deal.',
   },
   'inventory.draftProcurement': {
     operation: 'inventory.procurement.draft',
-    note: "src/lib/inventory/commands. Raises an approval, where approvals_no_self_approval means Autopilot cannot decide its own draft — refused by Postgres, not by a policy somebody can relax.",
+    note: 'src/lib/inventory/commands. Raises an approval, where approvals_no_self_approval means Autopilot cannot decide its own draft — refused by Postgres, not by a policy somebody can relax.',
   },
   'payments.requestPayment': {
     operation: 'payment.request',
-    note: "src/lib/payments/requests. Takes NO money and creates no link: it routes through resolveCollectionPolicy and nextGuestAction and records what was asked. It deliberately publishes no event — payment.instructions_sent already has an owner in guest-journey, and a second emitter from a command that sends nothing would be a delivery receipt for a delivery that did not happen.",
+    note: 'src/lib/payments/requests. Takes NO money and creates no link: it routes through resolveCollectionPolicy and nextGuestAction and records what was asked. It deliberately publishes no event — payment.instructions_sent already has an owner in guest-journey, and a second emitter from a command that sends nothing would be a delivery receipt for a delivery that did not happen.',
   },
   'access.issueCode': {
     operation: null,
-    note: "Deliberately unbound. The only access_code in the schema is a column on the guest-journey table, which another session owns and which is off limits; building this would mean writing into that territory. Recorded as unavailable rather than worked around.",
+    note: 'Deliberately unbound. The only access_code in the schema is a column on the guest-journey table, which another session owns and which is off limits; building this would mean writing into that territory. Recorded as unavailable rather than worked around.',
   },
   'access.revokeCode': {
     operation: null,
-    note: "Deliberately unbound, for the same reason as access.issueCode.",
+    note: 'Deliberately unbound, for the same reason as access.issueCode.',
   },
 
   /* ── withheld on purpose ─────────────────────────────────────────────── */
 
   'holds.releaseExpired': {
     operation: 'hold.release_expired',
-    note: "src/lib/booking/holds-commands. The precondition the catalogue claims now EXISTS and is asserted: assertHoldHasExpired refuses not_expired, already_released, already_converted and expiry_unreadable, with the clock injected. This is why hold.release itself was deliberately never bound — it releases any hold, and the safe_internal rating rests entirely on the hold having already expired.",
+    note: 'src/lib/booking/holds-commands. The precondition the catalogue claims now EXISTS and is asserted: assertHoldHasExpired refuses not_expired, already_released, already_converted and expiry_unreadable, with the clock injected. This is why hold.release itself was deliberately never bound — it releases any hold, and the safe_internal rating rests entirely on the hold having already expired.',
   },
 }
 

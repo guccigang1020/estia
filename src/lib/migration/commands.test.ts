@@ -15,10 +15,7 @@ import type {
   UnitAvailabilityRules,
 } from '../booking/availability'
 import type { HoldDraft } from '../booking/holds'
-import type {
-  BookingDraft,
-  BookingRepository,
-} from '../booking/repository'
+import type { BookingDraft, BookingRepository } from '../booking/repository'
 import type { BookingSnapshot } from '../booking/state-machine'
 import type { Hold } from '../booking/types'
 import { ENTITLEMENTS, type Entitlement } from '../plans/entitlements'

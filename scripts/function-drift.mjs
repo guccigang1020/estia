@@ -226,9 +226,7 @@ if (hashesAt) {
   )
 
   for (const row of prose) {
-    console.log(
-      `  ${row.name}  (${row.file})  comments differ, code identical`,
-    )
+    console.log(`  ${row.name}  (${row.file})  comments differ, code identical`)
   }
 
   for (const row of drifted) {

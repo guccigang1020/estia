@@ -388,8 +388,10 @@ export class SupabaseMigrationRepository implements MigrationRepository {
   ): Promise<readonly SavedMapping[]> {
     let query = this.db
       .from(MAPPINGS)
-      .select('id, organization_id, name, entity, source_format, ' +
-        'signature, mappings')
+      .select(
+        'id, organization_id, name, entity, source_format, ' +
+          'signature, mappings',
+      )
       .eq('organization_id', organizationId)
 
     if (entity !== undefined) query = query.eq('entity', entity)
@@ -493,7 +495,9 @@ function asDecision(row: Readonly<Record<string, unknown>>): ConflictDecision {
 /** A stored side of a conflict. Refused rather than half-read. */
 function asSide(value: unknown): Conflict['left'] {
   if (typeof value !== 'object' || value === null) {
-    throw new Error('A conflict side came back from the database as a non-object')
+    throw new Error(
+      'A conflict side came back from the database as a non-object',
+    )
   }
   const row = value as Record<string, unknown>
   return {

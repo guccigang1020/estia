@@ -101,9 +101,9 @@ describe('mapping a session row', () => {
       },
     })
 
-    await expect(
-      repository.loadSession('org-1', 'session-1'),
-    ).rejects.toThrow(/Unknown import session status/)
+    await expect(repository.loadSession('org-1', 'session-1')).rejects.toThrow(
+      /Unknown import session status/,
+    )
   })
 
   it('drops a malformed saved mapping rather than locking the session', async () => {

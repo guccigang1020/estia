@@ -52,7 +52,9 @@ describe('the dry run cannot write', () => {
         return
       }
       if (Array.isArray(value)) {
-        value.forEach((entry, index) => walk(entry, `${path}[${index}]`, depth + 1))
+        value.forEach((entry, index) =>
+          walk(entry, `${path}[${index}]`, depth + 1),
+        )
         return
       }
       if (typeof value === 'object' && value !== null) {

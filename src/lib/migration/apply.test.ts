@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { applyImport, type ApplyProgress } from './apply'
-import type {
-  CommandContext,
-  ImportCommands,
-  ResolvedUnit,
-} from './commands'
+import type { CommandContext, ImportCommands, ResolvedUnit } from './commands'
 import type { ExistingCalendar } from './conflicts'
 import { actorWith, auditActor, bookingRecord, guestRecord } from './fixtures'
 import { ledgerEntryFor, type LedgerEntry } from './idempotency'
@@ -107,9 +103,9 @@ describe('the same file imported twice', () => {
 
     const first = await run({ records, commands })
     expect(commands.guests).toHaveLength(2)
-    expect(
-      first.results.every((result) => result.outcome === 'created'),
-    ).toBe(true)
+    expect(first.results.every((result) => result.outcome === 'created')).toBe(
+      true,
+    )
 
     // The ledger the first run produced, exactly as `repository.ts` would have
     // stored it.
@@ -124,9 +120,7 @@ describe('the same file imported twice', () => {
 
     expect(commands.guests).toHaveLength(2)
     expect(
-      second.results.every(
-        (result) => result.outcome === 'skipped_unchanged',
-      ),
+      second.results.every((result) => result.outcome === 'skipped_unchanged'),
     ).toBe(true)
   })
 
@@ -163,11 +157,7 @@ describe('the same file imported twice', () => {
 describe('a corrected file updates rather than duplicating', () => {
   it('refuses to create a second record and says a person must update it', async () => {
     const original = guestRecord(2, { fullName: 'דנה כהן' }, 'src-1')
-    const corrected = guestRecord(
-      2,
-      { fullName: 'דנה כהן-לוי' },
-      'src-1',
-    )
+    const corrected = guestRecord(2, { fullName: 'דנה כהן-לוי' }, 'src-1')
     const commands = new CountingCommands()
 
     const report = await run({

@@ -90,8 +90,9 @@ describe('the date ambiguity, which is the real hazard', () => {
 
     expect(result.dateOrder).toBe('dmy')
     const second = result.records[1]
-    expect(second?.values.entity === 'bookings' && second.values.booking.checkIn)
-      .toBe('2026-05-03')
+    expect(
+      second?.values.entity === 'bookings' && second.values.booking.checkIn,
+    ).toBe('2026-05-03')
   })
 
   it('refuses a day the calendar does not have', () => {

@@ -123,9 +123,7 @@ export type DryRunInput = {
  * `Assert<T extends true>` is in `types.ts`. `false` does not extend `true`,
  * so a violation is a build error rather than a warning nobody reads.
  * ═══════════════════════════════════════════════════════════════════════════ */
-type PLAIN_DATA_PROOF = Assert<
-  DryRunInput extends PlainData ? true : false
->
+type PLAIN_DATA_PROOF = Assert<DryRunInput extends PlainData ? true : false>
 
 /** Referenced so the assertion is not removed as an unused type. */
 export type DryRunInputIsPlainData = PLAIN_DATA_PROOF
@@ -139,14 +137,8 @@ export type DryRunInputIsPlainData = PLAIN_DATA_PROOF
  * second thing to check.
  */
 export function dryRun(input: DryRunInput): DryRunReport {
-  const {
-    records,
-    world,
-    computedOn,
-    decisions,
-    issues,
-    emailIsVerified,
-  } = input
+  const { records, world, computedOn, decisions, issues, emailIsVerified } =
+    input
 
   // Rows a person has already settled against importing are excluded from
   // conflict detection, so settling one collision does not leave the rows
@@ -234,10 +226,7 @@ export function dryRun(input: DryRunInput): DryRunReport {
  * sort correctly and carry no time zone — the same reasoning
  * `booking/dates.ts` applies to a property-local day.
  */
-export function isHistoric(
-  record: ImportRecord,
-  computedOn: string,
-): boolean {
+export function isHistoric(record: ImportRecord, computedOn: string): boolean {
   if (record.values.entity !== 'bookings') return false
   return record.values.booking.checkOut <= computedOn
 }
@@ -375,9 +364,8 @@ function tally(args: {
       duplicates: args.duplicates.filter(
         (duplicate) => duplicate.entity === entity,
       ).length,
-      conflicts: args.conflicts.filter(
-        (conflict) => conflict.entity === entity,
-      ).length,
+      conflicts: args.conflicts.filter((conflict) => conflict.entity === entity)
+        .length,
       unchanged,
     }
   })

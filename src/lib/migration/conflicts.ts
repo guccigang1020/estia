@@ -350,7 +350,9 @@ function overlapConflict(
  * whole file exists to prevent, or its mirror image: a double booking written
  * because nobody said no.
  */
-export function skippedRows(conflicts: readonly Conflict[]): ReadonlySet<number> {
+export function skippedRows(
+  conflicts: readonly Conflict[],
+): ReadonlySet<number> {
   const rows = new Set<number>()
   for (const conflict of conflicts) {
     if (conflict.decision === 'skip_record') rows.add(conflict.rowNumber)

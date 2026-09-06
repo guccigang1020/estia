@@ -222,7 +222,6 @@ class FakeQueryBuilder implements PromiseLike<FakeResponse> {
     return this.filter('lte', column, value)
   }
 
-
   /**
    * PostgREST's `or`, which takes one filter STRING rather than a column and
    * a value — `property_id.is.null,property_id.eq.<uuid>`.

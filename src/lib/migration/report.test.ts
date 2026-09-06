@@ -108,9 +108,9 @@ describe('the sentences', () => {
   })
 
   it('says plainly when nothing was suppressed', () => {
-    expect(
-      suppressionSentence({ ...REPORT, suppressedEvents: [] }),
-    ).toContain('לא הפעיל')
+    expect(suppressionSentence({ ...REPORT, suppressedEvents: [] })).toContain(
+      'לא הפעיל',
+    )
   })
 })
 

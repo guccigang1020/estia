@@ -45,10 +45,7 @@
 
 import type { Grant } from '../authz/permissions'
 import type { Entitlement } from '../plans/entitlements'
-import type {
-  ActionSafetyLevel,
-  AutopilotDomain,
-} from '../contracts/states'
+import type { ActionSafetyLevel, AutopilotDomain } from '../contracts/states'
 
 /* ------------------------------------------------------------ the list -- */
 

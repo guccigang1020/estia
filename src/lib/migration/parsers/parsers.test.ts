@@ -27,9 +27,7 @@ describe('detecting what a file actually is', () => {
     // A real person renames bookings.xlsx to bookings.csv because a previous
     // product told them to. Reading it as text produces four hundred rows of
     // unactionable rubbish.
-    expect(detectFormat('PKrest', 'bookings.csv')).toBe(
-      'excel_binary',
-    )
+    expect(detectFormat('PKrest', 'bookings.csv')).toBe('excel_binary')
     expect(isBinaryWorkbook('PK')).toBe(true)
   })
 

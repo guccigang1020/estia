@@ -47,7 +47,10 @@ import {
 import { createClient } from '@/lib/supabase/server'
 
 import { requirePlatformGrant } from '../../../_lib/guard'
-import { platformOperationContext, platformServices } from '../../../_lib/wiring'
+import {
+  platformOperationContext,
+  platformServices,
+} from '../../../_lib/wiring'
 
 function organizationPath(organizationId: string): string {
   return `/platform/autopilot/${organizationId}`

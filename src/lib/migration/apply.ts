@@ -34,11 +34,7 @@
  * file would refuse a different row each time.
  */
 
-import {
-  findUnit,
-  type ExistingCalendar,
-  type ExistingUnit,
-} from './conflicts'
+import { findUnit, type ExistingCalendar, type ExistingUnit } from './conflicts'
 import type { CommandContext, ImportCommands, ResolvedUnit } from './commands'
 import { isHistoric } from './dryrun'
 import {

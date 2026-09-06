@@ -49,8 +49,9 @@ describe('classify', () => {
   })
 
   it('calls an unseen record new', () => {
-    expect(classify(guestRecord(3, { fullName: 'רון' }, 'src-2'), ledger).state)
-      .toBe('new')
+    expect(
+      classify(guestRecord(3, { fullName: 'רון' }, 'src-2'), ledger).state,
+    ).toBe('new')
   })
 })
 

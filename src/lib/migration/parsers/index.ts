@@ -58,10 +58,7 @@ const SAMPLE_LINES = 40
  * that begins `BEGIN:VCALENDAR` is a calendar whatever it is called, and one
  * that begins `PK` is a zip whatever it is called.
  */
-export function detectFormat(
-  text: string,
-  fileName?: string,
-): SourceFormat {
+export function detectFormat(text: string, fileName?: string): SourceFormat {
   const head = text.replace(/^﻿/, '').trimStart()
 
   if (isBinaryWorkbook(head)) return 'excel_binary'

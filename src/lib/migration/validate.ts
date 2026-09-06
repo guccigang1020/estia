@@ -641,7 +641,15 @@ function readNationality(values: Values, args: ReadArgs): string | null {
 
 /** Hebrew and English affirmatives, because both appear in real exports. */
 const TRUTHY: ReadonlySet<string> = new Set([
-  'true', '1', 'yes', 'y', 'כן', 'אמת', 'v', 'x', '✓',
+  'true',
+  '1',
+  'yes',
+  'y',
+  'כן',
+  'אמת',
+  'v',
+  'x',
+  '✓',
 ])
 
 export function isTruthy(raw: string): boolean {

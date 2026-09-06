@@ -175,13 +175,17 @@ export interface PolicyContext {
   /** `manual_only` and `high_attention` narrow; they never widen. */
   bookingHandling: 'normal' | 'high_attention' | 'manual_only'
   /** From `autopilot_policies`, already narrowed to this property. */
-  dispositions: Readonly<Partial<Record<AutopilotActionKind, AutopilotDisposition>>>
+  dispositions: Readonly<
+    Partial<Record<AutopilotActionKind, AutopilotDisposition>>
+  >
   /**
    * The platform ceiling by safety level — the blanket rules, which are the
    * ones that matter: money, access and cancellation are never automatic for
    * anybody.
    */
-  safetyCeiling: Readonly<Partial<Record<ActionSafetyLevel, AutopilotDisposition>>>
+  safetyCeiling: Readonly<
+    Partial<Record<ActionSafetyLevel, AutopilotDisposition>>
+  >
   /**
    * The platform ceiling for ONE named action, when such a rule exists.
    *

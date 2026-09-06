@@ -130,7 +130,9 @@ export function identityOf(
   const email = normalizeEmail(values.email)
 
   const usableEmail =
-    email !== null && options.emailIsVerified === true && !isSharedMailbox(email)
+    email !== null &&
+    options.emailIsVerified === true &&
+    !isSharedMailbox(email)
 
   return {
     phoneE164: phone.ok ? phone.e164 : null,

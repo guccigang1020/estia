@@ -16,11 +16,7 @@
  * it is why the dry run runs in the browser before anything is uploaded.
  */
 
-export {
-  applyImport,
-  type ApplyArgs,
-  type ApplyProgress,
-} from './apply'
+export { applyImport, type ApplyArgs, type ApplyProgress } from './apply'
 
 export {
   UnsupportedImportEntityError,
