@@ -88,18 +88,24 @@ import {
 export const INBOX_PAGE_SIZE = 50
 
 /**
- * The tables a messaging module would need before this screen is a real inbox.
+ * What is STILL absent, after 0063.
  *
- * Named here rather than in the page so the list has one home, and so the
- * report the screen prints cannot drift from what an engineer would actually
- * create. Not a promise about names — a promise about what is absent.
+ * This list used to name four tables and it was accurate when written. Then
+ * `conversations`, `conversation_messages` and `conversation_reads` were
+ * built — the thread, both directions of message, and per-person read state
+ * — under those names rather than the ones guessed here.
+ *
+ * The list is shortened rather than deleted, because the point of it stands:
+ * a screen that prints what it lacks is worth more than one that implies it
+ * lacks nothing. What it must never do is keep naming something that now
+ * exists, which would tell a business its database is missing tables it has.
+ *
+ * Templates are genuinely still absent. `template.manage` is in the
+ * catalogue and has nothing to point at, which is exactly the state
+ * `message.assign` was in until 0063 gave it
+ * `conversations.assigned_to_user_id`.
  */
-export const MISSING_MESSAGING_TABLES: readonly string[] = [
-  'message_threads',
-  'messages',
-  'message_participants',
-  'message_templates',
-]
+export const MISSING_MESSAGING_TABLES: readonly string[] = ['message_templates']
 
 export type InboxArgs = {
   db: Db

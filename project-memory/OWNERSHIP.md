@@ -132,6 +132,19 @@ src/lib/autopilot/runtime/**                   autopilot-runtime write
 src/lib/messaging/release.ts                   deferred-release write
 src/lib/notifications/release.ts               deferred-release write
 
+# ── P2 · The unified inbox (second of the four) ────────────────────────────
+# A conversation spine. It sits ABOVE src/lib/messaging and does not replace
+# it: guest_messages already owns what the business SENT, so an outbound
+# message in a thread REFERENCES that row rather than copying it. The same
+# rule Autopilot was held to — above the engine, never beside it.
+#
+# src/lib/messaging/** is NOT claimed here and must not be edited by this
+# work. If the thread needs something from it, the thread adapts.
+
+src/lib/inbox/**                               unified-inbox write
+src/app/(app)/inbox/**                         unified-inbox write
+src/components/inbox/**                        unified-inbox write
+
 # ── P2 · Webhooks (the first of the four modules with no code) ─────────────
 # Outbound only, in this wave. A partner registers an endpoint and ESTIA
 # POSTs domain events to it, signed. The inbound public API needs an API
@@ -499,7 +512,14 @@ src/lib/demo/dataset-agents.ts                distribution         write
 
 src/app/(app)/action-center/**                shell                write
 src/app/(app)/activity/**                     shell                write
-src/app/(app)/inbox/**                        shell                write
+# /inbox moved to unified-inbox for this wave. What shell built there is a
+# deliberately honest placeholder — three lists, each labelled as what it
+# actually is, and a refusal to render the "no open conversations" empty
+# state because there was no conversations table to be empty. That reasoning
+# is the specification for what replaces it, and the file says so itself.
+# Same precedent as /channels above. The claim is at the top of the register
+# and this row is removed rather than shadowed: two identical globs are
+# ambiguous intent, not a specificity question, and the checker refuses them.
 src/app/(app)/leads/**                        shell                write
 src/app/(app)/settings/**                     shell                write
 src/components/shell-screens/**               shell                write

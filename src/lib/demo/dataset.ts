@@ -657,6 +657,15 @@ const TABLES: DemoTables = {
   webhook_endpoint_secrets: [],
   webhook_deliveries: [],
 
+  // 0063 · the conversation spine. Empty, and every one of them for the same
+  // reason the audit trail is: a thread is a record of what people actually
+  // said to each other. Seeding one would put words in a guest's mouth, and
+  // an invented conversation is the one kind of fiction a product that
+  // arbitrates deposits must never ship.
+  conversations: [],
+  conversation_messages: [],
+  conversation_reads: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

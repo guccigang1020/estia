@@ -19,7 +19,6 @@ import type { Db } from '@/lib/persistence'
 import { SupabaseActorSource } from '@/lib/persistence/actor'
 
 import {
-  MISSING_MESSAGING_TABLES,
   listGuestNotes,
   listInternalNotes,
   listRequestTasks,
@@ -62,28 +61,44 @@ async function argsFor(personaId: string): Promise<InboxArgs> {
   }
 }
 
-/* ============================================================== the gap == */
+/* ====================================================== the gap, closed == */
 
-describe('the messaging domain', () => {
-  it('does not exist, and the dataset agrees', () => {
-    // `MissingDemoTable` is thrown for a table the dataset has no key for, and
-    // `dataset.test.ts` checks every key against the migrations — so a table
-    // absent from `DEMO_DATASET.tables` is a table absent from the schema.
-    for (const table of MISSING_MESSAGING_TABLES) {
-      expect(DEMO_DATASET.tables[table]).toBeUndefined()
-    }
-    // The names the product would most plausibly have used, for good measure.
-    for (const table of ['messages', 'threads', 'conversations']) {
-      expect(DEMO_DATASET.tables[table]).toBeUndefined()
+describe('the conversation spine', () => {
+  it('exists now, and the dataset agrees', () => {
+    // This test used to assert the opposite, and it was right to: there was
+    // no messages table, no threads table and no conversations table, so the
+    // screen showed three honestly-labelled lists and refused to render the
+    // "no open conversations" empty state, which would have asserted two
+    // things that were both false.
+    //
+    // 0063 built it. The assertion is inverted rather than deleted, because
+    // what it pins is still the same fact — whether the product can hold a
+    // conversation — and a test that simply vanished would leave nobody able
+    // to see that the answer changed.
+    //
+    // `dataset.test.ts` checks every key against the migrations in BOTH
+    // directions now, so a key present here is a table present in the schema.
+    for (const table of ['conversations', 'conversation_messages']) {
+      expect(DEMO_DATASET.tables[table]).toBeDefined()
     }
   })
 
-  it('still has its permissions, which is what makes the gap a gap', async () => {
+  it('is empty, and that is the honest contents', () => {
+    // Declared and empty, for the reason the audit trail is empty: a thread
+    // is a record of what people actually said to each other, and seeding
+    // one would put words in a guest's mouth.
+    expect(DEMO_DATASET.tables['conversations']).toEqual([])
+    expect(DEMO_DATASET.tables['conversation_messages']).toEqual([])
+  })
+
+  it('gives message.assign something to point at at last', async () => {
     const reception = await actorFor('reception')
     expect(holdsGrant(reception, 'message.view')).toBe(true)
     expect(holdsGrant(reception, 'message.send')).toBe(true)
 
-    // And nothing to assign, which is why the screen offers no such control.
+    // This grant was in the catalogue with nothing to write to, which the
+    // old screen said out loud. `conversations.assigned_to_user_id` is what
+    // it now names.
     const owner = await actorFor('owner')
     expect(holdsGrant(owner, 'message.assign')).toBe(true)
   })
