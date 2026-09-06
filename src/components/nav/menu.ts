@@ -730,6 +730,18 @@ export const MENU: readonly MenuSectionDefinition[] = [
           offersUpgrade: true,
         },
       },
+      {
+        id: 'revenue',
+        label: 'הכנסות',
+        // `report.financial.view` alone, and deliberately not the wider
+        // `anyOf` that /insights carries. This screen is money — occupancy,
+        // average nightly rate, revenue by channel — and `automation.view`
+        // has no business opening it. The screen writes nothing, so it needs
+        // no export or manage grant either; `report.financial.export` is a
+        // different question about taking the numbers off the premises.
+        requires: { kind: 'grant', anyOf: ['report.financial.view'] },
+        destination: { status: 'ready', href: '/revenue' },
+      },
     ],
   },
 

@@ -543,3 +543,28 @@ function json(body: unknown, status: number): Response {
     },
   })
 }
+
+/**
+ * The same handler, reachable by GET, because a scheduler is not a browser.
+ *
+ * ══ WHY A GET THAT HAS EFFECTS IS THE RIGHT CALL HERE ═══════════════════════
+ *
+ * It is normally the wrong one. A GET is supposed to be safe, and a link
+ * preview, a crawler or a prefetch can follow one without a human deciding to.
+ *
+ * Two facts make this the exception. Vercel Cron issues GET and only GET —
+ * there is no configuration that makes it POST — so a scheduler-shaped
+ * deployment has no other door. And `refuseSweep` runs first on both verbs:
+ * without `Authorization: Bearer <SWEEP_RELEASE_SECRET>` nothing executes, so
+ * the crawler that follows this URL gets a 401 and the sweep does not run.
+ * The safety a GET is supposed to have is provided by the guard rather than
+ * by the verb.
+ *
+ * ══ THE SECRET AND `CRON_SECRET` MUST BE THE SAME VALUE ═════════════════════
+ *
+ * Vercel sends `Authorization: Bearer ${CRON_SECRET}` and nothing else, and
+ * this route reads `SWEEP_RELEASE_SECRET`. Set both environment variables to
+ * one value. `docs/DEPLOYMENT.md` says so where an operator will look for it;
+ * this comment says so where somebody debugging a 401 will.
+ */
+export const GET = POST

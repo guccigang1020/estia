@@ -42,10 +42,35 @@
  * difference is one line that is not there — the role switch — and it is the
  * whole reason the file needs the warning above it.
  *
+ * ── AND THEN 0064 MADE THE PRIVILEGE OPTIONAL ─────────────────────────────
+ *
+ * Everything above remains true about the two paths this file implements, and
+ * neither is the one the product now takes first.
+ *
+ * `0064_first_workspace.sql` moves the write into the database as
+ * `create_first_workspace(...)`: one SECURITY DEFINER function that creates an
+ * organization for `auth.uid()` and **takes no user id at all**, so it cannot
+ * name anybody but its caller. It runs in a single statement, which makes it
+ * atomic in the same sense the `BEGIN … COMMIT` path is, and it needs no
+ * secret — the ordinary signed-in client calls it.
+ *
+ * That is why the file's own warning banner is now historical rather than
+ * operative. The privileged paths still work and are still tested; they are
+ * simply the fallback for a database where 0064 has not been applied, which
+ * `notProvisioned()` detects rather than assumes. The reason to prefer the
+ * RPC is not that it is newer: a service-role credential in the web process
+ * can read and write every tenant's data forever, and it was there for the
+ * sake of one insert that happens once per customer.
+ *
  * ── Atomic, and when it honestly is not ───────────────────────────────────
  *
- * `strategy()` reports which of two paths is available, and the caller is told
- * which one ran:
+ * `strategy()` reports which of three paths is available, and the caller is
+ * told which one ran:
+ *
+ *   'rpc'         — 0064 is applied. One database function call, one
+ *                   transaction, no privileged credential anywhere in the
+ *                   request path. This is the default and needs no
+ *                   configuration.
  *
  *   'atomic'      — `DATABASE_URL` is set. One `BEGIN … COMMIT`. A failure at
  *                   any point rolls the whole thing back and no row survives.
@@ -60,8 +85,10 @@
  *                   rather than `not_saved`. It is not atomic and this file
  *                   does not pretend it is.
  *
- *   'unavailable' — neither is configured. Refused loudly, before anything is
- *                   written, naming the variable that is missing.
+ *   'unavailable' — 0064 is not applied AND neither variable is configured.
+ *                   Refused loudly, before anything is written, naming what is
+ *                   missing. Reachable only on a database behind this
+ *                   repository's migrations.
  *
  * An organization with no owner is the failure this care exists to prevent: no
  * policy admits anybody to it, so nobody can read it, edit it, or delete it.
@@ -72,6 +99,7 @@ import { hasServiceRoleKey } from '@/lib/env'
 import { AppError, BusinessRuleError, InternalError } from '@/lib/errors'
 import { postgresPool } from '@/lib/persistence'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 
 import {
   FIXED_COUNTRY,
@@ -89,7 +117,7 @@ export type WorkspaceSeed = {
   timezone: string
 }
 
-export type SignupStrategy = 'atomic' | 'compensated' | 'unavailable'
+export type SignupStrategy = 'rpc' | 'atomic' | 'compensated' | 'unavailable'
 
 export type SignupSuccess = {
   organizationId: string
@@ -111,19 +139,27 @@ export class SlugTakenError extends BusinessRuleError {
   }
 }
 
-/** Neither `DATABASE_URL` nor the service role key is configured. */
+/**
+ * `create_first_workspace` is not on this database AND no privileged path is
+ * configured either.
+ *
+ * The wording matters: before 0064 this meant "an operator forgot a secret",
+ * and now it means "this database is behind the repository's migrations",
+ * which is a different thing to go and fix.
+ */
 export class SignupUnavailableError extends AppError {
   constructor() {
     super({
       code: 'workspace_creation_unavailable',
       status: 503,
       message:
-        'Cannot create an organization: neither DATABASE_URL nor the ' +
-        'service role key is set. Creating the first organization, ' +
-        'its owner membership and its subscription is the one write no row ' +
-        'level security policy can authorize — see 0004_rls.sql — so it needs ' +
-        'one of the two privileged paths. Set DATABASE_URL to the Supabase ' +
-        'transaction pooler (port 6543) for the atomic path.',
+        'Cannot create an organization. `create_first_workspace` is not ' +
+        'provisioned on this database — apply 0064_first_workspace.sql — and ' +
+        'neither DATABASE_URL nor the service role key is set as a fallback. ' +
+        'Creating the first organization, its owner membership and its ' +
+        'subscription is the one write no row level security policy can ' +
+        'authorize; see 0004_rls.sql. The RPC is the path that needs no ' +
+        'secret and it is the one to restore.',
       userMessage:
         'לא ניתן ליצור מרחב עבודה כרגע: חסרה הגדרת שרת. פנה למנהל המערכת — אף נתון לא נשמר.',
       retryable: false,
@@ -166,11 +202,44 @@ function databaseUrl(): string | undefined {
   return url && url.trim() !== '' ? url : undefined
 }
 
-/** Which path `createWorkspace` will take, without taking it. */
+/**
+ * Which path `createWorkspace` will take, without taking it.
+ *
+ * Always the RPC. It ships in this repository's own migrations, so on any
+ * database these migrations built it is there — which is precisely why the
+ * screen can stop asking whether signup is possible at all before drawing a
+ * form. Whether it is REALLY there is a question only the call can answer, and
+ * `createWorkspace` asks it by calling and reading the refusal.
+ */
 export function strategy(): SignupStrategy {
+  return 'rpc'
+}
+
+/**
+ * Where `createWorkspace` goes when the RPC turns out not to be provisioned.
+ *
+ * Kept as a separate question from `strategy()` on purpose: a deployment with
+ * no `DATABASE_URL` and no service role key is now the ordinary healthy case,
+ * and reporting that as 'unavailable' would be reporting health as failure.
+ */
+export function fallbackStrategy(): SignupStrategy {
   if (databaseUrl()) return 'atomic'
   if (hasServiceRoleKey()) return 'compensated'
   return 'unavailable'
+}
+
+/**
+ * The function is missing from this database, as opposed to having refused.
+ *
+ * `PGRST202` is PostgREST failing to find the function in its schema cache and
+ * `42883` is Postgres saying the same thing. Anything else — a guard that
+ * fired, a constraint, a unique violation — is an ANSWER, and treating it as
+ * "not provisioned" would silently fall back to a privileged path and repeat a
+ * write the database already refused for a reason.
+ */
+function notProvisioned(cause: unknown): boolean {
+  const code = (cause as { code?: unknown } | null)?.code
+  return code === 'PGRST202' || code === '42883'
 }
 
 /* --------------------------------------------------------------- shared -- */
@@ -552,6 +621,70 @@ async function createCompensated(
   }
 }
 
+/* ------------------------------------------------------------- rpc path -- */
+
+/**
+ * The default path: one call, as the signed-in person, with no secret.
+ *
+ * ── Why `userId` is checked rather than passed ────────────────────────────
+ *
+ * It cannot be passed. `create_first_workspace` has no parameter for a user
+ * id — the membership it writes is for `auth.uid()` and nothing in its body
+ * can name anybody else. That is the safety property the whole design rests
+ * on, and it means the `userId` this function receives is not an input to the
+ * write at all.
+ *
+ * So it is used for the only thing it is still good for: confirming that the
+ * caller and the database agree about who is signing up. They always do today
+ * — `actions.ts` reads it from `getUser()` on the same request — and that is
+ * exactly the kind of "always" that stops being true when somebody adds a
+ * second caller. A mismatch here means a business would be created for a
+ * different person than the screen just told, so it refuses rather than
+ * proceeds.
+ */
+async function createViaRpc(
+  userId: string,
+  seed: WorkspaceSeed,
+): Promise<string> {
+  const db = await createClient()
+
+  const {
+    data: { user },
+    error: sessionError,
+  } = await db.auth.getUser()
+
+  if (sessionError) throw sessionError
+
+  if (!user || user.id !== userId) {
+    throw new InternalError({
+      message:
+        `createWorkspace was given user ${userId} but the request's own ` +
+        `session belongs to ${user?.id ?? 'nobody'}. The database writes the ` +
+        `membership for its caller, so continuing would create a business ` +
+        `for a different person than the caller believes.`,
+    })
+  }
+
+  const { data, error } = await db.rpc('create_first_workspace', {
+    p_slug: seed.slug,
+    p_name: seed.name,
+    p_business_type: seed.businessType,
+    p_timezone: seed.timezone,
+  })
+
+  if (error) throw error
+
+  if (typeof data !== 'string' || data === '') {
+    throw new InternalError({
+      message:
+        'create_first_workspace returned no organization id. The rows may ' +
+        'exist; nothing here can say which.',
+    })
+  }
+
+  return data
+}
+
 /* ---------------------------------------------------------------- entry -- */
 
 /**
@@ -565,18 +698,46 @@ export async function createWorkspace(
   userId: string,
   seed: WorkspaceSeed,
 ): Promise<SignupSuccess> {
-  const mode = strategy()
-  if (mode === 'unavailable') throw new SignupUnavailableError()
+  let mode: SignupStrategy = 'rpc'
 
   try {
-    const organizationId =
-      mode === 'atomic'
-        ? await createAtomically(userId, seed)
-        : await createCompensated(userId, seed)
+    let organizationId: string
 
-    return { organizationId, atomic: mode === 'atomic', replayed: false }
+    try {
+      organizationId = await createViaRpc(userId, seed)
+    } catch (cause) {
+      // Only "the function is not here" falls through. A guard that fired is
+      // an answer, and repeating the write down a privileged path would be
+      // overriding a refusal the database gave for a reason.
+      if (!notProvisioned(cause)) throw cause
+
+      mode = fallbackStrategy()
+      if (mode === 'unavailable') throw new SignupUnavailableError()
+
+      organizationId =
+        mode === 'atomic'
+          ? await createAtomically(userId, seed)
+          : await createCompensated(userId, seed)
+    }
+
+    // The RPC is one statement, so it is atomic in the same sense the
+    // `BEGIN … COMMIT` path is. Only the compensated path is not.
+    return {
+      organizationId,
+      atomic: mode === 'rpc' || mode === 'atomic',
+      replayed: false,
+    }
   } catch (cause) {
+    if (cause instanceof SignupUnavailableError) throw cause
     if (!isUniqueViolation(cause)) throw cause
+
+    // On the RPC path the double-submit answer already happened inside the
+    // function: it returns the caller's own organization for a slug they
+    // already own, so a unique violation that got out here can only be
+    // somebody else's slug. Asking again would need the privileged lookup this
+    // path exists to avoid, and on a deployment with no secret it would turn a
+    // field error into a 503.
+    if (mode === 'rpc') throw new SlugTakenError(seed.slug)
 
     // Either this caller's own second click, or somebody else's slug.
     const existing = await ownedOrganizationIdForSlug(userId, seed.slug)
@@ -602,6 +763,20 @@ export async function createWorkspace(
  * on the column), so this discloses nothing a link would not.
  */
 export async function isSlugAvailable(slug: string): Promise<boolean> {
+  // 0064 answers this without a secret, and it answers it identically: one
+  // boolean, never a name. Same fall-through rule as the write — only "the
+  // function is not here" reaches the privileged paths below.
+  try {
+    const db = await createClient()
+    const { data, error } = await db.rpc('workspace_slug_available', {
+      p_slug: slug,
+    })
+    if (error) throw error
+    return data === true
+  } catch (cause) {
+    if (!notProvisioned(cause)) throw cause
+  }
+
   const url = databaseUrl()
 
   if (url) {

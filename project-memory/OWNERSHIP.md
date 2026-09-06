@@ -68,6 +68,7 @@ tsconfig.json                                 coordinator          write
 eslint.config.mjs                             coordinator          write
 .gitignore                                    coordinator          write
 .env.example                                  coordinator          write
+vercel.json                                   coordinator          write
 scripts/**                                    coordinator          write
 project-memory/**                             coordinator          write
 docs/**                                       coordinator          write

@@ -41,11 +41,14 @@ export const metadata: Metadata = { title: 'הצטרפות' }
  * abandoned signup resumes where it stopped instead of creating a second
  * organization.
  *
- * WHY IT CAN REFUSE BEFORE SHOWING A FORM. Creating an organization needs a
- * privileged path — `signup.ts` says why at length — and a deployment that has
- * neither `DATABASE_URL` nor a service role key cannot do it at all. Rendering
- * the form anyway would put somebody through four fields to reach a failure
- * that was knowable before they typed the first one.
+ * WHY IT CAN REFUSE BEFORE SHOWING A FORM. Rendering a form that leads to a
+ * knowable failure puts somebody through four fields to reach it. The guard
+ * stays for that reason — but since `0064_first_workspace.sql` it should never
+ * fire: `strategy()` returns `'rpc'`, the database function needs no secret,
+ * and it ships in this repository's own migrations. A deployment with no
+ * `DATABASE_URL` and no service role key is now the ordinary healthy case
+ * rather than a broken one, which is exactly why the check asks `strategy()`
+ * and not whether those variables are set.
  */
 export default async function OnboardingPage({
   searchParams,

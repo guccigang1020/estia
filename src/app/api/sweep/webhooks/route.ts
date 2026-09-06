@@ -132,3 +132,12 @@ export async function POST(request: Request): Promise<Response> {
     return json({ ok: false, error: 'sweep_failed' }, 500)
   }
 }
+
+/**
+ * Reachable by GET for the scheduler, on exactly the argument made at the foot
+ * of `/api/sweep/release/route.ts`: Vercel Cron issues GET and only GET, and
+ * `refuseSweep` runs before anything else on both verbs, so an unauthenticated
+ * GET executes nothing. `CRON_SECRET` and `SWEEP_RELEASE_SECRET` must hold the
+ * same value.
+ */
+export const GET = POST
