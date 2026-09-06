@@ -203,6 +203,23 @@ describe('the dataset matches the migrations', () => {
     expect(unknown).toEqual([])
   })
 
+  it('names EVERY table the migrations create', () => {
+    // The direction above cannot catch the failure that has actually
+    // happened here twice. `DemoDatabase.rows` throws `MissingDemoTable` for
+    // a key it has never heard of, so a table left out entirely makes a
+    // demo-mode read fail where it should have answered "nothing yet" — and
+    // a screen cannot tell that from a broken deployment.
+    //
+    // It went undetected for 43 tables, then for 17 more, because the only
+    // assertion ran the other way: it proved no key was invented and said
+    // nothing about keys that were missing. Both directions, from here on.
+    //
+    // Declared and empty is the correct answer for most of these. The point
+    // is that the answer is written down.
+    const missing = [...SCHEMA.keys()].filter((name) => !(name in tables))
+    expect(missing).toEqual([])
+  })
+
   it('puts only real columns on its rows', () => {
     const strays: string[] = []
 

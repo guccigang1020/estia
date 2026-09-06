@@ -647,6 +647,16 @@ const TABLES: DemoTables = {
   incident_inspections: [],
   incident_inspection_items: [],
 
+  // 0060 · outbound webhooks. `webhook_endpoint_secrets` is empty and must
+  // stay empty for the reason `guide_entry_secrets` is: it holds signing
+  // secrets, and a demo signing secret is still a signing secret in a
+  // shipped bundle. Deliveries are written by the sweep, never seeded — a
+  // delivery log nobody performed is the audit trail's failure mode wearing
+  // an integration's clothes.
+  webhook_endpoints: [],
+  webhook_endpoint_secrets: [],
+  webhook_deliveries: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

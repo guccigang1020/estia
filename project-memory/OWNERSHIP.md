@@ -132,6 +132,22 @@ src/lib/autopilot/runtime/**                   autopilot-runtime write
 src/lib/messaging/release.ts                   deferred-release write
 src/lib/notifications/release.ts               deferred-release write
 
+# ── P2 · Webhooks (the first of the four modules with no code) ─────────────
+# Outbound only, in this wave. A partner registers an endpoint and ESTIA
+# POSTs domain events to it, signed. The inbound public API needs an API
+# credential and is deliberately NOT started here — §164 says one at a time,
+# and a read API without webhooks is a slower version of the screens.
+#
+# This block sits ABOVE the sweep-runtime rows on purpose. The register is
+# FIRST MATCH WINS, not most-specific-wins — src/app/api/** would otherwise
+# swallow src/app/api/webhooks/**, and the checker says so in those words.
+# Placed here, sweep-runtime keeps every path under src/app/api but this one.
+
+src/lib/webhooks/**                            webhooks write
+src/app/api/webhooks/**                        webhooks write
+src/app/(app)/settings/webhooks/**             webhooks write
+src/components/webhooks/**                     webhooks write
+
 # Making the sweep callable: the two repository reads it needs, and the one
 # guarded entry point that runs it. There is no src/app/api in this repo at
 # all, so the route handler is new ground and is claimed explicitly.
