@@ -505,6 +505,90 @@ const TABLES: DemoTables = {
       'להשאיר את המפתח בתיבה, לכבות מזגנים ולסגור את השער.',
     version: 1,
   })),
+
+  /* ── Declared and empty ────────────────────────────────────────────────
+   *
+   * Forty-three tables the product can read and this dataset does not fill.
+   * They are here because `DemoDatabase.rows` throws `MissingDemoTable` for a
+   * key it has never heard of — so a table left out entirely makes a read
+   * FAIL where it should have answered "nothing yet", and a screen cannot
+   * tell that from a broken deployment. That distinction has already cost two
+   * screens once; this is the same lesson applied to the six waves that
+   * landed after it.
+   *
+   * Empty rather than seeded, and that is the honest choice rather than an
+   * unfinished one. Every one of these is written by the product as it runs:
+   * an Autopilot action nobody's engine decided, a notification nobody's
+   * event raised, a published website version nobody published, a signed
+   * contract nobody signed. Seeding them would be seeding the output of the
+   * very code paths the demo exists to exercise — and a demo that ships an
+   * audit trail nobody performed, or an automatic action nobody's policy
+   * allowed, teaches the wrong thing about a product whose whole argument is
+   * that it does not fabricate.
+   *
+   * A wave that wants its screen populated in the demo should add rows in its
+   * own `dataset-*.ts` and reference them here, which is how laundry, store
+   * and agents already do it.
+   */
+
+  // 0041 · platform console
+  platform_staff: [],
+  platform_support_sessions: [],
+
+  // 0042 · website studio
+  sites: [],
+  site_pages: [],
+  site_sections: [],
+  site_seo: [],
+  site_media: [],
+  site_versions: [],
+  site_domains: [],
+  site_generation_requests: [],
+  site_quality_runs: [],
+  site_quality_findings: [],
+  site_booking_requests: [],
+
+  // 0043 · notifications
+  notification_settings: [],
+  notification_preferences: [],
+  notifications: [],
+  notification_deliveries: [],
+  notification_escalation_rules: [],
+
+  // 0046 · autopilot
+  autopilot_capability: [],
+  autopilot_settings: [],
+  autopilot_property_settings: [],
+  autopilot_booking_overrides: [],
+  autopilot_policies: [],
+  autopilot_safety_rules: [],
+  autopilot_exceptions: [],
+  autopilot_actions: [],
+  autopilot_rule_candidates: [],
+
+  // Guest journey — the other session's wave.
+  booking_guest_journey: [],
+  booking_guest_confirmations: [],
+  booking_guest_details: [],
+  booking_contract_signatures: [],
+  guest_contract_templates: [],
+  guest_link_sends: [],
+  guest_requests: [],
+
+  // Agents, finance and preparation — written as the product runs.
+  agent_commission_rule_versions: [],
+  agent_payout_batches: [],
+  agent_payout_batch_lines: [],
+  commission_statements: [],
+  finance_snapshots: [],
+  payment_schedules: [],
+  payment_schedule_instalments: [],
+  work_plan_versions: [],
+
+  // The permission catalogue. Empty for the same reason `role_permissions` is:
+  // every role in this demo is `is_system`, and a system role's grants come
+  // from the catalogue in code rather than from a table.
+  permissions: [],
 }
 
 export const DEMO_DATASET: DemoDataset = {
