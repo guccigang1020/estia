@@ -491,6 +491,72 @@ export const MENU: readonly MenuSectionDefinition[] = [
           offersUpgrade: true,
         },
       },
+      // ── Autopilot ────────────────────────────────────────────────────────
+      // Five entries rather than one, because they are five different amounts
+      // of authority and the menu is where that first becomes visible: the log
+      // is gated on `activity_view` and not on `view`, since somebody who may
+      // see today's exceptions is not thereby entitled to the whole history of
+      // every message ESTIA has sent on the business's behalf.
+      //
+      // `offersUpgrade: true` on all five is earned rather than asserted:
+      // every one of these routes renders the plan-lock on the
+      // `plan_does_not_include` branch instead of redirecting, so a customer
+      // without the entitlement meets an offer rather than a closed door.
+      //
+      // `/autopilot/settings/activate` is deliberately absent. It is gated on
+      // `autopilot.configure` and reached from the settings screen, because a
+      // wizard that switches a business to automatic is not something to put
+      // one stray click away in a sidebar.
+      {
+        id: 'autopilot',
+        label: 'טייס אוטומטי',
+        requires: { kind: 'grant', anyOf: ['autopilot.view'] },
+        destination: {
+          status: 'ready',
+          href: '/autopilot',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'autopilot-exceptions',
+        label: 'מרכז החריגות',
+        requires: { kind: 'grant', anyOf: ['autopilot.view'] },
+        destination: {
+          status: 'ready',
+          href: '/autopilot/exceptions',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'autopilot-activity',
+        label: 'יומן הטייס האוטומטי',
+        requires: { kind: 'grant', anyOf: ['autopilot.activity_view'] },
+        destination: {
+          status: 'ready',
+          href: '/autopilot/activity',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'autopilot-value',
+        label: 'מה ESTIA עשתה',
+        requires: { kind: 'grant', anyOf: ['autopilot.view'] },
+        destination: {
+          status: 'ready',
+          href: '/autopilot/value',
+          offersUpgrade: true,
+        },
+      },
+      {
+        id: 'autopilot-settings',
+        label: 'הגדרות טייס אוטומטי',
+        requires: { kind: 'grant', anyOf: ['autopilot.view'] },
+        destination: {
+          status: 'ready',
+          href: '/autopilot/settings',
+          offersUpgrade: true,
+        },
+      },
       {
         id: 'templates',
         label: 'תבניות',

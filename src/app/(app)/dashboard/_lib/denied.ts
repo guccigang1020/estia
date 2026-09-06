@@ -53,6 +53,13 @@ export const GRANT_CAPABILITY: Partial<Record<Grant, string>> = {
   'audit.view': 'צפייה ביומן הביקורת',
   'automation.view': 'צפייה באוטומציות',
   'automation.manage': 'ניהול אוטומציות',
+  // Autopilot. Named here in Hebrew only — the product's own name is latin
+  // and a sibling test refuses a latin letter anywhere a refusal reaches a
+  // reader, which is right: somebody who has just been told no should not
+  // also have to parse a brand.
+  'autopilot.view': 'צפייה במרכז האוטומציה החכמה',
+  'autopilot.activity_view': 'צפייה ביומן פעולות האוטומציה החכמה',
+  'autopilot.configure': 'הגדרת האוטומציה החכמה',
   'availability.view': 'צפייה בזמינות היחידות',
   'booking.create': 'פתיחת הזמנה חדשה',
   'booking.view': 'צפייה בהזמנות',
