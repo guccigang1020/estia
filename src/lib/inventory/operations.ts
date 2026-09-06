@@ -451,6 +451,26 @@ export function defineInventoryOperations(
         return issues
       }),
       async execute({ input, context }) {
+        // The write lands in `inventory_movements`, whose insert policy in
+        // 0011 asks for `inventory.edit` — NOT the `inventory.adjust` this
+        // operation declares. An actor holding one and not the other passed
+        // every application check and was refused by row level security as a
+        // bare SQLSTATE at the end of the write.
+        //
+        // No SYSTEM role reaches that today: every bundle grants the two
+        // together. But `custom_roles` is a sellable entitlement, so a
+        // business can build a role that does, and the failure it would meet
+        // is the least legible one available. Asked here so the refusal is a
+        // sentence in the domain instead.
+        //
+        // Found by the agent building the stock-count module, which hit the
+        // same shape in its own code and checked the neighbours.
+        assertCan(context.actor, 'inventory.edit', {
+          organizationId: context.actor.organizationId,
+          propertyId: input.propertyId,
+          family: 'operations',
+        })
+
         return ports.recordMovement({
           organizationId: context.actor.organizationId,
           movement: input,

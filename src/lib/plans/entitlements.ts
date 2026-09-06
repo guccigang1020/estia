@@ -142,6 +142,8 @@ export const ENTITLEMENT_FOR_GRANT: Partial<Record<Grant, Entitlement>> = {
   'owner.manage': 'owner_portal',
   'owner_statement.view': 'owner_portal',
   'owner_statement.issue': 'owner_portal',
+  'owner.payout': 'owner_portal',
+  'owner_approval.decide': 'owner_portal',
   'owner.view_commission': 'owner_portal',
 
   // Agent network

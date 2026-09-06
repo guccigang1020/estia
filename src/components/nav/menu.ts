@@ -419,6 +419,16 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/laundry/forecast' },
       },
       {
+        // `inventory.view` and not `inventory.adjust`, matching the route:
+        // reading a past stocktake is a reporting act, and the screen hides
+        // every button a reader cannot press rather than showing a door that
+        // then refuses.
+        id: 'inventory-counts',
+        label: 'ספירות מלאי',
+        requires: { kind: 'grant', anyOf: ['inventory.view'] },
+        destination: { status: 'ready', href: '/inventory/counts' },
+      },
+      {
         id: 'inventory-forecast',
         label: 'תחזית מלאי',
         requires: { kind: 'grant', anyOf: ['inventory.view'] },
@@ -546,9 +556,15 @@ export const MENU: readonly MenuSectionDefinition[] = [
           kind: 'grant',
           anyOf: ['owner.view', 'owner_statement.view'],
         },
+        // Repointed from /finance/owners, which reads an owner as a
+        // MEMBERSHIP holding the property_owner role. The new register reads
+        // an owner as an outside party with a dated share of a property, who
+        // may never sign in at all — and only that one can carry a statement.
+        // Two owner screens backed by two different ideas of what an owner is
+        // would disagree in the first week.
         destination: {
           status: 'ready',
-          href: '/finance/owners',
+          href: '/owners',
           offersUpgrade: true,
         },
       },

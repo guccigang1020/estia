@@ -50,6 +50,24 @@ export const env = {
  * It has no `NEXT_PUBLIC_` prefix, which means Next.js will not inline it —
  * and it must never be given one.
  */
+/**
+ * The shared secret the release sweep is called with.
+ *
+ * Lazy and server-only for the same reason as the service role key. Its
+ * ABSENCE is meaningful and is not an error here: the sweep route refuses
+ * every request when it is unset, which is the safe direction — an
+ * unauthenticated endpoint that sends messages on a customer's behalf is the
+ * worst thing this codebase could leave open. So this returns null rather
+ * than throwing, and the caller decides.
+ */
+export function sweepReleaseSecret(): string | null {
+  if (typeof window !== 'undefined') {
+    throw new Error('The sweep secret must never be read in the browser.')
+  }
+  const value = process.env.SWEEP_RELEASE_SECRET
+  return value !== undefined && value.trim().length > 0 ? value : null
+}
+
 export function serviceRoleKey(): string {
   if (typeof window !== 'undefined') {
     throw new Error('The service role key must never be read in the browser.')

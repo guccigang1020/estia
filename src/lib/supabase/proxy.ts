@@ -31,6 +31,16 @@ import { env } from '@/lib/env'
 /** Paths a signed-out visitor may reach. Everything else needs a session. */
 const PUBLIC_PREFIXES = [
   '/', // the marketing home page
+  // The release sweep, which exists to send a message that quiet hours held
+  // back. It runs on a schedule with no user, so a redirect to /sign-in would
+  // mean the endpoint never executes — the defect it was written to close.
+  //
+  // `/api/sweep` and NOT `/api`, so a future route that does need a session
+  // still gets the optimistic redirect. Public here means only "the proxy does
+  // not demand a session": the handler itself refuses every request without
+  // SWEEP_RELEASE_SECRET, and refuses ALL requests when that is unset rather
+  // than falling back to open.
+  '/api/sweep',
   '/sign-in',
   '/sign-up',
   '/magic-link',

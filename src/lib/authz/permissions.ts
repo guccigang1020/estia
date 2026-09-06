@@ -261,6 +261,16 @@ export const PERMISSIONS = [
   'owner.manage',
   'owner_statement.view',
   'owner_statement.issue',
+  // Releasing money to a third party. NOT 'owner_statement.issue': issuing a
+  // document and paying somebody are different acts, and the second is the one
+  // that cannot be taken back. Deliberately not 'owner.manage' either — that
+  // is owner/administrator-only and would put every payout beyond the finance
+  // manager whose job it is.
+  'owner.payout',
+  // An owner deciding a request addressed to them. Separate from
+  // 'approval.decide', which must never be given to a property owner: it would
+  // let them decide an agent's discount approval inside their own scope.
+  'owner_approval.decide',
 
   // ── Agent network ───────────────────────────────────────────────────────
   // External sellers are members of the organization with a narrow role and a

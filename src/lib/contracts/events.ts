@@ -127,6 +127,15 @@ export const DOMAIN_EVENTS = [
   'owner_statement.issued',
   'owner_payout.approved',
   'owner_payout.paid',
+  // Money coming back FROM an owner. Published under owner_payout.paid until
+  // now, which says the opposite — the direction was in the payload, but a
+  // subscriber filtering on the name got it backwards.
+  'owner_payout.received',
+  // The register's own lifecycle. owner.linked_to_property is the one that
+  // matters commercially: nothing could react to a property gaining an
+  // external owner.
+  'owner.created',
+  'owner.linked_to_property',
 
   // Operations
   'preparation.calculated',
