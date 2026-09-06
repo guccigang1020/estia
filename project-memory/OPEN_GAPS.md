@@ -939,3 +939,45 @@ GUARDS typo_timezone_refused=t anon_refused=t orgs_now=0
 בלי ביקורות ובפחות משלוש, ומשקל 2 מעליהן. נוספה `property.reviews_hidden` —
 הממוצע כבר מחריג מוסתרות, ובלי השורה הזאת עסק היה יכול להסתיר את דרכו לציון
 טוב והדוח היה מסכים איתו.
+
+---
+
+### G-022 · נסגר ✅ — קונסולת הפלטפורמה נגישה
+
+השורה הראשונה ב-`platform_staff` נוצרה 7.9.2026, בנוהל שכתוב ב-
+[`docs/BOOTSTRAP.md`](../docs/BOOTSTRAP.md) ובאישור מפורש של בעל המוצר.
+
+**נבדק, לא הונח:**
+
+```
+BOOTSTRAP email=buildmatriix@gmail.com role=platform_super_admin
+          status=active rows=1 is_platform_staff=t second_run_inserted=0
+```
+
+`is_platform_staff=t` נמדד **כקורא `authenticated` אמיתי** — זה השער שכל
+פונקציית פלטפורמה משתמשת בו בפועל, ולא בדיקה שהשורה קיימת.
+`second_run_inserted=0` הוא ה-`not exists` שהופך את הפקודה לפעם-אחת: הרצה
+שנייה מחזירה אפס שורות במקום לצרף עוד מנהל-על בטעות.
+
+נפתח בכך: `platform_set_autopilot_capability` — כלומר **אפשר להעניק Autopilot
+לארגון**, וזו נקודת המכירה של המודול — לצד
+`platform_set_organization_capabilities` ו-`platform_set_organization_status`.
+
+**מה שעדיין לא נצפה:** אף אחד לא ראה את מסכי הקונסולה נטענים. השער הוכח,
+המסך לא.
+
+---
+
+### G-023 · נשאר הצעד האחרון, והוא בכוונה שלך
+
+**כל מה שחסם הוסר.** `create_first_workspace` קיים, מוכח, ונגיש מ-PostgREST
+בלי שום סוד. `platform_staff` מאוכלס. 66 מיגרציות, 176 טבלאות, 176/176 נכפות.
+
+מה שנשאר: **כניסה והשלמת טופס ההצטרפות במסכים.**
+
+לא יצרתי את הארגון ב-SQL, וזו החלטה ולא מגבלה. `docs/BOOTSTRAP.md` אומר
+למה בפירוש: ארגון שנוצר מחוץ למסכים לא מוכיח שמסלול ההצטרפות עובד — וזו
+הייתה **כל השאלה של G-023**. לזרוע אותו היה סוגר את הרשומה בלי לענות עליה.
+
+ובנוסף, `organizations.slug` בלתי ניתן לשינוי במוצר (`0001`: "changing it
+breaks links"), ולכן הכתובת הפומבית של העסק היא החלטה של בעליו.
