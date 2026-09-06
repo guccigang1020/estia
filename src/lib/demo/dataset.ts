@@ -674,6 +674,12 @@ const TABLES: DemoTables = {
   // three flattering reviews here would be the first person to break it.
   guest_reviews: [],
 
+  // 0071 · message templates. Empty because empty IS the product default: no
+  // template means compose.ts writes the built-in Hebrew, which is what every
+  // business gets today. Seeding one would make the demo show wording no
+  // deployment actually starts with.
+  message_templates: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

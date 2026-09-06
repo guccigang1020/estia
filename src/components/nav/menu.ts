@@ -878,6 +878,17 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/settings/notifications' },
       },
       {
+        id: 'message-templates',
+        label: 'נוסחי הודעות',
+        // `template.manage`, which is also what gates `/templates` — the
+        // AUTOMATION template library. One grant covering two unrelated kinds
+        // of template is muddy and it is named here rather than quietly
+        // reused: worth separating the day either one grows a reason to be
+        // held without the other.
+        requires: { kind: 'grant', anyOf: ['template.manage'] },
+        destination: { status: 'ready', href: '/settings/messages' },
+      },
+      {
         id: 'guest-journey',
         label: 'מסע האורח',
         // `organization.settings.edit` and no plan entitlement, deliberately.

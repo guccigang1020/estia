@@ -21,3 +21,6 @@ package-lock.json
 # Binary / generated assets
 public/
 *.ico
+
+# Agent worktrees: a second copy of the whole tree.
+.claude/worktrees/

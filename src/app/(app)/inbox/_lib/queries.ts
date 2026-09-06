@@ -100,12 +100,17 @@ export const INBOX_PAGE_SIZE = 50
  * lacks nothing. What it must never do is keep naming something that now
  * exists, which would tell a business its database is missing tables it has.
  *
- * Templates are genuinely still absent. `template.manage` is in the
- * catalogue and has nothing to point at, which is exactly the state
- * `message.assign` was in until 0063 gave it
+ * **The list is now empty, and that is the whole story of it.** Templates were
+ * the last entry: `0071_message_templates.sql` gave `template.manage` the table
+ * it had been pointing at, the same way 0063 gave `message.assign`
  * `conversations.assigned_to_user_id`.
+ *
+ * The constant stays rather than being deleted, because the banner it feeds is
+ * the mechanism, not the message. The next module to ship a grant before its
+ * table adds an entry here and the screen says so again — and an empty array
+ * renders no banner at all, so nothing tells a business it lacks anything.
  */
-export const MISSING_MESSAGING_TABLES: readonly string[] = ['message_templates']
+export const MISSING_MESSAGING_TABLES: readonly string[] = []
 
 export type InboxArgs = {
   db: Db

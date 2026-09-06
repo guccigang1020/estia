@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     // .gitignore, so it was linting the coverage reporter's own bundled
     // scripts and warning about code nobody here wrote.
     'coverage/**',
+    // Agent worktrees are full copies of src/ living inside the repository.
+    // Linting them reports every finding twice and blames the wrong file.
+    '.claude/worktrees/**',
     // The demo server's build output. `scripts/demo.mjs` points Next at
     // `.next-demo` so a demo run cannot collide with `npm run dev`, and the
     // directory is git-ignored for exactly the reason `.next` is — but ESLint

@@ -52,3 +52,9 @@ next-env.d.ts
 
 # The Supabase CLI's own version cache. Not ours, changes on every invocation.
 supabase/.temp/
+
+# Agent worktrees. Git worktrees live INSIDE the repository here, so every
+# tool that walks the tree — eslint, prettier, vitest, the ownership checker —
+# sees a second full copy of src/ and reports its findings twice. Ignored in
+# each of them for the same reason, and here so one is never committed.
+.claude/worktrees/

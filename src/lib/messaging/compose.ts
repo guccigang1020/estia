@@ -24,6 +24,8 @@
 
 import type { Agorot } from '../booking/types'
 
+import { renderTemplate, type PlaceholderValues } from './templates'
+
 import type {
   GuestChannel,
   GuestMessageKind,
@@ -75,10 +77,45 @@ export function compose(args: {
   channel: GuestChannel
   recipient: GuestRecipient
   subject: GuestMessageSubject
+  /**
+   * The business's own wording, when it has written one.
+   *
+   * Absent means the built-in text below, unchanged. That fallback is the
+   * reason a business can delete a template safely: it goes back to working
+   * Hebrew rather than to silence. See `templates.ts`.
+   */
+  template?: { subject: string | null; body: string } | null
 }): ComposedMessage {
   const { kind, subject, recipient } = args
   const place = where(subject)
   const dates = `${subject.checkIn} – ${subject.checkOut}`
+
+  if (args.template) {
+    // The values are resolved HERE rather than in `templates.ts`, so that the
+    // fallbacks a guest actually reads — `where()` for a missing property,
+    // the shekel formatting — stay in the one file that owns the wording.
+    const values: PlaceholderValues = {
+      guest_first_name: recipient.firstName,
+      organization_name: subject.organizationName,
+      property_name: place,
+      reference: subject.reference,
+      check_in: subject.checkIn,
+      check_out: subject.checkOut,
+      amount:
+        subject.outstandingAgorot === null
+          ? null
+          : shekels(subject.outstandingAgorot),
+      portal_url: subject.portalUrl,
+    }
+
+    return {
+      subject:
+        args.channel === 'email' && args.template.subject !== null
+          ? renderTemplate(args.template.subject, values)
+          : null,
+      body: renderTemplate(args.template.body, values),
+    }
+  }
 
   const lines: string[] = [greeting(recipient.firstName)]
 
