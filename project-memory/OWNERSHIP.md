@@ -117,6 +117,42 @@ supabase/migrations/0031_payment_collection.sql     payment-policy   write
 # in 0029, rows in the demo dataset, ports declared — and nothing implementing
 # them against Postgres, so the screens work in the demo and would find
 # nothing in production.
+# ── Runtime wave ──────────────────────────────────────────────────────────
+# Autopilot's five stages are built and tested and NOTHING RUNS THEM.
+# createCommandRegistry is exported and never called; no composition root
+# builds the handler map with a request-scoped Db; the detectors have no
+# fact source. Until this lands, everything in src/lib/autopilot is an
+# engine nobody starts. This is the highest-value work outstanding.
+#
+# The deferred-release sweep is the other blocking gap: a message held by
+# quiet hours is never released, in BOTH notification_deliveries and
+# guest_messages — worse than the gate it passed through.
+
+src/lib/autopilot/runtime/**                   autopilot-runtime write
+src/lib/messaging/release.ts                   deferred-release write
+src/lib/notifications/release.ts               deferred-release write
+
+# ── P2 modules ────────────────────────────────────────────────────────────
+# Named in the Market Leadership Program and absent from the product: no
+# domain, no tables. Each agent builds domain-first and proposes its schema;
+# the coordinator writes the migration.
+
+src/lib/incidents/**                           incident-cases write
+src/app/(app)/incidents/**                     incident-cases write
+src/components/incidents/**                    incident-cases write
+
+src/lib/owners/**                              owner-portal write
+src/app/(app)/owners/**                        owner-portal write
+src/components/owners/**                       owner-portal write
+
+src/lib/guest-guide/**                         guest-guide write
+src/app/(app)/settings/guest-guide/**          guest-guide write
+src/components/guest-guide/**                  guest-guide write
+
+src/lib/inventory/counts.ts                    stock-intelligence write
+src/lib/inventory/loss.ts                      stock-intelligence write
+src/app/(app)/inventory/counts/**              stock-intelligence write
+
 # ── Domain commands wave ──────────────────────────────────────────────────
 # Autopilot's decision layer is complete and 18 of its 33 actions resolve to
 # no operation at all — the largest functional gap in the product. These
@@ -400,7 +436,9 @@ src/lib/demo/dataset-bookings.ts              coordinator          write
 
 src/app/(app)/tasks/**                        operations           write
 src/app/(app)/maintenance/**                  operations           write
-src/app/(app)/incidents/**                    operations           write
+# /incidents moved to incident-cases for this wave. What operations built
+# there is a screen with no tables behind it — it queries nothing — and the
+# damage-and-deposit case model is a new capability on the same route.
 # inventory moved to inventory         for this wave — see the block above.
 src/components/operations/**                  operations           write
 src/lib/demo/dataset-operations.ts            operations           write
