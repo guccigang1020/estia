@@ -104,11 +104,22 @@ const md5 = (text) => createHash('md5').update(text, 'utf8').digest('hex')
  * It transforms both sides identically, so the worst it can do is miss a
  * difference that lives *only* in spacing around punctuation inside a string
  * literal. That is a trade worth making.
+ *
+ * `[` and `]` are in the class for the same reason and were added after the
+ * first run that had live bodies to compare against. It reported five
+ * functions as drifted; three of them — `occupying_booking_statuses`,
+ * `settled_payment_statuses` and `tg_guard_scope_references` — held
+ * byte-identical code whose only difference was an array literal wrapped onto
+ * more lines in the file than in the database: `array[ 'option',` against
+ * `array['option',`. Exactly the lesson the paragraph above records for `(`,
+ * and it had to be learned twice because the character class was written as a
+ * list rather than as the rule it stands for — punctuation a formatter moves
+ * whitespace around and a parser does not care about.
  */
 const squeeze = (text) =>
   text
     .replace(/[ \t\r\n]+/g, ' ')
-    .replace(/ *([(),]) */g, '$1')
+    .replace(/ *([(),[\]]) */g, '$1')
     .trim()
 
 /** The body with `--` comments removed, so prose changes stop being drift. */
@@ -166,10 +177,22 @@ const fileBodies = bodiesFromMigrations()
 /* ------------------------------------------------------- the hashes mode -- */
 
 if (hashesAt) {
+  // Two hashes per function where the caller supplies both. `code` is the
+  // body as deployed; `codeOnly` is the same body with `--` comments
+  // stripped before hashing. Without the second one this mode can only ask
+  // "does the file match the deployed body", and a prose edit to a comment
+  // reads exactly like an edit to the code — which is how the first real run
+  // of this checker reported `accept_invitation` and `invitation_preview` as
+  // drifted when their executable text was byte-identical. Two of the most
+  // security-sensitive functions in the schema, and the tool could not say
+  // so without a human fetching both bodies by hand.
   const liveHashes = new Map(
     JSON.parse(readFileSync(hashesAt, 'utf8')).map((row) => [
       String(row.proname).toLowerCase(),
-      String(row.code ?? row.raw),
+      {
+        code: String(row.code ?? row.raw),
+        codeOnly: row.codeOnly === undefined ? null : String(row.codeOnly),
+      },
     ]),
   )
 
@@ -177,21 +200,36 @@ if (hashesAt) {
   for (const [name, { body, file }] of fileBodies) {
     const deployed = liveHashes.get(name)
     if (deployed === undefined) continue // Not in this sample; say nothing.
+    const fileCode = md5(squeeze(stripComments(body)))
+    const same =
+      md5(squeeze(body)) === deployed.code || fileCode === deployed.code
     checked.push({
       name,
       file,
-      same:
-        md5(squeeze(body)) === deployed ||
-        md5(squeeze(stripComments(body))) === deployed,
+      same,
+      // Only claimable when the caller supplied `codeOnly`. Absent it, this
+      // stays false and the function is reported as differing — the tool
+      // must never upgrade "I cannot tell" into "the code is fine".
+      commentsOnly:
+        !same && deployed.codeOnly !== null && fileCode === deployed.codeOnly,
     })
   }
 
-  const drifted = checked.filter((row) => !row.same)
+  const drifted = checked.filter((row) => !row.same && !row.commentsOnly)
+  const prose = checked.filter((row) => row.commentsOnly)
+  const identical = checked.length - drifted.length - prose.length
   console.log(
     `function-drift — ${checked.length} of ${fileBodies.size} functions ` +
-      `compared by hash · ${checked.length - drifted.length} byte-identical · ` +
-      `${drifted.length} differ`,
+      `compared by hash · ${identical} byte-identical · ` +
+      `${prose.length} differ in comments only · ` +
+      `${drifted.length} differ in code`,
   )
+
+  for (const row of prose) {
+    console.log(
+      `  ${row.name}  (${row.file})  comments differ, code identical`,
+    )
+  }
 
   for (const row of drifted) {
     console.log(

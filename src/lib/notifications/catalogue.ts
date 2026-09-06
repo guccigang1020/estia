@@ -653,6 +653,40 @@ export const NOTIFICATION_CATALOGUE: Partial<
     body: 'הגרסה החדשה של האתר עלתה לאוויר.',
     href: () => '/website',
   },
+  // Evidence is `info`, not `attention`, and deliberately does not escalate.
+  // A damage case collects photos over days; a manager who is paged for each
+  // one stops reading the ones that matter.
+  'incident.evidence_added': {
+    category: 'operations',
+    severity: 'info',
+    requiredGrant: 'incident.view',
+    family: 'operations',
+    audience: 'grant_holders',
+    notifyActor: false,
+    title: 'נוספה ראיה לאירוע',
+    body: 'צורף תיעוד לתיק האירוע. הראיה נשמרת כפי שהתקבלה ואינה ניתנת לעריכה.',
+    href: incidentHref,
+  },
+  'incident.closed': {
+    category: 'operations',
+    severity: 'info',
+    requiredGrant: 'incident.view',
+    family: 'operations',
+    audience: 'grant_holders',
+    title: 'התיק נסגר',
+    body: 'תיק האירוע נסגר. הטיפול הסתיים והתיק לא ייפתח מחדש.',
+    href: incidentHref,
+  },
+  'guide.published': {
+    category: 'system',
+    severity: 'info',
+    requiredGrant: 'property.view',
+    family: 'settings',
+    audience: 'grant_holders',
+    title: 'מדריך האירוח פורסם',
+    body: 'הגרסה החדשה של המדריך זמינה לאורחים בנכס.',
+    href: () => '/settings/guest-guide',
+  },
 }
 
 /* ------------------------------------------------------------------ reads -- */

@@ -740,6 +740,19 @@ create trigger invitations_validate_scope_refs
   for each row execute function public.tg_validate_scope_refs('scope_property_ids', 'scope_unit_ids', 'scope_team_ids');
 
 
+-- RESTORED to the text that actually ran. `scripts/function-drift.mjs`, on
+-- the first run it ever had live bodies to compare against, found this body
+-- differing from the deployed one in two places: the error messages read
+-- `% % :` here and `% %:` in the database, and the invitations query was
+-- split across two adjacent string literals here and written as one there.
+-- Semantically identical, and edited into this file at some point AFTER it
+-- was applied.
+--
+-- A migration file is the record of what ran, not a place to keep improving.
+-- The tidier text is not restored here and not lost either: it can be a new
+-- migration any day. What must never happen is this file describing a body
+-- the database has never held, because the next person to read it to answer
+-- "what does this trigger actually do" gets a confident wrong answer.
 create or replace function public.tg_guard_scope_references()
 returns trigger
 language plpgsql
@@ -750,24 +763,20 @@ declare
   n bigint;
 begin
   execute format(
-    'select count(*) from public.membership_scopes where %I @> array[$1]::uuid[]',
-    tg_argv[0]
+    'select count(*) from public.membership_scopes where %I @> array[$1]::uuid[]', tg_argv[0]
   ) into n using old.id;
   if n > 0 then
-    raise exception
-      'cannot delete % % : % membership scope(s) still name it', tg_table_name, old.id, n
+    raise exception 'cannot delete % %: % membership scope(s) still name it', tg_table_name, old.id, n
       using errcode = '23503',
             hint = 'Soft-delete it instead, or narrow the scopes that reference it.';
   end if;
 
   execute format(
-    'select count(*) from public.invitations where %I @> array[$1]::uuid[] '
-    '  and accepted_at is null and revoked_at is null',
+    'select count(*) from public.invitations where %I @> array[$1]::uuid[] and accepted_at is null and revoked_at is null',
     tg_argv[1]
   ) into n using old.id;
   if n > 0 then
-    raise exception
-      'cannot delete % % : % live invitation(s) name it', tg_table_name, old.id, n
+    raise exception 'cannot delete % %: % live invitation(s) name it', tg_table_name, old.id, n
       using errcode = '23503',
             hint = 'Soft-delete it instead, or revoke the invitations that reference it.';
   end if;

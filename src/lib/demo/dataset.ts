@@ -616,6 +616,37 @@ const TABLES: DemoTables = {
   import_conflicts: [],
   import_field_mappings: [],
 
+  // 0057 · the stock count. Written by counting, not before it: a count
+  // session with lines already in it is a count somebody did not perform,
+  // and the variance report exists precisely to be earned.
+  inventory_count_sessions: [],
+  inventory_count_lines: [],
+  inventory_count_expectations: [],
+  inventory_count_variances: [],
+
+  // 0058 · the property guide. `guide_entry_secrets` is empty and must stay
+  // empty — it holds door codes, and the whole point of splitting it out of
+  // `guide_entries` is that a code is never in a row an ordinary read
+  // returns. A demo door code is still a door code in a shipped bundle.
+  property_guides: [],
+  guide_entries: [],
+  guide_entry_secrets: [],
+  guide_media: [],
+  guide_recommendations: [],
+  guide_versions: [],
+
+  // 0059 · damage, deposits and who decides. Empty for the reason the audit
+  // trail is: a liability decision names the person who made it, and there
+  // is no such person here. Seeding one would be fabricating the single
+  // record this module exists to make unfabricatable.
+  incident_cases: [],
+  incident_case_questions: [],
+  incident_evidence: [],
+  incident_cost_lines: [],
+  incident_liability_decisions: [],
+  incident_inspections: [],
+  incident_inspection_items: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

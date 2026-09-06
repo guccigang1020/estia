@@ -29,12 +29,15 @@
  *
  * ── The events ───────────────────────────────────────────────────────────
  *
- * None. `src/lib/contracts/events.ts` is frozen and carries no name for a
- * guide being published; `site.published` is the website's and would be a lie
- * in a subscriber's filter. Following the website module's own reasoning, an
- * edit to a draft is not something anything should react to and needs no
- * event — but a publish is, and that name does not exist. The gap is in the
- * report with the three names this module needs; nothing here invents one.
+ * One: publishing emits `guide.published`. Following the website module's
+ * own reasoning, an edit to a draft is not something anything should react
+ * to and needs no event — but a publish is.
+ *
+ * That name did not exist when this module was written. `site.published` is
+ * the website's and would have been a lie in a subscriber's filter, so this
+ * module emitted nothing and asked for the name rather than borrowing one.
+ * It was added to the frozen catalogue and the publish operation now emits
+ * it, with counts in the payload and never content.
  */
 
 import { assertCan } from '../authz/can'
@@ -717,6 +720,37 @@ export function defineGuestGuideOperations(options: {
           entryCount: result.entryCount,
         },
       }
+    },
+
+    /**
+     * `guide.published`, and deliberately not `site.published`.
+     *
+     * The website is what strangers read before they book; the guide is what
+     * a guest standing in the unit reads at midnight looking for the boiler
+     * switch. Different people publish them at different times, and a
+     * subscriber filtering on one must never be woken by the other. The name
+     * did not exist when this module was written and it refused to borrow
+     * one; it was requested and added to the frozen catalogue instead.
+     *
+     * The payload carries counts, never content — a guide entry can hold a
+     * door code's neighbouring text, and an event payload is the wrong place
+     * for any of it. Secrets are not in the snapshot either; see
+     * `buildGuideSnapshot`.
+     */
+    events({ input, result }) {
+      return [
+        {
+          name: 'guide.published' as const,
+          propertyId: input.propertyId,
+          payload: {
+            guideId: result.guideId,
+            versionId: result.versionId,
+            versionNumber: result.versionNumber,
+            entryCount: result.entryCount,
+            recommendationCount: result.recommendationCount,
+          },
+        },
+      ]
     },
   })
 

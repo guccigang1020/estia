@@ -502,6 +502,15 @@ export const MENU: readonly MenuSectionDefinition[] = [
         destination: { status: 'ready', href: '/incidents' },
       },
       {
+        id: 'incident-cases',
+        label: 'תיקי נזק',
+        // `incident.view` alone, deliberately narrower than the entry above.
+        // A cleaner who may report a fault (`incident.create`) has no
+        // business reading what the business decided a guest owes.
+        requires: { kind: 'grant', anyOf: ['incident.view'] },
+        destination: { status: 'ready', href: '/incidents/cases' },
+      },
+      {
         id: 'inventory',
         label: 'מלאי',
         requires: { kind: 'grant', anyOf: ['inventory.view'] },
@@ -849,6 +858,16 @@ export const MENU: readonly MenuSectionDefinition[] = [
           anyOf: ['organization.settings.edit'],
         },
         destination: { status: 'ready', href: '/settings/guest-journey' },
+      },
+      {
+        id: 'guest-guide',
+        label: 'מדריך האירוח',
+        // `property.view`, matching the route's own `requireGrant` exactly.
+        // A menu entry that admits somebody the page then refuses is a dead
+        // click, and a narrower entry than the page hides a screen its
+        // holder may use.
+        requires: { kind: 'grant', anyOf: ['property.view'] },
+        destination: { status: 'ready', href: '/settings/guest-guide' },
       },
       {
         id: 'billing',

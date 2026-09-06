@@ -9,28 +9,29 @@
  * gets to write the sequence. A `db.from('incident_cases').insert(...)` in a
  * server action would look identical on screen and would skip all six.
  *
- * ── The event catalogue is frozen, and two of these have nothing to emit ───
- *
- * `src/lib/contracts/events.ts` carries `incident.opened` and
- * `incident.resolved` and no third incident event. It is frozen and this
- * module does not edit it. So:
+ * ── What each operation emits ─────────────────────────────────────────────
  *
  *   · opening a case emits `incident.opened`, which is also in `ALERT_EVENTS`;
+ *   · attaching evidence emits `incident.evidence_added`;
  *   · reaching `awaiting_approval` emits `approval.requested`;
  *   · reaching `resolved` emits `incident.resolved`;
  *   · recording a liability decision emits `approval.decided`, which is what
  *     it is: a named person deciding a thing that was awaiting decision;
- *   · **attaching evidence and closing a case emit nothing.**
+ *   · closing a case emits `incident.closed`.
  *
- * That last line is a deliberate refusal rather than an omission. There is no
- * name in the catalogue for "evidence was added" or "the case was closed", and
- * borrowing `incident.opened` or re-emitting `incident.resolved` would put a
- * false sentence in the event log and wake up every subscriber that keys off
- * it. Neither action is invisible: the pipeline's audit event is mandatory and
- * both write one, with a named actor and a Hebrew summary. The two names this
- * module wants — `incident.evidence_added` and `incident.closed` — are in its
- * report as requests, and the day they exist these two `events()` callbacks
- * are one line each.
+ * The last two names did not exist when this module was written, and it
+ * refused to borrow `incident.opened` or re-emit `incident.resolved` in their
+ * place — either would have put a false sentence in the event log and woken
+ * every subscriber that keys off it. They were requested and added to the
+ * frozen catalogue instead, so the refusal cost two release cycles of silence
+ * rather than a permanent wrong answer.
+ *
+ * `incident.evidence_added` is routed as `info` and does not escalate: a
+ * damage case collects photos over days, and a manager paged for each one
+ * stops reading the ones that matter. `incident.closed` is deliberately
+ * distinct from `incident.resolved` — resolved means the damage is dealt
+ * with, closed means the file is shut, and a deposit dispute months later
+ * turns on which of the two happened when.
  *
  * ── Why the liability operation is the strict one ─────────────────────────
  *
@@ -410,9 +411,22 @@ export function defineAddEvidence(
       }
     },
 
-    /** No event. See this file's header — the catalogue has no name for it. */
-    events(): readonly CaseEventDraft[] {
-      return []
+    events({ entity, result }): readonly CaseEventDraft[] {
+      return [
+        {
+          name: 'incident.evidence_added',
+          propertyId: entity.incident.propertyId,
+          payload: {
+            caseId: entity.incident.id,
+            evidenceId: result.id,
+            kind: result.kind,
+            source: result.source,
+            // The reference, never the content — as in the audit record
+            // above and for the same reason.
+            mediaRef: result.mediaRef,
+          },
+        },
+      ]
     },
   })
 }
@@ -838,9 +852,18 @@ export function defineCloseCase(
       }
     },
 
-    /** No event. See this file's header — `incident.closed` does not exist. */
-    events(): readonly CaseEventDraft[] {
-      return []
+    events({ entity, result }): readonly CaseEventDraft[] {
+      return [
+        {
+          name: 'incident.closed',
+          propertyId: result.propertyId,
+          payload: {
+            caseId: result.id,
+            decisions: entity.decisions.length,
+            assessedTotalAgorot: assessedTotal(entity.costLines),
+          },
+        },
+      ]
     },
   })
 }

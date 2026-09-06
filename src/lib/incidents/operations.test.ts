@@ -169,10 +169,19 @@ describe('attaching evidence', () => {
 
     expect(outcome.data.mediaRef).toBe('incidents/case-1/after-01.jpg')
     expect(Object.keys(outcome.data)).not.toContain('data')
-    // No event: the frozen catalogue has no name for "evidence was added", and
-    // borrowing one would put a false sentence in the log. The audit row is
-    // still written.
-    expect(outcome.events).toEqual([])
+    // `incident.evidence_added`, which this module asked for rather than
+    // borrowing `incident.opened` and putting a false sentence in the log.
+    // The payload carries the REFERENCE and no content, for the same reason
+    // the row does.
+    expect(outcome.events.map((event) => event.name)).toEqual([
+      'incident.evidence_added',
+    ])
+    expect(outcome.events[0]?.payload).toMatchObject({
+      caseId: incident.id,
+      kind: 'after_photo',
+      mediaRef: 'incidents/case-1/after-01.jpg',
+    })
+    expect(Object.keys(outcome.events[0]?.payload ?? {})).not.toContain('data')
     expect(audit.records.at(-1)?.summary).toContain('צורפה ראיה')
   })
 
@@ -462,8 +471,13 @@ describe('closing a case', () => {
 
     expect(outcome.data.status).toBe('closed')
     expect(outcome.data.closedByUserId).toBe('user-operations_manager')
-    // No event: `incident.closed` does not exist in the frozen catalogue.
-    expect(outcome.events).toEqual([])
+    // `incident.closed`, and NOT a second `incident.resolved`. Resolved means
+    // the damage is dealt with, closed means the file is shut, and a deposit
+    // dispute months later turns on which of the two happened when.
+    expect(outcome.events.map((event) => event.name)).toEqual([
+      'incident.closed',
+    ])
+    expect(outcome.events[0]?.payload).toMatchObject({ caseId: incident.id })
   })
 
   it('refuses to close over an unanswered question', async () => {

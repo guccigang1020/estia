@@ -155,6 +155,15 @@ export const DOMAIN_EVENTS = [
   'task.overdue',
   'incident.opened',
   'incident.resolved',
+  // Evidence was attached to a case. Kept apart from `incident.opened`
+  // because a subscriber that wakes on a new case must not wake again every
+  // time somebody adds a photo to one it already knows about.
+  'incident.evidence_added',
+  // The case is finished and will not be reopened. Distinct from resolved,
+  // which the close path was refusing to borrow: resolved means the damage is
+  // dealt with, closed means the file is shut, and a deposit dispute months
+  // later turns on which of the two happened when.
+  'incident.closed',
   // The shortage somebody is standing in front of, now.
   'inventory.shortage_detected',
   // The shortage that has not happened yet, and is the point of the forecast:
@@ -207,6 +216,15 @@ export const DOMAIN_EVENTS = [
   'site.generated',
   'site.published',
   'site.rolled_back',
+
+  // Guest guide
+  //
+  // Deliberately not `site.published`. The website is what strangers read
+  // before they book; the guide is what a guest standing in the unit reads at
+  // midnight looking for the boiler switch. Different people publish them at
+  // different times, and a subscriber filtering on one must never be woken by
+  // the other.
+  'guide.published',
 
   // Channels
   'channel.reservation_received',
