@@ -256,6 +256,28 @@ src/lib/notifications/**                       notifications    write
 src/app/(app)/settings/notifications/**        notifications    write
 src/components/notifications/**                notifications    write
 
+# ── Market parity wave (P1) ───────────────────────────────────────────────
+# Certification found these three areas have a screen and NO domain and NO
+# tables. The screens are honest views over canonical tables — /channels
+# reports bookings by source — but they are not the capability. Each agent
+# builds domain-pure first (engines, types, pure functions, tests) and
+# proposes its schema; the coordinator writes and applies the migration,
+# because agents do not write migrations.
+
+src/lib/channels/**                            channels-parity  write
+src/app/(app)/channels/**                      channels-parity  write
+src/components/channels/**                     channels-parity  write
+
+src/lib/migration/**                           migration-factory write
+src/app/(app)/migration/**                     migration-factory write
+src/components/migration/**                    migration-factory write
+
+src/lib/fiscal/**                              israel-compliance write
+src/lib/guest-book/**                          israel-compliance write
+src/app/(app)/settings/fiscal/**               israel-compliance write
+src/app/(app)/guest-book/**                    israel-compliance write
+src/components/fiscal/**                       israel-compliance write
+
 # ── Autopilot wave ────────────────────────────────────────────────────────
 # The shared contract — states, events, grants, the action catalogue, the
 # stage types and 0046 — is the coordinator's and is already written. Six
@@ -378,7 +400,10 @@ src/app/(app)/agents/**                       distribution         write
 src/app/(app)/agencies/**                     distribution         write
 src/app/(app)/quotes/**                       distribution         write
 src/app/(app)/promotions/**                   distribution         write
-src/app/(app)/channels/**                     distribution         write
+# /channels moved to channels-parity for this wave. What distribution built
+# there is a report of bookings BY SOURCE and is being kept; the channel
+# manager — connectors, mapping, sync, reconciliation — is a new capability
+# on the same route. Same precedent as website and insights above.
 src/components/distribution/**                distribution         write
 src/lib/demo/dataset-agents.ts                distribution         write
 
