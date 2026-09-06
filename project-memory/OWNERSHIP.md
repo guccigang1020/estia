@@ -132,6 +132,13 @@ src/lib/autopilot/runtime/**                   autopilot-runtime write
 src/lib/messaging/release.ts                   deferred-release write
 src/lib/notifications/release.ts               deferred-release write
 
+# Making the sweep callable: the two repository reads it needs, and the one
+# guarded entry point that runs it. There is no src/app/api in this repo at
+# all, so the route handler is new ground and is claimed explicitly.
+src/lib/notifications/release-store.ts         sweep-runtime write
+src/lib/messaging/release-store.ts             sweep-runtime write
+src/app/api/**                                 sweep-runtime write
+
 # ── P2 modules ────────────────────────────────────────────────────────────
 # Named in the Market Leadership Program and absent from the product: no
 # domain, no tables. Each agent builds domain-first and proposes its schema;
