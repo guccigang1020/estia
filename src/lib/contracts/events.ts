@@ -227,6 +227,30 @@ export const DOMAIN_EVENTS = [
   'autopilot.rule_candidate_observed',
   'autopilot.rule_candidate_adopted',
   'autopilot.brief_sent',
+
+  // Fiscal documents. Separate from `invoice.*`, which is ESTIA's own
+  // document: these are what an external accounting vendor did with it.
+  // `document_refused` is an ordinary outcome and not a failure — a provider
+  // that is not connected refuses honestly, and a retry queue treating that as
+  // a failure would loop forever.
+  'fiscal.document_requested',
+  'fiscal.document_issued',
+  'fiscal.document_refused',
+  // The vendor did not answer. A numbered legal document may exist that ESTIA
+  // cannot see, so retrying would create a duplicate tax invoice — and a tax
+  // invoice cannot be un-issued.
+  'fiscal.document_outcome_unknown',
+  // Money arrived and the paperwork did not.
+  'fiscal.payment_undocumented',
+  'fiscal.reconciliation_completed',
+  'fiscal.reconciliation_difference_found',
+
+  // The guest register.
+  'guest_book.entry_created',
+  'guest_book.entry_updated',
+  // A required field is still empty. This is what makes the holes workable
+  // rather than invisible.
+  'guest_book.entry_incomplete',
 ] as const
 
 export type DomainEventName = (typeof DOMAIN_EVENTS)[number]
@@ -275,6 +299,11 @@ export const ALERT_EVENTS: readonly DomainEventName[] = [
   'payment.failed',
   'payment.outcome_unknown',
   'invoice.failed',
+  // A numbered document may exist that ESTIA cannot see, and nobody should
+  // discover that from an accountant in March.
+  'fiscal.document_outcome_unknown',
+  'fiscal.payment_undocumented',
+  'fiscal.reconciliation_difference_found',
   'channel.sync_failed',
   'inventory.shortage_detected',
   'task.overdue',

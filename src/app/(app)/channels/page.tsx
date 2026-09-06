@@ -1,8 +1,11 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { ActionError } from '@/components/booking/action-error'
+import { ConnectorCard } from '@/components/channels/connector-card'
+import { SourceReport } from '@/components/channels/source-report'
+import { SyncBadge } from '@/components/channels/sync-badge'
 import { PlanLock } from '@/components/distribution/plan-lock'
-import { Money } from '@/components/finance/money'
 import { EmptyState } from '@/components/states/empty-state'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { toSafeResponse } from '@/lib/errors'
@@ -10,6 +13,7 @@ import { createClient } from '@/lib/supabase/server'
 
 import { ALL_PROPERTIES, shellContext } from '../_lib/context'
 import { requireDistributionGrant } from '../agents/_lib/gate'
+import { channelManagerState, type ChannelManagerState } from './_lib/manager'
 import {
   channelPicture,
   connectionState,
@@ -20,40 +24,44 @@ import {
 export const metadata: Metadata = { title: 'ערוצי הפצה' }
 
 /**
- * EXECUTION CONTEXT — SERVER COMPONENT. Airbnb and Booking.com — and the truth
- * about them.
+ * EXECUTION CONTEXT — SERVER COMPONENT. The channel health centre.
  *
- * ══ NOTHING IS CONNECTED, AND THAT IS THE HEADLINE ═══════════════════════
+ * ══ ONE SCREEN, TWO HONEST ANSWERS ═════════════════════════════════════════
  *
- * There is no channel integration in ESTIA. No connection record, no listing
- * mapping, no sync cursor, no inbound reservation handler. `channel.manage` is
- * in the permission catalogue and `channels` is an entitlement Pro carries, and
- * behind them is nothing.
+ * This route used to say one thing: nothing is connected, and here is what
+ * *did* come from the channels. That report was true, is still true, and is
+ * still here — as `SourceReport`, lower down the page. **ADD does not mean
+ * REPLACE**, and the section it became reads exactly as it did.
  *
- * So this screen leads with that, in the first sentence, above everything else.
- * A channels dashboard drawn over an absent integration is the most dangerous
- * screen this product could ship: a business would read "Booking.com ✓" and stop
- * checking its own calendar, and the first thing that happens is the same night
- * sold twice. The specification says it in one line — a booking in one channel
- * must immediately block those dates everywhere else, otherwise double booking —
- * and the honest thing to say is that nothing here does that.
+ * What is new above it is the channel manager's own view: every connector,
+ * when each direction last actually ran, what is queued, and what is waiting
+ * on a person. It is built from `src/lib/channels/**`, where the engines live
+ * as pure functions, and it renders whatever the database honestly contains.
  *
- * WHAT IS SHOWN INSTEAD IS REAL. Bookings whose `source` says they came from an
- * OTA, counted per channel with the `source_channel` label somebody typed. Those
- * are genuine bookings a person entered by hand, and they are worth seeing: how
- * many, from where, and what they are worth. The screen is careful to say that
- * knowing about them is not the same as keeping calendars in step, because that
- * distinction *is* the double booking.
+ * ── Three states, and the first one is the truth today ────────────────────
  *
- * WHAT WOULD HAVE TO EXIST is listed on the page rather than left as a roadmap
- * note, so an owner reading this knows what they are waiting for instead of
- * being told "coming soon".
+ *   1. **`not_provisioned`** — the channel tables have not been created in
+ *      this deployment. Stated in one sentence, and DERIVED from the database
+ *      rather than from a constant, so it disappears by itself the day the
+ *      migration runs. A hard-coded "not connected" would keep saying so over
+ *      a live integration, which is the failure the previous version of this
+ *      screen argued against at length and which is not reintroduced here.
+ *   2. **`ready` with no connectors** — the tables exist and nobody has
+ *      connected a channel. That is a setup flow away, and the screen links to
+ *      it rather than describing it.
+ *   3. **`ready` with connectors** — the health centre proper.
  *
- * GATING. `channel.manage` is mapped to the `channels` entitlement, so a Basic
- * or Direct organization gets the upgrade screen — which is the honest refusal
- * for them, and is not a claim that the feature works for anybody else. A Pro
- * organization reaches this page and reads that nothing is connected, which is
- * the more useful truth.
+ * ── What this screen refuses to draw ──────────────────────────────────────
+ *
+ * A green tick over a channel whose last push was four hours ago. Health is
+ * computed in `connectorHealth` from elapsed time and queue depth, never from
+ * the absence of an error, because a channel manager that is broken looks
+ * exactly like one that has nothing to do. Both are quiet, and only one of
+ * them is selling the same Friday twice.
+ *
+ * GATING. `channel.manage`, mapped to the `channels` entitlement, so a Basic
+ * organization gets the upgrade screen — the honest refusal for them, and not
+ * a claim that the feature works for anybody else.
  */
 export default async function ChannelsPage() {
   const [access, context] = await Promise.all([
@@ -85,21 +93,30 @@ export default async function ChannelsPage() {
     otaBookings: 0,
     readable: false,
   }
+  let manager: ChannelManagerState = { kind: 'not_provisioned' }
   let failure: ReturnType<typeof toSafeResponse> | null = null
 
   try {
     const db = await createClient()
-    picture = await channelPicture({
+    const args = {
       db,
       actor,
       organizationId: actor.organizationId,
       propertyId,
-    })
+    }
+
+    const [loadedPicture, loadedManager] = await Promise.all([
+      channelPicture(args),
+      channelManagerState(args),
+    ])
+
+    picture = loadedPicture
+    manager = loadedManager
   } catch (cause) {
     failure = toSafeResponse(cause, crypto.randomUUID())
   }
 
-  const state = connectionState(picture)
+  const legacy = connectionState(picture)
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
@@ -108,22 +125,85 @@ export default async function ChannelsPage() {
           ערוצי הפצה
         </h1>
         <p className="text-muted-foreground">
-          Airbnb, Booking.com והשאר — ומה המערכת באמת יודעת עליהם היום.
+          Airbnb, Booking.com והשאר — מה מחובר, מתי באמת סונכרן, ומה ממתין
+          להחלטה.
         </p>
       </header>
 
-      {/* The headline, and it is a refusal to draw a dashboard. */}
+      {failure ? (
+        <ActionError error={failure.error} />
+      ) : (
+        <>
+          <ManagerSection state={manager} />
+
+          <SourceReport
+            rows={picture.channels.map((channel) => ({
+              key: channel.source,
+              label: OTA_LABEL[channel.source],
+              bookingCount: channel.bookingCount,
+              labels: channel.labels,
+              revenueAgorot: channel.revenueAgorot,
+            }))}
+            totalBookings={picture.totalBookings}
+            otaBookings={picture.otaBookings}
+            readable={picture.readable}
+          />
+
+          {manager.kind === 'not_provisioned' && (
+            <Card>
+              <CardHeader>
+                <CardTitle as="h2">מה צריך להיבנה כדי שזה יעבוד</CardTitle>
+              </CardHeader>
+              <p className="mt-2 text-sm text-muted-foreground">
+                ״בקרוב״ זה משפט שאי אפשר לתכנן לפיו. אלה הדברים שחסרים בפועל:
+              </p>
+              <ol className="mt-3 flex list-inside list-decimal flex-col gap-2 text-sm text-foreground">
+                {legacy.missing.map((piece) => (
+                  <li key={piece}>{piece}</li>
+                ))}
+              </ol>
+              {legacy.manualChannelBookings && (
+                <p className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
+                  עד שזה ייבנה — ההזמנות מהערוצים שמופיעות למעלה הן מה שהוקלד
+                  ידנית, ורק הן. אם משהו הוזמן בערוץ ולא הוקלד כאן, המערכת חושבת
+                  שהתאריכים פנויים.
+                </p>
+              )}
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------ the states -- */
+
+function ManagerSection({ state }: { state: ChannelManagerState }) {
+  if (state.kind === 'not_readable') {
+    return (
+      <div
+        role="status"
+        className="rounded-xl border border-border bg-surface px-4 py-4 text-sm text-muted-foreground sm:px-5"
+      >
+        אין לך הרשאה לנהל ערוצי הפצה, ולכן מצב החיבורים אינו מוצג. זו אינה טענה
+        שאין חיבורים.
+      </div>
+    )
+  }
+
+  if (state.kind === 'not_provisioned') {
+    return (
       <div
         role="status"
         className="flex flex-col gap-3 rounded-xl border border-border-strong bg-accent-soft px-4 py-4 text-sm text-accent-foreground sm:px-5"
       >
         <p className="font-display text-base font-bold">
-          אף ערוץ אינו מחובר, ואין סנכרון.
+          מנהל הערוצים אינו מותקן בהתקנה הזו, ואין סנכרון.
         </p>
         <p>
-          לא קיים במערכת חיבור לאף ערוץ הפצה — לא ל-Airbnb, לא ל-Booking.com ולא
-          לאחרים. המשמעות המעשית: הזמנה שנכנסת בערוץ <strong>אינה</strong> חוסמת
-          את התאריכים אצלך, והזמנה שנכנסת אצלך <strong>אינה</strong> חוסמת אותם
+          המשמעות המעשית: הזמנה שנכנסת בערוץ <strong>אינה</strong> חוסמת את
+          התאריכים אצלך, והזמנה שנכנסת אצלך <strong>אינה</strong> חוסמת אותם
           בערוץ. מי שמוכר בשני המקומות חייב להמשיך לעדכן ידנית.
         </p>
         <p>
@@ -131,115 +211,99 @@ export default async function ChannelsPage() {
           אינטגרציה שאיננה הוא בדיוק מה שגורם לאותו לילה להימכר פעמיים.
         </p>
       </div>
+    )
+  }
 
-      {failure ? (
-        <ActionError error={failure.error} />
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">מה כן נרשם מהערוצים</CardTitle>
-            </CardHeader>
-            <p className="mt-2 text-sm text-muted-foreground">
-              הזמנות שמישהו הקליד ידנית וסימן שמקורן בערוץ. הן אמיתיות והן
-              נספרות כאן — אבל הן לא הגיעו דרך חיבור, ואף אחת מהן לא חסמה
-              תאריכים בערוץ שממנו באה.
-            </p>
+  if (state.connectors.length === 0) {
+    return (
+      <EmptyState
+        illustration="calendar"
+        title="לא חובר אף ערוץ"
+        body="מנהל הערוצים מותקן ומוכן, ואף ערוץ לא חובר אליו עדיין. עד שיחובר ערוץ, היומן שלך והיומן שלו אינם מדברים זה עם זה."
+        action={
+          <Link
+            href="/channels/setup"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            חיבור ערוץ
+          </Link>
+        }
+      />
+    )
+  }
 
-            {!picture.readable ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                אין לך הרשאה לראות הזמנות, ולכן אי אפשר להציג את הפילוח. זו אינה
-                טענה שאין הזמנות מערוצים.
-              </p>
-            ) : picture.otaBookings === 0 ? (
-              <EmptyState
-                className="mt-4"
-                illustration="calendar"
-                title="לא נרשמה אף הזמנה ממקור ערוץ"
-                body={`מתוך ${picture.totalBookings === 1 ? 'הזמנה אחת' : `${picture.totalBookings} הזמנות`} בטווח שלך, אף אחת לא סומנה כמגיעה מ-Airbnb, מ-Booking.com או מערוץ אחר. אם בפועל מגיעות אליך הזמנות מהערוצים, שווה לסמן את המקור בכל הזמנה — זה מה שיאפשר להשוות מאוחר יותר כמה עולה כל ערוץ.`}
-              />
-            ) : (
-              <>
-                <p className="mt-4 text-sm text-foreground">
-                  {picture.otaBookings} מתוך {picture.totalBookings} ההזמנות
-                  בטווח שלך סומנו כמגיעות מערוץ.
-                </p>
-                <ul className="mt-4 flex flex-col divide-y divide-border">
-                  {picture.channels
-                    .filter((channel) => channel.bookingCount > 0)
-                    .map((channel) => (
-                      <li
-                        key={channel.source}
-                        className="flex flex-wrap items-center justify-between gap-3 py-3"
-                      >
-                        <span className="flex flex-col gap-0.5">
-                          <span className="font-semibold text-foreground">
-                            {CHANNEL_LABEL[channel.source]}
-                          </span>
-                          {channel.labels.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              {channel.labels.join(' · ')}
-                            </span>
-                          )}
-                        </span>
-                        <span className="flex items-center gap-4">
-                          <span className="text-sm text-muted-foreground">
-                            {channel.bookingCount === 1
-                              ? 'הזמנה אחת'
-                              : `${channel.bookingCount} הזמנות`}
-                          </span>
-                          <Money agorot={channel.revenueAgorot} emphasis />
-                        </span>
-                      </li>
-                    ))}
-                </ul>
-              </>
-            )}
-          </Card>
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <SyncBadge state={state.fleet.worst} />
+          <p className="text-sm text-foreground">
+            {state.fleet.connectors} ערוצים מחוברים · {state.fleet.healthy}{' '}
+            תקינים · {state.fleet.degraded + state.fleet.failing} דורשים תשומת
+            לב
+          </p>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <Link
+            href="/channels/exceptions"
+            className="font-semibold text-primary underline-offset-4 hover:underline"
+          >
+            {state.tally.open === 0
+              ? 'אין חריגות פתוחות'
+              : `${state.tally.open} חריגות פתוחות`}
+          </Link>
+          <Link
+            href="/channels/setup"
+            className="font-semibold text-primary underline-offset-4 hover:underline"
+          >
+            התאמות מודעות
+          </Link>
+        </div>
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">מה צריך להיבנה כדי שזה יעבוד</CardTitle>
-            </CardHeader>
-            <p className="mt-2 text-sm text-muted-foreground">
-              ״בקרוב״ זה משפט שאי אפשר לתכנן לפיו. אלה ארבעת הדברים שחסרים
-              בפועל:
-            </p>
-            <ol className="mt-3 flex list-inside list-decimal flex-col gap-2 text-sm text-foreground">
-              {state.missing.map((piece) => (
-                <li key={piece}>{piece}</li>
-              ))}
-            </ol>
-            {state.manualChannelBookings && (
-              <p className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
-                עד שזה ייבנה — ההזמנות מהערוצים שמופיעות למעלה הן מה שהוקלד
-                ידנית, ורק הן. אם משהו הוזמן בערוץ ולא הוקלד כאן, המערכת חושבת
-                שהתאריכים פנויים.
-              </p>
-            )}
-          </Card>
-        </>
+      {state.tally.critical > 0 && (
+        <div
+          role="alert"
+          className="rounded-xl border-2 border-danger bg-danger/10 px-4 py-4 text-sm sm:px-5"
+        >
+          <p className="font-display text-base font-bold text-danger">
+            {state.tally.critical} חריגות קריטיות ממתינות להחלטה.
+          </p>
+          <p className="mt-1 text-foreground">
+            חריגה קריטית פירושה שהזמנה קיימת בערוץ ואינה קיימת אצלך, או ששני
+            הצדדים מחזיקים גרסאות שונות של אותה שהות. התאריכים שבמחלוקת אינם
+            חסומים.
+          </p>
+        </div>
       )}
-    </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {state.connectors.map((view) => (
+          <ConnectorCard
+            key={view.connector.id}
+            connector={view.connector}
+            status={view.status}
+          />
+        ))}
+      </div>
+    </>
   )
 }
 
 /**
  * The channel names, as their own brands spell them.
  *
- * A total `Record` over `OTA_SOURCES`, so a channel added to the contract
- * without a name here fails the typecheck rather than rendering `other_channel`
- * at a guesthouse owner. Not translated: Airbnb and Booking.com are proper
- * nouns and a Hebrew rendering of either would be a name nobody recognises.
+ * A total `Record` over `OTA_SOURCES`, so a source added to the booking
+ * contract without a name here fails the typecheck rather than rendering
+ * `other_channel` at a guesthouse owner. Kept here rather than folded into
+ * `@/lib/channels`, because these are `BookingSource` values and the channel
+ * module's own `CHANNEL_LABEL` is over `ChannelCode` — two vocabularies that
+ * overlap and are not the same list. Collapsing them would be the first step
+ * towards a channel that exists in one and not the other.
  */
-const CHANNEL_LABEL: Record<OtaSource, string> = {
+const OTA_LABEL: Record<OtaSource, string> = {
   airbnb: 'Airbnb',
   booking_com: 'Booking.com',
   vrbo: 'Vrbo',
-  // Expedia and every other OTA the contract does not name individually. The
-  // vocabulary is `BOOKING_SOURCES` in `booking/types.ts` and is consumed, not
-  // extended — a fifth channel is a migration on the `booking_source` enum and
-  // a change to every exhaustive switch that reads it, which is not a screen's
-  // decision to make.
   other_channel: 'ערוץ אחר',
 }

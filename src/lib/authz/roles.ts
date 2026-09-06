@@ -430,6 +430,11 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     // send themselves.
     'autopilot.configure',
     'autopilot.override',
+    // Runs the business, so decides what the business records and works the
+    // queue of accounting documents that did not go through.
+    'fiscal.resolve',
+    'guest_book.view',
+    'guest_book.manage',
     'booking.override_price',
     'booking.override_availability',
     'booking.export',
@@ -606,6 +611,11 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     // configure, and — as everywhere else — cannot make Autopilot charge
     // anybody: that is a platform safety rule, not a permission.
     ...AUTOPILOT_OPERATOR,
+    // Works the failed-document queue and reads the register. Not
+    // `guest_book.manage`: which fields a business is required to record is a
+    // decision about the business, not about its bookkeeping.
+    'fiscal.resolve',
+    'guest_book.view',
     'guest.view_name',
     'guest.view_phone',
     'guest.view_email',

@@ -190,6 +190,48 @@ export const NOTIFICATION_CATALOGUE: Partial<
     body: 'הכסף התקבל והחשבונית לא יצאה. זו חשיפה מול רשות המסים ולא תקלה טכנית בלבד.',
     href: financeHref,
   },
+  // The vendor never answered. This is deliberately `critical` while
+  // `invoice.failed` is `urgent`, and the gap is the whole point: a failure is
+  // a document that did not go out, and this is a document that MAY have gone
+  // out under a number ESTIA cannot see. Retrying it produces a duplicate tax
+  // invoice, which cannot be un-issued — so a person has to look before
+  // anybody touches it.
+  'fiscal.document_outcome_unknown': {
+    category: 'money',
+    severity: 'critical',
+    requiredGrant: 'fiscal.resolve',
+    family: 'finance',
+    audience: 'grant_holders',
+    escalates: true,
+    title: 'מסמך חשבונאי — תוצאה לא ידועה',
+    body: 'הספק לא ענה. ייתכן שהופק מסמך ממוספר שאיננו רואים, ולכן ניסיון חוזר עלול ליצור כפילות. צריך לבדוק מול הספק לפני כל פעולה.',
+    href: financeHref,
+  },
+  // Money arrived and the paperwork did not. Separate from invoice.failed
+  // because nothing failed here — ESTIA may simply not have been asked to
+  // issue anything, which is a gap somebody has to close rather than a bug.
+  'fiscal.payment_undocumented': {
+    category: 'money',
+    severity: 'urgent',
+    requiredGrant: 'fiscal.resolve',
+    family: 'finance',
+    audience: 'grant_holders',
+    escalates: true,
+    title: 'תשלום ללא מסמך חשבונאי',
+    body: 'הכסף נרשם והמסמך החשבונאי עדיין ממתין. שני הדברים נכונים בו זמנית, וזה מה שצריך לסגור.',
+    href: financeHref,
+  },
+  'fiscal.reconciliation_difference_found': {
+    category: 'money',
+    severity: 'urgent',
+    requiredGrant: 'fiscal.resolve',
+    family: 'finance',
+    audience: 'grant_holders',
+    escalates: true,
+    title: 'פער מול ספק החשבוניות',
+    body: 'ההשוואה מצאה הפרש בין מה שרשום כאן לבין מה שרשום אצל הספק. ההשוואה מדווחת ואינה מתקנת.',
+    href: financeHref,
+  },
   'commission.became_eligible': {
     category: 'money',
     severity: 'info',

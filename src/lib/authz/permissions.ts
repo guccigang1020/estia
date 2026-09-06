@@ -71,6 +71,13 @@ export const PERMISSIONS = [
   'guest.update',
   'guest.delete',
   'guest.export',
+  // The historical register, separate from 'guest.view' because the two serve
+  // different people: an accountant needs the register without today's guest
+  // cards, and a receptionist needs today's cards without five years of
+  // history.
+  'guest_book.view',
+  // Deciding which fields this business records, and correcting an entry.
+  'guest_book.manage',
 
   // ── Lead & quote ────────────────────────────────────────────────────────
   // Both are worked from two sides — the business's desk and an external
@@ -114,6 +121,12 @@ export const PERMISSIONS = [
   'expense.approve',
   'invoice.view',
   'invoice.issue',
+  // Working the queue of accounting documents that failed, were refused, or
+  // whose outcome the vendor never confirmed. Deliberately NOT 'invoice.issue':
+  // resolving one issues nothing and touches no money, and a bookkeeper who
+  // should retry a failed document is not thereby somebody who may raise a tax
+  // invoice.
+  'fiscal.resolve',
   'report.financial.view',
   'report.financial.export',
 
