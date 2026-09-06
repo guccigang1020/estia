@@ -63,8 +63,7 @@ import { MIGRATION_APPLY, MIGRATION_VIEW } from './access'
 import { loadMigrationWorld } from './queries'
 
 export type ActionResult<TData> =
-  | { ok: true; data: TData }
-  | { ok: false; error: SafeErrorBody }
+  { ok: true; data: TData } | { ok: false; error: SafeErrorBody }
 
 export type DryRunRequest = {
   entity: ImportEntity

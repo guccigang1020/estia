@@ -61,6 +61,11 @@ export default async function PlatformLayout({
       available: mayUse(session, 'platform.organization.view'),
     },
     {
+      href: '/platform/autopilot',
+      label: 'טייס אוטומטי',
+      available: mayUse(session, 'platform.organization.view'),
+    },
+    {
       href: '/platform/audit',
       label: 'יומן הפלטפורמה',
       available: mayUse(session, 'platform.organization.view'),

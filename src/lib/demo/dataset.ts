@@ -600,6 +600,9 @@ const TABLES: DemoTables = {
   channel_sync_runs: [],
   channel_exceptions: [],
 
+  // 0053 · outward guest messages
+  guest_messages: [],
+
   // 0052 · the import factory
   import_sessions: [],
   import_records: [],

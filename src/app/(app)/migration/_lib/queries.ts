@@ -32,7 +32,11 @@
  * different sentences and only one of them is somebody's mistake.
  */
 
-import type { ExistingBlock, ExistingBooking, ExistingUnit } from '@/lib/migration'
+import type {
+  ExistingBlock,
+  ExistingBooking,
+  ExistingUnit,
+} from '@/lib/migration'
 import type { ExistingGuest } from '@/lib/migration'
 import type { LedgerEntry } from '@/lib/migration'
 import type { ExistingWorld } from '@/lib/migration'
@@ -43,12 +47,7 @@ import {
   OCCUPYING_STATUSES,
   type BookingStatus,
 } from '@/lib/booking/types'
-import {
-  asString,
-  asStringOrNull,
-  toRows,
-  type Db,
-} from '@/lib/persistence'
+import { asString, asStringOrNull, toRows, type Db } from '@/lib/persistence'
 
 /** Postgres says this when a table named in a query does not exist. */
 const UNDEFINED_TABLE = '42P01'
@@ -160,7 +159,9 @@ async function loadOccupyingBookings(
 function asStatus(value: unknown): BookingStatus {
   const found = BOOKING_STATUSES.find((candidate) => candidate === value)
   if (found === undefined) {
-    throw new Error(`Unknown booking status from the database: ${String(value)}`)
+    throw new Error(
+      `Unknown booking status from the database: ${String(value)}`,
+    )
   }
   return found
 }

@@ -72,9 +72,9 @@ describe('simulateAction', () => {
   it('admits that an unimplemented command would have failed', () => {
     const simulated = simulateAction(
       planned({
-        kind: 'guest.send_reminder',
-        safetyLevel: 'external_communication',
-        command: 'messaging.sendGuestMessage',
+        kind: 'access.issue_code',
+        safetyLevel: 'money_access_cancellation',
+        command: 'access.issueCode',
       }),
       wired,
     )

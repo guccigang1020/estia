@@ -190,3 +190,13 @@ export {
   type GuestStoreCard,
   type GuestStoreView,
 } from './portal'
+
+export {
+  defineStoreCommands,
+  type ChaseProviderInput,
+  type ChasedProvider,
+  type PreparedUpsell,
+  type StoreCommandDeps,
+  type StoreCommands,
+  type UpsellOfferInput,
+} from './commands'

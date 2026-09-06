@@ -100,3 +100,11 @@ export {
   type StoredProof,
   type UploadTicket,
 } from './storage'
+
+export {
+  definePaymentRequestCommands,
+  type PaymentRequestCommands,
+  type PaymentRequestDeps,
+  type PaymentRequestInput,
+  type RequestedPayment,
+} from './requests'

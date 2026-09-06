@@ -128,3 +128,10 @@ export {
   type BookingOperations,
   type PricingInput,
 } from './operations'
+
+export {
+  assertHoldHasExpired,
+  defineHoldExpiryCommands,
+  type ExpiredHoldRelease,
+  type HoldExpiryCommands,
+} from './holds-commands'

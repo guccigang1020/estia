@@ -262,7 +262,7 @@ supabase/migrations/0041_platform_admin.sql    platform-admin   write
 # Autopilot's platform console. Listed BEFORE the platform-admin catch-alls
 # because ownership is most-specific-first and these would otherwise never
 # match — which the checker said, on its first run, before anything was built.
-src/app/(platform)/autopilot/**                autopilot-platform write
+src/app/(platform)/platform/autopilot/**       autopilot-platform write
 src/lib/platform/autopilot.ts                  autopilot-platform write
 
 src/app/(platform)/**                          platform-admin   write

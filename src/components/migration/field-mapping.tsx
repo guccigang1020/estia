@@ -55,8 +55,8 @@ export function FieldMappingTable({
   return (
     <div className="flex flex-col gap-4" dir="rtl">
       <p className="text-sm text-muted-foreground">
-        עמודה שלא זוהתה נשארת ריקה במכוון — ניחוש סביר הוא הדבר שאף אחד לא
-        קורא שוב. שדה שכבר נתפס על ידי עמודה קודמת אינו מוצע שנית.
+        עמודה שלא זוהתה נשארת ריקה במכוון — ניחוש סביר הוא הדבר שאף אחד לא קורא
+        שוב. שדה שכבר נתפס על ידי עמודה קודמת אינו מוצע שנית.
       </p>
 
       <ul className="flex flex-col gap-3">
@@ -128,5 +128,7 @@ function sample(rows: readonly SourceRow[], column: string): string {
     .map((row) => row.cells[column] ?? '')
     .filter((value) => value.length > 0)
 
-  return values.length === 0 ? 'אין ערכים בשלוש השורות הראשונות' : values.join(' · ')
+  return values.length === 0
+    ? 'אין ערכים בשלוש השורות הראשונות'
+    : values.join(' · ')
 }

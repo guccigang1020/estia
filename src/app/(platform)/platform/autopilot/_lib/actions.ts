@@ -46,11 +46,11 @@ import {
 } from '@/lib/platform/autopilot'
 import { createClient } from '@/lib/supabase/server'
 
-import { requirePlatformGrant } from '../../_lib/guard'
-import { platformOperationContext, platformServices } from '../../_lib/wiring'
+import { requirePlatformGrant } from '../../../_lib/guard'
+import { platformOperationContext, platformServices } from '../../../_lib/wiring'
 
 function organizationPath(organizationId: string): string {
-  return `/autopilot/${organizationId}`
+  return `/platform/autopilot/${organizationId}`
 }
 
 /**
@@ -96,7 +96,7 @@ export async function setAutopilotCapabilityAction(
     })
 
     revalidatePath(organizationPath(organizationId))
-    revalidatePath('/autopilot')
+    revalidatePath('/platform/autopilot')
     outcome = `done=${encodeURIComponent(
       'מצב היכולת וההרשאה במנוי עודכנו יחד, בפעולה אחת. השינוי נרשם ביומן ' +
         'הביקורת של הלקוח.',

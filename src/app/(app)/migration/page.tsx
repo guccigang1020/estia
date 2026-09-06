@@ -1,15 +1,9 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
-import { MigrationWizard } from '@/components/migration/wizard'
-import { holdsGrant } from '@/lib/authz/can'
+import { NoImportsYet } from '@/components/migration/migration-empty'
 
-import {
-  MIGRATION_APPLY,
-  WRITE_GRANT_LABEL,
-  missingWriteGrants,
-  requireMigrationAccess,
-} from './_lib/access'
-import { applyMigrationAction, dryRunMigrationAction } from './_lib/actions'
+import { MIGRATION_STEPS, STEP_LEAD, STEP_PATH, STEP_TITLE } from './_lib/steps'
 
 export const metadata: Metadata = { title: 'ייבוא נתונים ממערכת קודמת' }
 
@@ -25,74 +19,88 @@ export const metadata: Metadata = { title: 'ייבוא נתונים ממערכת
  *
  * WHAT IS DELIBERATELY NOT HERE. A progress bar with a percentage and nothing
  * under it. A single "1,847 imported" number. A confirmation dialog that
- * summarises in one line. Every one of those asks for trust rather than earning
- * it, and this is the screen where trust is either earned or the migration is
- * abandoned.
+ * summarises in one line. Every one of those asks for trust rather than
+ * earning it, and this is the screen where trust is either earned or the
+ * migration is abandoned.
  *
- * THE DRY RUN IS THE POINT. Steps one and two exist to reach it. It reads the
- * whole file against everything already in ESTIA and writes nothing — provably
- * nothing: `dryRun` is synchronous, takes no writer, and the compiler asserts
- * its whole input is plain data. The button that writes is behind it and stays
- * disabled while a single conflict is unsettled.
+ * AN EMPTY HISTORY IS NOT AN ERROR. Every organization's first visit here is an
+ * empty one, and the four import tables are empty on a new deployment by
+ * definition. The empty state says "you have not run one yet" and offers the
+ * first step; it does not apologise, and it is not a warning.
  *
- * NO IMPORTED STAY EVER REACHES A SUBSCRIBER. The commands the import writes
- * through are built with an event quarantine, and the builder's options type has
- * no `events` field — a live bus cannot be passed in. Eighteen hundred
- * confirmation messages about stays from 2023, sent from the operator's own
- * business on the first day they trusted us, is the one failure this feature
- * cannot recover from.
+ * THE DRY RUN IS THE POINT. The four steps before it exist to reach it. It
+ * reads the whole file against everything already in ESTIA and writes nothing —
+ * provably nothing: `dryRun` is synchronous, takes no writer, and the compiler
+ * asserts its whole input is plain data. The step that writes is behind it and
+ * stays closed while a single conflict is unsettled.
  *
- * THE ROUTE GATE IS NOT THE WRITE GATE. `integration.manage` decides who may
- * *start* a migration — a stand-in until `migration.view` / `migration.run` /
- * `migration.apply` exist; see `_lib/access.ts`. What each record may do is
- * decided by the domain operation that writes it, and the grants a person is
- * missing are named on screen before they upload anything rather than
- * discovered forty minutes later.
+ * THE ROUTE GATE IS NOT THE WRITE GATE. `migration.view` decides who may open
+ * this flow and read a dry run; `migration.apply` decides who may execute it;
+ * and what each *record* may do is decided by the domain operation that writes
+ * it. The grants a person is missing are named on screen before they upload
+ * anything rather than discovered forty minutes later — see `_lib/access.ts`.
  */
-export default async function MigrationPage() {
-  const actor = await requireMigrationAccess()
-  const missing = missingWriteGrants(actor)
-
+export default function MigrationPage() {
   return (
-    <div
-      dir="rtl"
-      className="mx-auto flex w-full max-w-shell flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:px-8"
-    >
-      <header className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-          ייבוא נתונים ממערכת קודמת
-        </h1>
-        <p className="max-w-prose text-muted-foreground">
-          ההיסטוריה שלך עוברת איתך. מעלים קובץ, מסבירים איזו עמודה היא מה,
-          וקוראים בדיוק מה יקרה — לפני שנכתב שום דבר. הרצה חוזרת של אותו קובץ
-          אינה מכפילה כלום.
-        </p>
-      </header>
-
-      <section className="flex flex-col gap-2 rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground">
-        <h2 className="font-semibold text-foreground">
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-2 rounded-xl border border-border bg-muted p-5 text-sm text-muted-foreground">
+        <h2 className="font-display text-base font-bold text-foreground">
           שתי הבטחות, לפני שמתחילים
         </h2>
         <p>
           <strong className="text-foreground">אף אורח לא יקבל הודעה.</strong>{' '}
           ייבוא שהות שהסתיימה ב-2023 אינו שולח הודעה, אינו פותח משימת ניקיון
-          ואינו מייצר הכנה. כל אירוע אוטומטי שהייבוא הפיק נחסם, ורשימתו מופיעה
-          בדוח הסיום.
+          ואינו מייצר הכנה. כל אירוע אוטומטי שהייבוא הפיק נחסם, ורשימתו המלאה
+          מופיעה בדוח הסיום — הבטחה עם רשימה מתחתיה היא היחידה שאפשר לבדוק.
         </p>
         <p>
           <strong className="text-foreground">שום שורה לא נמחקת בשקט.</strong>{' '}
-          התנגשות בין שתי הזמנות היא עובדה על העסק שלך, לא תקלה בקובץ. היא
-          מוצגת עם שני הצדדים ומחכה להחלטה שלך.
+          התנגשות בין שתי הזמנות היא עובדה על העסק שלכם, לא תקלה בקובץ. היא
+          מוצגת עם שני הצדדים וממתינה להחלטה שלכם, ושורה שלא הוכרעה פשוט לא
+          תיובא.
         </p>
       </section>
 
-      <MigrationWizard
-        actions={{ dryRun: dryRunMigrationAction, apply: applyMigrationAction }}
-        mayApply={holdsGrant(actor, MIGRATION_APPLY)}
-        missingGrants={missing.map(
-          (grant) => WRITE_GRANT_LABEL[grant] ?? grant,
-        )}
+      <NoImportsYet
+        action={
+          <Link
+            href={STEP_PATH.upload}
+            className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[0.9375rem] font-medium text-primary-foreground shadow-soft hover:bg-primary/90"
+          >
+            להתחיל: בחירת קובץ
+          </Link>
+        }
       />
+
+      <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
+        <h2 className="font-display text-base font-bold text-foreground">
+          מה יקרה, בשמונה שלבים
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          חמשת הראשונים אינם כותבים דבר, וארבעת הראשונים אפילו לא שולחים את
+          הקובץ לשום מקום. אפשר לעצור בכל אחד מהם.
+        </p>
+        <ol className="flex flex-col gap-2">
+          {MIGRATION_STEPS.map((step, index) => (
+            <li key={step} className="flex gap-3">
+              <span
+                aria-hidden="true"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground"
+              >
+                {index + 1}
+              </span>
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-foreground">
+                  {STEP_TITLE[step]}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {STEP_LEAD[step]}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
     </div>
   )
 }

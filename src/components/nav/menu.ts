@@ -781,6 +781,9 @@ export const MENU: readonly MenuSectionDefinition[] = [
       // Bringing another system's history in. Gated on `migration.view`, which
       // reads the dry run; running the import needs `migration.apply`, and the
       // screen shows that difference rather than offering a button that fails.
+      // No `offersUpgrade`, and no entitlement behind it. Moving your own
+      // history into the product cannot be a paid feature: a customer who can
+      // be blocked from importing is a customer who never becomes one.
       {
         id: 'migration',
         label: 'ייבוא ממערכת אחרת',

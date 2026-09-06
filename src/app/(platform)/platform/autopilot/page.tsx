@@ -30,7 +30,7 @@ import {
 } from '@/lib/platform/autopilot'
 import { createClient } from '@/lib/supabase/server'
 
-import { requirePlatformGrant } from '../_lib/guard'
+import { requirePlatformGrant } from '../../_lib/guard'
 import {
   ACTION_OUTCOME_LABEL,
   actionKindLabel,
@@ -290,7 +290,7 @@ function OrganizationLink({
 }) {
   return (
     <Link
-      href={`/autopilot/${organization.id}`}
+      href={`/platform/autopilot/${organization.id}`}
       className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {organization.name}
@@ -531,7 +531,7 @@ function IncidentsSection({
               </td>
               <td className="px-4 py-3">
                 <Link
-                  href={`/autopilot/${incident.organizationId}`}
+                  href={`/platform/autopilot/${incident.organizationId}`}
                   dir="ltr"
                   className="text-primary underline-offset-4 hover:underline"
                 >

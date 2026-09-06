@@ -209,3 +209,13 @@ export type {
 } from './repository'
 
 export { defineAgentOperations, type AgentOperations } from './operations'
+
+export {
+  defineAgentCommands,
+  type AgentCommandDeps,
+  type AgentCommands,
+  type AgentReminderInput,
+  type OpportunityInput,
+  type PreparedAgentReminder,
+  type PreparedOpportunity,
+} from './commands'

@@ -25,7 +25,7 @@ import {
 } from '@/lib/platform/autopilot'
 import { createClient } from '@/lib/supabase/server'
 
-import { requirePlatformGrant } from '../../_lib/guard'
+import { requirePlatformGrant } from '../../../_lib/guard'
 import {
   CapabilityControl,
   CapabilityControlUnavailable,
@@ -145,7 +145,7 @@ export default async function AutopilotOrganizationPage({
       lede={organization.slug}
       actions={
         <Link
-          href="/autopilot"
+          href="/platform/autopilot"
           className="text-sm text-primary underline-offset-4 hover:underline"
         >
           חזרה לכל הלקוחות

@@ -21,6 +21,7 @@ import type { Grant } from '../../authz/permissions'
 import type { Entitlement } from '../../plans/entitlements'
 import { InMemoryIdempotencyStore, defineOperation, s } from '../../service'
 import { AUTOPILOT_ACTIONS } from '../actions'
+import { REVERSALS } from './undo'
 import type { PlannedAction } from '../types'
 
 import {
@@ -96,21 +97,37 @@ describe('the bindings', () => {
     }
   })
 
-  it('leaves nothing bound to an action kind that does not exist', () => {
-    const kinds = Object.values(AUTOPILOT_ACTIONS)
-    const named = new Set(
-      kinds.map((spec) => spec.command).filter((command) => command !== null),
-    )
+  it('leaves nothing bound that neither an action nor a reversal names', () => {
+    // Two legitimate sources. An action's own `command`, and a REVERSAL —
+    // `tasks.cancelTask` is only ever reached as the undo for task.create and
+    // is not something anybody plans, so requiring it to be an action's
+    // command would have kept the undo path dead to satisfy a test.
+    const named = new Set<string>([
+      ...Object.values(AUTOPILOT_ACTIONS)
+        .map((spec) => spec.command)
+        .filter((command): command is string => command !== null),
+      ...Object.values(REVERSALS).map((reversal) => reversal.command),
+    ])
     for (const command of Object.keys(COMMAND_BINDINGS)) {
       expect(named.has(command)).toBe(true)
     }
   })
 
-  it('withholds holds.releaseExpired on purpose', () => {
-    // hold.release exists and would run. It releases ANY hold, and the
-    // safe_internal level is claimed from the hold having already expired.
-    expect(COMMAND_BINDINGS['holds.releaseExpired'].operation).toBeNull()
-    expect(unavailableCommands()).toContain('holds.releaseExpired')
+  it('binds holds.releaseExpired only now that the precondition is asserted', () => {
+    // hold.release exists and would run, and it releases ANY hold — the
+    // safe_internal rating rests entirely on the hold having already expired,
+    // which nothing verified. That is why this stayed unbound.
+    //
+    // src/lib/booking/holds-commands now asserts it: assertHoldHasExpired
+    // refuses not_expired, already_released, already_converted and
+    // expiry_unreadable, with the clock injected. The binding is to that
+    // command and must never be moved to the bare hold.release.
+    expect(COMMAND_BINDINGS['holds.releaseExpired']?.operation).toBe(
+      'hold.release_expired',
+    )
+    expect(COMMAND_BINDINGS['holds.releaseExpired']?.operation).not.toBe(
+      'hold.release',
+    )
   })
 })
 
@@ -119,11 +136,11 @@ describe('the bindings', () => {
 describe('resolution', () => {
   it('refuses a command with no operation, in a sentence a person can read', () => {
     const registry = createCommandRegistry()
-    const resolution = registry.resolve('messaging.sendGuestMessage')
+    const resolution = registry.resolve('access.issueCode')
 
     expect(resolution.status).toBe('unavailable')
     if (resolution.status === 'unavailable') {
-      expect(resolution.detail).toContain('messaging.sendGuestMessage')
+      expect(resolution.detail).toContain('access.issueCode')
       expect(resolution.detail).toContain('אינה ממומשת')
     }
   })
@@ -146,10 +163,10 @@ describe('resolution', () => {
     // Wiring a handler must not be a way to smuggle in a callable that is not
     // an operation: the binding table decides, not the caller.
     const registry = createCommandRegistry({
-      'tasks.createTask': async () => ({ sneaked: true }),
+      'access.issueCode': async () => ({ sneaked: true }),
     })
 
-    expect(registry.resolve('tasks.createTask').status).toBe('unavailable')
+    expect(registry.resolve('access.issueCode').status).toBe('unavailable')
   })
 })
 
