@@ -127,6 +127,13 @@ export const PERMISSIONS = [
   // should retry a failed document is not thereby somebody who may raise a tax
   // invoice.
   'fiscal.resolve',
+  // Bringing another system's history in. Separate from 'integration.manage'
+  // because connecting an account and importing three years of somebody
+  // else's bookings are not the same act: the second one writes into the
+  // calendar, the guest list and the financial history at once, and getting it
+  // wrong is not undone by disconnecting anything.
+  'migration.view',
+  'migration.apply',
   'report.financial.view',
   'report.financial.export',
 

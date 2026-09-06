@@ -600,6 +600,12 @@ const TABLES: DemoTables = {
   channel_sync_runs: [],
   channel_exceptions: [],
 
+  // 0052 · the import factory
+  import_sessions: [],
+  import_records: [],
+  import_conflicts: [],
+  import_field_mappings: [],
+
   // The permission catalogue. Empty for the same reason `role_permissions` is:
   // every role in this demo is `is_system`, and a system role's grants come
   // from the catalogue in code rather than from a table.

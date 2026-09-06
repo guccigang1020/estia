@@ -435,6 +435,10 @@ const COMPOSED_ROLE_GRANTS: Record<ComposedRole, readonly Grant[]> = {
     'fiscal.resolve',
     'guest_book.view',
     'guest_book.manage',
+    // Moving a business onto ESTIA is a general manager's job, and it happens
+    // roughly once.
+    'migration.view',
+    'migration.apply',
     'booking.override_price',
     'booking.override_availability',
     'booking.export',

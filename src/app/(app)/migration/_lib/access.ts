@@ -46,10 +46,10 @@ import type { Grant } from '@/lib/authz/permissions'
 import { requireGrant } from '../../_lib/guard'
 
 /** Stand-in for `migration.view` / `migration.run`. See the header. */
-export const MIGRATION_VIEW: Grant = 'integration.manage'
+export const MIGRATION_VIEW: Grant = 'migration.view'
 
 /** Stand-in for `migration.apply`. See the header. */
-export const MIGRATION_APPLY: Grant = 'integration.manage'
+export const MIGRATION_APPLY: Grant = 'migration.apply'
 
 /** The grants each record's write will be refused without. */
 export const WRITE_GRANTS: readonly Grant[] = [

@@ -1148,8 +1148,8 @@ describe('administrator', () => {
    * specification asked for ten `store.*` grants; six of them already existed
    * as `product.*` and `order.*` and were reused rather than renamed.
    */
-  it('holds exactly 164 grants', () => {
-    expect(grantsForSystemRole('administrator')).toHaveLength(164)
+  it('holds exactly 166 grants', () => {
+    expect(grantsForSystemRole('administrator')).toHaveLength(166)
   })
 })
 
@@ -1181,7 +1181,7 @@ describe('organization_owner', () => {
   })
 
   it('holds exactly 157 grants — every non-platform permission and every field permission', () => {
-    expect(grantsForSystemRole('organization_owner')).toHaveLength(168)
+    expect(grantsForSystemRole('organization_owner')).toHaveLength(170)
   })
 
   it('holds the agent network, because running the sellers is the owner’s business', () => {
