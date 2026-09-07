@@ -13,14 +13,21 @@
  *
  * ── THE ONE SENTENCE THIS SCREEN MUST NOT LET SOMEBODY BELIEVE ────────────
  *
- * That anything happened.
+ * That a row here means something happened.
  *
- * Nothing does. `(app)/_lib/events.ts` subscribes the evaluation half and only
- * that half; the code that would perform is behind a per-organization switch a
- * named person turns on, and there is no handler behind any of the eight action
- * kinds anyway. So the header says it in full before the first row, the badge
- * for the strongest outcome reads "היה מבקש לפעול" rather than "פעל", and the
- * action list under each row is introduced as what WOULD have been done.
+ * It never does, whatever the organization has consented to. These rows are
+ * `automation_runs` as the EVALUATION half wrote them — what each rule decided
+ * — and the performing half stamps `performed_at` on the same row rather than
+ * writing a new one. This panel does not read that column, so every word on it
+ * is about a decision.
+ *
+ * So the header says it in full before the first row, the badge for the
+ * strongest outcome reads "היה מבקש לפעול" rather than "פעל", and the action
+ * list under each row is introduced as what WOULD have been done. The header
+ * also states the two gates in the order a person meets them: consent, then a
+ * handler for every action — because after consent a rule with one unhandled
+ * action is refused whole, and somebody watching one rule work and another do
+ * nothing needs to know why.
  *
  * A screen that let a row imply an engine would be the one dishonest thing in a
  * module built entirely around telling a zero from a silence.
@@ -106,13 +113,14 @@ export function DecisionsPanel({
         {/* The absence, in full, before the first row. */}
         <p className="rounded-lg border border-border-strong bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">
           <span className="font-semibold">
-            הכללים מכריעים, ועדיין לא פועלים.
+            הרישום הזה הוא החלטות, לא ביצוע.
           </span>{' '}
-          המערכת רושמת מה כל כלל החליט על כל אירוע, ואינה מבצעת דבר: לא נשלחו
-          הודעות, לא נפתחו משימות ולא הופקו חשבוניות. הביצוע בפועל דורש אישור
-          נפרד של אדם בשם מלא לכל ארגון, והוא כבוי בכל הארגונים.{' '}
-          <span className="font-semibold">״היה מבקש לפעול״</span> פירושו שהכלל
-          דלוק והתנאים שלו התקיימו — לא שמשהו קרה, וגם לא שההרשאה לפעולה נבדקה.
+          ביצוע בפועל דורש אישור נפרד של אדם בשם מלא לכל ארגון. בלעדיו נרשמת
+          ההחלטה בלבד: לא נשלחת הודעה, לא נפתחת משימה ולא מופקת חשבונית. גם אחרי
+          אישור, פעולה שאין לה מבצע במערכת דוחה את הכלל כולו — ולא מבצעת את
+          חציו. <span className="font-semibold">״היה מבקש לפעול״</span> פירושו
+          שהכלל דלוק והתנאים שלו התקיימו — לא שמשהו קרה, וגם לא שההרשאה לפעולה
+          נבדקה.
         </p>
       </header>
 

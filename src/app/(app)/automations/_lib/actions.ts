@@ -16,12 +16,14 @@
  * event stream, so an enabled rule IS evaluated against every event it listens
  * to and what it decided is written to `automation_runs` (0075).
  *
- * What still does not happen is performing. `automation/performing.ts` is
- * called by nothing, and it refuses unless a named person has consented for the
- * organization AND a handler exists for the action — the shipped registry has
- * none for any of the eight kinds. The screen states that in Hebrew above every
- * control. It is stated here as well, because whoever wonders why a rule that
- * says "on" sent nothing will read this file.
+ * Performing is REACHABLE now and is still gated.
+ * `(app)/_lib/automation-performing.ts` subscribes it after the evaluation
+ * half, and it refuses unless a named person has consented for the
+ * organization AND a handler exists for EVERY action the enabled rules need.
+ * There is one handler, `create_task`, so a rule that touches anything outside
+ * the business is refused whole rather than performed by halves. The screen
+ * states that in Hebrew above every control. It is stated here as well, because
+ * whoever wonders why a rule that says "on" sent nothing will read this file.
  *
  * ── Idempotency, and why the key comes from the caller ────────────────────
  *

@@ -122,19 +122,29 @@ const MODULE_INCLUDES = [
  * have done. `DecisionsPanel` below is that record, and it is the first thing on
  * this screen that is neither a preview nor a definition — it is what happened.
  *
- * What a switch still does not do is start anything. The half that performs is
- * `automation/performing.ts`, it is called by nothing, and it refuses before it
- * reaches the engine unless a named person has consented for the organization
- * in `automation_execution_consent` AND a handler exists for the action — and
- * `shippedActionHandlers()` is empty, so the second gate is shut for all eight
- * kinds regardless of the first.
+ * ── The half that performs is now REACHABLE, and still shut ──────────────
  *
- * So enabling a rule now means it will be EVALUATED and its decision recorded;
- * it still does not mean anything is sent. The banner below says that in
- * Hebrew, the decisions panel says it again above its first row, and the switch
- * says it a third time where the decision is actually made. A screen that let a
- * toggle imply an engine would be the one dishonest thing in a module built
- * entirely around telling a zero from a silence.
+ * `automation/performing.ts` used to be called by nothing. It is called by
+ * `(app)/_lib/automation-performing.ts` now, subscribed to the same stream
+ * after the evaluation half. That changes what is possible and not what
+ * happens: it refuses before it reaches the engine unless a named person has
+ * consented for the organization in `automation_execution_consent` AND a
+ * handler exists for EVERY action the enabled rules need.
+ *
+ * There is exactly one handler — `create_task`. So a rule that only opens a
+ * task could act for a business that consented, and every rule that touches
+ * anything outside the business is refused WHOLE rather than performed by
+ * halves. `library.ts` ships all of those off anyway; the refusal is what
+ * holds if somebody switches one on.
+ *
+ * So enabling a rule means it will be EVALUATED and its decision recorded, and
+ * — for an organization that has consented on the settings screen, which none
+ * has — it may now also open a task. It still does not mean anything is sent
+ * to a guest. The banner below says that in Hebrew, the decisions panel says it
+ * again above its first row, and the switch says it a third time where the
+ * decision is actually made. A screen that let a toggle imply an engine would
+ * be the one dishonest thing in a module built entirely around telling a zero
+ * from a silence.
  */
 export default async function AutomationsPage() {
   const [access, context] = await Promise.all([
