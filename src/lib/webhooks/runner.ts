@@ -115,11 +115,15 @@ export async function runOneDelivery(
   // Rebuilt from the stored row, not from anything live. A retry six hours
   // later must send the body the event had when it happened — re-deriving it
   // would deliver today's answer under yesterday's event.
+  // Five fields, which is exactly what `PublishedEvent` asks for and exactly
+  // what the stored row holds. The correlation id used to be passed here and
+  // was never read: `buildEnvelope` does not put it in the body, and a value
+  // faked as `''` to satisfy a type is the kind of filler that later gets
+  // mistaken for a real one.
   const envelope = buildEnvelope(delivery.id, {
     name: delivery.eventName,
     organizationId: delivery.organizationId,
     propertyId: delivery.propertyId,
-    correlationId: delivery.correlationId ?? '',
     occurredAt: delivery.createdAt,
     payload: delivery.eventPayload,
   })

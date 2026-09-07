@@ -48,6 +48,38 @@ export interface DomainEvent<T = unknown> {
   correlationId: string
   occurredAt: Date
   payload: T
+
+  /**
+   * Who caused it. Null for an event with no person behind it — a scheduled
+   * job, a sweep, an inbound webhook.
+   *
+   * ── Why this is on the envelope and not left to the subscriber ──────────
+   *
+   * A subscriber that acts on an event has to act under SOMEBODY'S authority.
+   * The automation engine asks `holdsGrant` per action — the same question a
+   * button asks — and without this field there is nobody to ask about, so the
+   * performing half could not be wired at all. Reading the session inside the
+   * subscriber instead would work today and would be wrong tomorrow: an event
+   * republished by a sweep would be attributed to whoever happened to be
+   * signed in when the sweep ran.
+   *
+   * Null is a real answer and not a hole. A subscriber that needs an actor
+   * must refuse rather than substitute one.
+   */
+  actorUserId: string | null
+
+  /**
+   * What the event is about, in the same words the audit record uses.
+   *
+   * `resourceType` is the operation's own declaration. `resourceId` is
+   * whatever the audit record asserted — which for a creation is the id that
+   * was just made, and is null only where the operation itself recorded none.
+   * Taken from the audit event rather than derived a second time, so a
+   * timeline and an event stream cannot disagree about which row they are
+   * describing.
+   */
+  resourceType: string
+  resourceId: string | null
 }
 
 export interface EventBus {

@@ -33,6 +33,9 @@ const event: DomainEvent = {
   organizationId: ORG,
   propertyId: '33333333-3333-4333-8333-333333333333',
   correlationId: 'corr-1',
+  actorUserId: 'user-1',
+  resourceType: 'booking',
+  resourceId: 'b-1',
   occurredAt: new Date('2026-09-06T12:00:00.000Z'),
   payload: { bookingId: 'b-1', totalAgorot: 120_000 },
 }

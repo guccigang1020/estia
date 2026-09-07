@@ -490,6 +490,23 @@ async function runOperation<TInput, TEntity, TResult>(
       correlationId,
       occurredAt: now,
       payload: draft.payload,
+
+      // The three fields a subscriber that ACTS needs, and every one of them
+      // taken from something this pipeline has already asserted rather than
+      // computed a second time here.
+      //
+      // `actorUserId` is the audit actor's, so "who the timeline says did it"
+      // and "whose authority a subscriber runs under" cannot drift apart.
+      // Null for `system` and `guest` actors, which is correct: a subscriber
+      // that needs a person must refuse, not substitute one.
+      actorUserId: context.auditActor.userId ?? null,
+      resourceType: definition.resourceType,
+      // The id the audit record asserted — for a creation, the one just made,
+      // which `definition.audit` names and nothing else in this function
+      // knows. Falls back to the request's for the paths that record no audit
+      // event, and to null rather than to an invented identity.
+      resourceId:
+        committed.auditEvent?.resourceId ?? request.resourceId ?? null,
     }))
 
     let eventError: unknown = null

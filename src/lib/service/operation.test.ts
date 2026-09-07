@@ -891,10 +891,62 @@ describe('domain events', () => {
         correlationId: CORRELATION,
         occurredAt: NOW,
         payload: { bookingId: 'bk-1' },
+        // The three fields a subscriber that ACTS needs. Asserted as a whole
+        // object rather than with `toMatchObject`, so a field added to the
+        // envelope has to be looked at here — the envelope is what leaves the
+        // pipeline, and something arriving in it unnoticed is how a user id
+        // ends up somewhere nobody decided to send it.
+        actorUserId: 'user-dana',
+        resourceType: 'booking',
+        resourceId: 'bk-1',
       },
     ])
     expect(outcome.events).toHaveLength(1)
     expect(outcome.eventError).toBeNull()
+  })
+
+  it('names the same person the timeline names, and null when there is none', async () => {
+    // `actorUserId` exists so a subscriber that ACTS can run under somebody's
+    // authority. Taken from the audit actor rather than from `actor.userId`,
+    // so "who the timeline says did it" and "whose grants an automation is
+    // checked against" cannot drift apart.
+    //
+    // Null for a `system` actor is the load-bearing half: a subscriber that
+    // needs a person must refuse rather than substitute one, and it can only
+    // refuse if the envelope is honest about having nobody.
+    seedBooking()
+    const services = wiring()
+
+    await updateBooking.run({
+      request: updateRequest(),
+      context: contextFor(actorWith(['booking.update']), {
+        auditActor: { type: 'system', userId: null, label: 'סריקה לילית' },
+      }),
+      services,
+    })
+
+    expect(services.events.published[0]?.actorUserId).toBeNull()
+  })
+
+  it('carries the resource the audit record asserted, never a second answer', async () => {
+    // `resourceId` is read off the audit event rather than recomputed, because
+    // for a creation the id is born in the result and only `definition.audit`
+    // knows where. Two derivations would eventually disagree, and a timeline
+    // and an event stream describing different rows is the worst kind of
+    // disagreement: both look right on their own.
+    seedBooking()
+    const services = wiring()
+
+    const outcome = await updateBooking.run({
+      request: updateRequest(),
+      context: contextFor(actorWith(['booking.update'])),
+      services,
+    })
+
+    expect(services.events.published[0]?.resourceId).toBe(
+      outcome.auditEvent?.resourceId,
+    )
+    expect(services.events.published[0]?.resourceType).toBe('booking')
   })
 
   it('does not fail the operation when a handler throws', async () => {

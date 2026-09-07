@@ -31,26 +31,36 @@
  * because RLS is bypassed inside it. This bus calls it with the CALLER'S
  * client. Nothing privileged enters a user request.
  *
- * ══ IT IS ADDITIVE, AND DELIBERATELY QUIET FOR NOW ══════════════════════════
+ * ══ IT IS ADDITIVE, AND DELIBERATELY QUIET ══════════════════════════════════
  *
- * Webhooks was the only subscriber wired here. Automations is the second, and
- * it is the EVALUATION half only: on every event it resolves which rules are on
- * for the organization, evaluates their conditions and records what each one
- * DECIDED — `automation_runs`, 0075. It performs nothing, and the code that
- * would perform is behind a per-organization switch a named human turns on
- * (`automation_execution_consent`), reached from `automation/performing.ts` and
- * called by nothing.
+ * Three subscribers, in order, and the third is the only one that can change
+ * anything outside this product.
  *
- * That split is the whole reason this is safe to wire. There is no organization
- * on this database, so nothing here can be watched working before it reaches a
- * paying customer — and a runner that acts, untested against real data, would
- * message somebody's guests on their first day. A runner that only records what
- * it would have done is useful on its own and is what makes switching the other
- * half on safe later.
+ *   · `webhooks` — the fan-out to a customer's own servers.
+ *   · `automations` — the EVALUATION half. It resolves which rules are on for
+ *     the organization, evaluates their conditions and records what each one
+ *     DECIDED (`automation_runs`, 0075). It performs nothing, ever.
+ *   · `automations:performing` — the half that acts, and it is reachable
+ *     rather than switched on. It refuses unless the organization has
+ *     consented on a screen (`automation_execution_consent`, written by a
+ *     named human), the event says who caused it, and a handler exists for
+ *     every action the enabled rules need. No organization has consented,
+ *     because there are no organizations.
+ *
+ * The split between the second and the third is the whole reason this is safe.
+ * Nothing here can be watched working before it reaches a paying customer, and
+ * a runner that acted untested against real data would message somebody's
+ * guests on their first day. So the decisions are recorded live from the start
+ * — that is the trail a person reads for a week before trusting any of it —
+ * and the acting is behind a switch they turn on once they can watch it.
+ *
+ * The order matters: the third stamps `performed_at` on the row the second
+ * writes, and `automation_run_performed` refuses a stamp with nothing to
+ * attach to.
  *
  * Notifications remains the obvious next one and is NOT turned on in the same
- * change, for the reason this header gave about starting three consumers at
- * once: it is one `subscribers` entry when its own wiring is ready.
+ * change, for the reason this header gave about starting consumers all at
+ * once: it is one `SUBSCRIBERS` entry when its own wiring is ready.
  *
  * ══ ONE SUBSCRIBER'S FAILURE IS ONLY ITS OWN ════════════════════════════════
  *
@@ -68,6 +78,8 @@
 import { recordAutomationEvaluation } from '@/lib/automation/runs'
 import type { Db } from '@/lib/persistence'
 import type { DomainEvent, EventBus } from '@/lib/service'
+
+import { performAutomations } from './automation-performing'
 
 /** One consumer of the stream. Named, so a failure can say whose it was. */
 interface Subscriber {
@@ -107,6 +119,21 @@ const SUBSCRIBERS: readonly Subscriber[] = [
     // frozen library is local.
     deliver: async (db, event) => {
       await recordAutomationEvaluation(db, event)
+    },
+  },
+  {
+    name: 'automations:performing',
+    // AFTER the entry above, and the order is load-bearing: the stamp this
+    // writes attaches to the decision row that one creates.
+    //
+    // Still performs nothing for anybody. `performAutomations` refuses unless
+    // the organization has consented on a screen, the event names who caused
+    // it, and a handler exists for every action the enabled rules need — and
+    // no organization has consented, because there are no organizations. The
+    // gates are listed in that file's header; this entry is only what makes
+    // them reachable at all.
+    deliver: async (db, event) => {
+      await performAutomations(db, event)
     },
   },
 ]

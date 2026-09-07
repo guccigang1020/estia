@@ -9,6 +9,9 @@ function event(name: DomainEvent['name']): DomainEvent {
     organizationId: 'org-1',
     propertyId: null,
     correlationId: 'req-1',
+    actorUserId: null,
+    resourceType: 'booking',
+    resourceId: null,
     occurredAt: new Date('2026-09-06T09:00:00.000Z'),
     payload: {},
   }

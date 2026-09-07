@@ -52,6 +52,27 @@ export function matches(
 }
 
 /**
+ * What a webhook needs from an event, and deliberately nothing more.
+ *
+ * ── Two reasons this is a `Pick` and not `DomainEvent` ────────────────────
+ *
+ * The envelope goes to somebody else's server. `DomainEvent` now carries
+ * `actorUserId` — an id in `auth.users` — and a function that took the whole
+ * event would be one careless spread away from sending a customer's internal
+ * user ids to a third party. The type is the guard: what is not in it cannot
+ * leave.
+ *
+ * And a retry rebuilds this from a stored `webhook_deliveries` row, which has
+ * five of these fields and none of the other three. A parameter that demanded
+ * them would force the replay path to invent an actor and a resource for an
+ * event that happened six hours ago.
+ */
+export type PublishedEvent = Pick<
+  DomainEvent,
+  'name' | 'organizationId' | 'propertyId' | 'occurredAt' | 'payload'
+>
+
+/**
  * The endpoints one event should be delivered to.
  *
  * The organization is asserted rather than assumed. Everything else in this
@@ -60,7 +81,7 @@ export function matches(
  * here even though the query that produced `endpoints` filtered already.
  */
 export function endpointsFor(
-  event: DomainEvent,
+  event: PublishedEvent,
   endpoints: readonly WebhookEndpoint[],
 ): readonly WebhookEndpoint[] {
   return endpoints.filter(
@@ -81,7 +102,7 @@ export function endpointsFor(
  */
 export function buildEnvelope(
   deliveryId: string,
-  event: DomainEvent,
+  event: PublishedEvent,
 ): WebhookEnvelope {
   return {
     id: deliveryId,
