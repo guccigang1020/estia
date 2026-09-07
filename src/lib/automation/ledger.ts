@@ -38,7 +38,7 @@
 
 import type { Db } from '../persistence/client'
 
-import type { AutomationLedger } from './engine'
+import type { AutomationLedger, RuleOutcome } from './engine'
 
 /** Everything one delivery needs, so the engine's contract is unchanged. */
 export class SupabaseAutomationLedger implements AutomationLedger {
@@ -88,6 +88,46 @@ export type PerformedOutcome =
   | 'refused_permission'
   | 'refused_plan'
   | 'skipped_duplicate'
+
+/**
+ * One rule's several actions, reduced to the one word the record keeps.
+ *
+ * ── THE WORST NEWS WINS, AND THAT IS THE WHOLE RULE ───────────────────────
+ *
+ * `automation_runs.performed_outcome` is a single value and a rule may have
+ * several actions. A rule that opened a task and failed to message the guest
+ * cannot be recorded as `executed`: a manager reading that word stops looking,
+ * and the thing that did not happen is the thing they needed to know about.
+ * So the order below is severity, not sequence.
+ *
+ * `skipped_duplicate` sits at the bottom deliberately. It is not a failure —
+ * it means an earlier delivery already did this — so it only wins when it is
+ * the whole story, and never masks an action that genuinely failed beside it.
+ *
+ * Returns `null` for a rule that never reached its actions. Those already have
+ * their answer in `decision`, and `automation_run_performed` refuses to stamp
+ * anything that did not decide `would_act` — so a caller that ignored this and
+ * stamped anyway would be refused by the database as well.
+ */
+export function performedOutcome(
+  outcome: RuleOutcome,
+): PerformedOutcome | null {
+  if (outcome.status !== 'ran') return null
+
+  const statuses = new Set(outcome.actions.map((entry) => entry.outcome.status))
+
+  if (statuses.has('failed')) return 'failed'
+  if (statuses.has('refused_permission')) return 'refused_permission'
+  if (statuses.has('refused_plan')) return 'refused_plan'
+  if (statuses.has('executed_unaudited')) return 'executed_unaudited'
+  if (statuses.has('executed')) return 'executed'
+  if (statuses.has('skipped_duplicate')) return 'skipped_duplicate'
+
+  // A rule with no actions cannot exist — `AutomationRule.actions` is a
+  // non-empty tuple — so this is unreachable rather than a default. Null
+  // rather than a guess, so an impossible state is not recorded as work.
+  return null
+}
 
 export async function recordPerformed(
   db: Db,

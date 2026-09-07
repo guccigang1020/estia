@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { FakeSupabaseClient } from '../persistence/fake-client'
 
-import { SupabaseAutomationLedger, recordPerformed } from './ledger'
+import {
+  SupabaseAutomationLedger,
+  performedOutcome,
+  recordPerformed,
+} from './ledger'
 
 const ORG = '11111111-1111-4111-8111-111111111111'
 const KEY = 'evt-7::rule-3::0::notify_team'
@@ -164,5 +168,66 @@ describe('recordPerformed', () => {
         outcome: 'executed',
       }),
     ).rejects.toMatchObject({ code: '23505' })
+  })
+})
+
+describe('performedOutcome', () => {
+  const ran = (
+    ...statuses: readonly string[]
+  ): Parameters<typeof performedOutcome>[0] => ({
+    status: 'ran',
+    actions: statuses.map((status) => ({
+      action: { kind: 'create_task' as const, note: '' },
+      key: `k-${status}`,
+      outcome: { status } as never,
+    })),
+  })
+
+  it('reports a clean run as executed', () => {
+    expect(performedOutcome(ran('executed', 'executed'))).toBe('executed')
+  })
+
+  it('lets the worst news win over a success beside it', () => {
+    // The record keeps ONE word. "executed" on a rule that opened a task and
+    // failed to message the guest stops the manager looking, and the failure
+    // is the half they needed.
+    expect(performedOutcome(ran('executed', 'failed'))).toBe('failed')
+    expect(performedOutcome(ran('executed', 'refused_permission'))).toBe(
+      'refused_permission',
+    )
+    expect(performedOutcome(ran('executed', 'refused_plan'))).toBe(
+      'refused_plan',
+    )
+  })
+
+  it('puts a failure above a refusal', () => {
+    expect(performedOutcome(ran('refused_plan', 'failed'))).toBe('failed')
+  })
+
+  it('says so when the trail did not record a real execution', () => {
+    expect(performedOutcome(ran('executed', 'executed_unaudited'))).toBe(
+      'executed_unaudited',
+    )
+  })
+
+  it('reports skipped_duplicate only when it is the whole story', () => {
+    expect(performedOutcome(ran('skipped_duplicate'))).toBe('skipped_duplicate')
+    expect(performedOutcome(ran('skipped_duplicate', 'executed'))).toBe(
+      'executed',
+    )
+    expect(performedOutcome(ran('skipped_duplicate', 'failed'))).toBe('failed')
+  })
+
+  it('has nothing to record for a rule that never reached its actions', () => {
+    // Those already have their answer in `decision`, and the database refuses
+    // to stamp anything that did not decide `would_act`.
+    expect(performedOutcome({ status: 'skipped_disabled' })).toBeNull()
+    expect(performedOutcome({ status: 'skipped_trigger' })).toBeNull()
+    expect(
+      performedOutcome({ status: 'skipped_conditions', failures: [] }),
+    ).toBeNull()
+    expect(
+      performedOutcome({ status: 'refused_plan', entitlement: 'automation' }),
+    ).toBeNull()
   })
 })
