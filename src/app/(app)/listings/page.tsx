@@ -10,6 +10,13 @@ import {
 } from '@/components/shell-screens/screen'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dial,
+  Figure,
+  Instrument,
+  InstrumentBar,
+  StatTile,
+} from '@/components/ui/metric'
+import {
   LISTING_AREA_LABEL,
   labelFor,
   whatToFixFirst,
@@ -19,6 +26,7 @@ import { createClient } from '@/lib/supabase/server'
 import { ALL_PROPERTIES, shellContext } from '../_lib/context'
 import { requireGrant } from '../_lib/guard'
 import { loadListingsScreen } from './_lib/queries'
+import { listingsShape } from './_lib/shape'
 
 export const metadata: Metadata = { title: 'איכות הליסטינג · ESTIA' }
 
@@ -37,13 +45,18 @@ export const metadata: Metadata = { title: 'איכות הליסטינג · ESTIA
  * recomputed it, and it would be confidently wrong in the one direction that
  * matters.
  *
- * WHAT IT REFUSES TO SCORE. Guest ratings, conversion and market position all
- * report `not_assessed` and weigh nothing, so they neither drag a score down
- * nor prop it up. Two of those are absent for the same reason: `review.view`
- * and `review.manage` are in the permission catalogue with no reviews table
- * behind them, and no analytics source exists. Saying so is the point — a
+ * WHAT IT REFUSES TO SCORE. Conversion and market position report
+ * `not_assessed` and weigh nothing, so they neither drag a score down nor prop
+ * it up: there is no analytics source and no market feed behind this product,
+ * and there is no honest way to invent either. Saying so is the point — a
  * report that scored what it cannot measure is decoration, and decoration is
  * what makes people stop reading reports.
+ *
+ * The guest rating used to be on that list and no longer is:
+ * `0066_guest_reviews.sql` gave it a source, and gave it one that a business
+ * cannot curate — a review there can be neither edited nor deleted by anybody.
+ * It still reports `not_assessed` with no reviews and with too few to average,
+ * because "opened last month" is not a quality failure.
  *
  * GATING. `requireGrant('property.view')` refuses the route: this is
  * information about the business's own properties, and everything it reads is
@@ -83,9 +96,79 @@ export default async function ListingsPage() {
   }
 
   const { reports, propertiesWithNoUnits } = screen
+  const shape = listingsShape(reports)
 
   return (
     <ScreenFrame title="איכות הליסטינג" lead={lead} width="prose">
+      {/*
+        A dial, because a listing score genuinely runs 0..100 — `score.ts`
+        divides earned weight by possible weight, and both sides are real.
+        `null` below is the case that matters: a business whose properties have
+        no units yet has nothing assessable, and an empty ring drawn at 0 would
+        read as "your listings are terrible" rather than "there is nothing here
+        to grade yet". `listingsShape` refuses to average that away.
+      */}
+      <InstrumentBar>
+        <Instrument>
+          <Dial
+            fraction={
+              shape.averageScore === null ? null : shape.averageScore / 100
+            }
+            label="ציון ממוצע"
+            value={
+              shape.averageScore === null ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  —
+                </span>
+              ) : (
+                shape.averageScore
+              )
+            }
+          />
+        </Instrument>
+
+        <Instrument className="flex-col items-stretch gap-1 sm:items-stretch">
+          <Figure
+            label="ליסטינגים שנבדקו"
+            value={{ known: true, display: shape.judgeable }}
+            hint="הממוצע הוא ממוצע פשוט על אלה — לכל ליסטינג משקל זהה, בלי קשר לכמה בדיקות חלו עליו."
+          />
+          <Figure
+            label="ליסטינגים שאי אפשר לשפוט"
+            value={
+              shape.blind === 0
+                ? { known: true, display: 0 }
+                : {
+                    known: false,
+                    why: `${shape.blind} — אין בהם מספיק נתונים לבדיקה, ואינם נספרים בממוצע`,
+                  }
+            }
+          />
+          <Figure
+            label="ממצאים לתיקון"
+            value={{ known: true, display: shape.findings }}
+            hint={
+              shape.withFindings > 0
+                ? `ב-${shape.withFindings} ליסטינגים.`
+                : undefined
+            }
+          />
+        </Instrument>
+
+        <Instrument>
+          <StatTile
+            tone={propertiesWithNoUnits > 0 ? 'accent' : 'quiet'}
+            className="w-44"
+            name={
+              <span className="estia-figures text-3xl font-semibold">
+                {propertiesWithNoUnits}
+              </span>
+            }
+            detail="נכסים בלי יחידה להזמין"
+          />
+        </Instrument>
+      </InstrumentBar>
+
       <Panel
         title="ליסטינגים"
         count={reports.length}
@@ -167,20 +250,14 @@ export default async function ListingsPage() {
 
       <Panel title="מה המסך הזה לא יודע לבדוק">
         <PanelNote>
-          <strong>דירוגי אורחים</strong> — ההרשאות{' '}
-          <span dir="ltr" className="font-mono text-xs">
-            review.view
-          </span>{' '}
-          ו־
-          <span dir="ltr" className="font-mono text-xs">
-            review.manage
-          </span>{' '}
-          קיימות בקטלוג ואין להן טבלה. <strong>שיעור המרה</strong> — אין מקור
-          אנליטיקה. <strong>מיקום מול השוק</strong> — אין נתוני שוק.
+          <strong>שיעור המרה</strong> — אין מקור אנליטיקה.{' '}
+          <strong>מיקום מול השוק</strong> — אין נתוני שוק.
         </PanelNote>
         <PanelNote>
-          שלושתם מדווחים כ״לא ניתן למדוד״ ומשקלם אפס, כדי שלא יורידו ציון ולא
-          יעלו אותו. ספירת התמונות נשענת על{' '}
+          שניהם מדווחים כ״לא ניתן למדוד״ ומשקלם אפס, כדי שלא יורידו ציון ולא
+          יעלו אותו. <strong>דירוג האורחים</strong> כן נמדד היום — ממסך
+          הביקורות, שבו אי אפשר לערוך ביקורת ואי אפשר למחוק אותה. ספירת התמונות
+          נשענת על{' '}
           <span dir="ltr" className="font-mono text-xs">
             site_media
           </span>{' '}

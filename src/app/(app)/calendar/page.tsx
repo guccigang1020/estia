@@ -17,6 +17,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dial,
+  Figure,
+  Instrument,
+  InstrumentBar,
+  StatTile,
+} from '@/components/ui/metric'
 import { resolveEmptyReason } from '@/components/states/empty-presets'
 import { addDays, localDate } from '@/lib/booking/dates'
 import { shabbatDatesBetween } from '@/lib/hebrew-calendar'
@@ -31,6 +38,7 @@ import {
   type UnitMonth,
 } from './_lib/availability'
 import { loadCalendarUnits } from './_lib/inventory'
+import { monthShape, occupancyPercent } from './_lib/month-shape'
 import {
   buildMonthDays,
   hebrewMonthSpan,
@@ -63,9 +71,14 @@ export const metadata: Metadata = { title: 'יומן' }
  * not the server's clock, because at 22:30 UTC it is already tomorrow in Israel
  * and a calendar that opened on yesterday would be wrong for two hours a day.
  *
- * NO NUMBER HERE WAS INVENTED. There is no occupancy percentage, no revenue
- * figure and no "X nights sold": nothing in the domain produces them yet, and a
- * fabricated one is a number somebody eventually repeats to their accountant.
+ * NO NUMBER HERE WAS INVENTED. The instrument row above the grid counts the
+ * cells of the grid itself — `monthShape` — and every figure in it can be
+ * checked by pointing at the month underneath and counting. There is still no
+ * revenue figure and no "X nights sold", because nothing on this page produces
+ * them: a fabricated one is a number somebody eventually repeats to their
+ * accountant. The occupancy shown is *of the visible month and the visible
+ * units*, said in those words on screen; `/revenue` owns the business-wide
+ * figure, over a different denominator, on purpose.
  */
 export default async function CalendarPage({
   searchParams,
@@ -234,9 +247,88 @@ function CalendarBody({
   }
 
   const present = statesPresent(rows)
+  const shape = monthShape(rows)
+  const percent = occupancyPercent(shape.occupancy)
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+        Counted from the cells below, and about them only.
+        `monthShape` argues the scope at length: this is the visible month and
+        the visible units, never the business. `/revenue` owns the figure a
+        person quotes to their accountant, and its denominator is a different
+        one on purpose.
+
+        The dial is here rather than a percentage in text because a month is
+        one of the few things in this product with a denominator you can point
+        at — every night in the ring is a cell on the grid underneath it.
+      */}
+      <InstrumentBar>
+        <Instrument>
+          <Dial
+            fraction={shape.occupancy}
+            label="תפוסה בחודש הזה"
+            value={
+              percent === null ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  —
+                </span>
+              ) : (
+                <>
+                  {percent}
+                  <span className="text-sm font-light text-muted-foreground">
+                    %
+                  </span>
+                </>
+              )
+            }
+          />
+        </Instrument>
+
+        <Instrument className="flex-col items-stretch gap-1 sm:items-stretch">
+          <Figure
+            label="לילות תפוסים"
+            value={{ known: true, display: shape.occupied }}
+            hint="מוזמן או מוחזק — כלומר לא פתוח למכירה. לא ״נמכר״: יחידה שאינך רואה את היומן שלה מציגה את השניים כמצב אחד."
+          />
+          <Figure
+            label="לילות שאפשר עוד למכור"
+            value={{ known: true, display: shape.free }}
+          />
+          <Figure
+            label="לילות בהחזקה"
+            value={
+              shape.held.known
+                ? { known: true, display: shape.held.count }
+                : {
+                    known: false,
+                    why: 'חלק מהיחידות בתצוגה אינן חושפות החזקה בנפרד מהזמנה',
+                  }
+            }
+          />
+        </Instrument>
+
+        <Instrument>
+          <StatTile
+            tone={shape.blocked > 0 ? 'accent' : 'quiet'}
+            className="w-44"
+            name={
+              <span className="estia-figures text-3xl font-semibold">
+                {shape.blocked}
+              </span>
+            }
+            detail="לילות חסומים — אינם במכנה"
+          />
+        </Instrument>
+      </InstrumentBar>
+
+      <p className="text-xs text-muted-foreground">
+        המספרים למעלה נספרים מהטבלה שמתחת בלבד — {shape.units}{' '}
+        {shape.units === 1 ? 'יחידה' : 'יחידות'} בתצוגה, {shape.cells} לילות
+        בחודש הזה. זו אינה התפוסה של העסק: הנתון הזה נמצא במסך ההכנסות, ומחושב
+        על מלאי פעיל ועל טווח אחר.
+      </p>
+
       <MonthGrid
         caption={`זמינות היחידות לחודש ${monthLabel(month)}, שורה לכל יחידה ועמודה לכל לילה.`}
         days={days.map((day) => ({

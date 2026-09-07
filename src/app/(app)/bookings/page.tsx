@@ -6,6 +6,7 @@ import { BookingFiltersBar } from '@/components/booking/booking-filters'
 import { BookingTable } from '@/components/booking/booking-table'
 import { ModuleEmptyState } from '@/components/states/empty-state'
 import { Button } from '@/components/ui/button'
+import { StatTile } from '@/components/ui/metric'
 import { resolveEmptyReason } from '@/components/states/empty-presets'
 import { can } from '@/lib/authz/can'
 import { toSafeResponse } from '@/lib/errors'
@@ -16,7 +17,9 @@ import { shellContext } from '../_lib/context'
 import {
   BOOKING_PAGE_SIZE,
   countBookings,
+  countBookingsNeedingAttention,
   listBookings,
+  type BookingAttention,
   type BookingListItem,
 } from './_lib/queries'
 import {
@@ -88,6 +91,14 @@ export default async function BookingsPage({
 
   let bookings: readonly BookingListItem[] = []
   let total = 0
+  /**
+   * Null when the read failed, and the tiles are then not rendered at all.
+   *
+   * Deliberately not zeroes: three tiles reading 0 on a screen whose count
+   * query failed says "nothing needs your attention", which is the one thing
+   * this row must never say when it does not know.
+   */
+  let attention: BookingAttention | null = null
   let failure: ReturnType<typeof toSafeResponse> | null = null
 
   try {
@@ -95,7 +106,7 @@ export default async function BookingsPage({
     // A reversed window matches nothing by definition, so the query is not
     // run for it — the message below is the answer, and an empty list would
     // have looked like a business with no bookings.
-    ;[bookings, total] = await Promise.all([
+    ;[bookings, total, attention] = await Promise.all([
       dateIssue === null
         ? listBookings(db, {
             organizationId: actor.organizationId,
@@ -104,6 +115,7 @@ export default async function BookingsPage({
           })
         : Promise.resolve([]),
       countBookings(db, actor.organizationId, propertyId),
+      countBookingsNeedingAttention(db, actor.organizationId, propertyId),
     ])
   } catch (cause) {
     failure = toSafeResponse(cause, crypto.randomUUID())
@@ -134,6 +146,51 @@ export default async function BookingsPage({
             without it regardless — see `createBookingAction`. */}
         {mayCreate && <Button href="/bookings/new">הזמנה חדשה</Button>}
       </header>
+
+      {/*
+        Counted across the whole organization, NOT across the visible page —
+        see `countBookingsNeedingAttention`. A manager narrowed to August
+        would otherwise read "1 awaiting payment" and act on it while four
+        more sat outside the filter.
+
+        Three tiles and not nineteen: `booking_status` has nineteen members
+        and a tile per member is a wall nobody reads. These are the three
+        where a stay stops moving until a person does something.
+      */}
+      {attention && (
+        <section
+          className="grid grid-cols-3 gap-3"
+          aria-label="הזמנות שממתינות לפעולה, בכל הארגון"
+        >
+          <StatTile
+            tone={attention.awaitingPayment > 0 ? 'primary' : 'quiet'}
+            name={
+              <span className="estia-figures text-3xl font-semibold">
+                {attention.awaitingPayment}
+              </span>
+            }
+            detail="ממתינות לתשלום"
+          />
+          <StatTile
+            tone={attention.contractPending > 0 ? 'accent' : 'quiet'}
+            name={
+              <span className="estia-figures text-3xl font-semibold">
+                {attention.contractPending}
+              </span>
+            }
+            detail="חוזה לא נחתם"
+          />
+          <StatTile
+            tone="quiet"
+            name={
+              <span className="estia-figures text-3xl font-semibold">
+                {attention.noShow}
+              </span>
+            }
+            detail="לא הגיעו"
+          />
+        </section>
+      )}
 
       <BookingFiltersBar filters={filters} dateIssue={dateIssue} />
 

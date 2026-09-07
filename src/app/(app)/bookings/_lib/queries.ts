@@ -323,3 +323,62 @@ export async function listBookableUnits(
     depositAgorot: asAgorot(row, 'deposit_agorot'),
   }))
 }
+
+/* ------------------------------------------------------- what needs doing -- */
+
+/**
+ * The three states on this screen that mean somebody has to act, counted
+ * across the WHOLE organization rather than across the visible page.
+ *
+ * ══ WHY IT IS NOT DERIVED FROM THE ROWS ALREADY LOADED ══════════════════════
+ *
+ * The obvious implementation is to count the statuses in `bookings` — the list
+ * this screen already has — and it would be wrong in the one direction that
+ * matters. That list is filtered and paged. A manager who has narrowed to
+ * August would read "1 awaiting payment" and act on it while four more sat
+ * outside the filter, and the number would be confidently, invisibly low.
+ *
+ * So it is its own query, ignoring the filters on purpose, and the screen says
+ * that these are organization-wide.
+ *
+ * ══ WHY THESE THREE AND NOT A FULL BREAKDOWN ════════════════════════════════
+ *
+ * `booking_status` has nineteen members and a tile per member is a wall
+ * nobody reads. These are the three where a stay stops moving until a person
+ * does something: money is owed, a contract is unsigned, a guest did not
+ * arrive. Everything else is either in motion or finished.
+ */
+export type BookingAttention = {
+  readonly awaitingPayment: number
+  readonly contractPending: number
+  readonly noShow: number
+}
+
+export async function countBookingsNeedingAttention(
+  db: Db,
+  organizationId: string,
+  propertyId: string | null,
+): Promise<BookingAttention> {
+  async function countOf(status: string): Promise<number> {
+    let query = db
+      .from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('status', status)
+      .is('deleted_at', null)
+
+    if (propertyId !== null) query = query.eq('property_id', propertyId)
+
+    const { count, error } = await query
+    if (error) throw error
+    return count ?? 0
+  }
+
+  const [awaitingPayment, contractPending, noShow] = await Promise.all([
+    countOf('awaiting_payment'),
+    countOf('contract_pending'),
+    countOf('no_show'),
+  ])
+
+  return { awaitingPayment, contractPending, noShow }
+}
