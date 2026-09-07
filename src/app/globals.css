@@ -11,100 +11,170 @@
    each customer's public website swap to a supplied brand style by replacing
    one block of raw values — without touching a single component.
 
+   ── DUSK ──────────────────────────────────────────────────────────────────
+
+   The product is dark, and this is a commitment rather than a preference for
+   dark mode. A guesthouse owner opens this at the hour the house turns over:
+   departures done, arrivals due, the light going. The photograph of their own
+   property is the loudest thing on the dashboard, and a warm ivory ground
+   fights every photograph placed on it — a dark one carries all of them.
+
+   THERE IS DELIBERATELY NO LIGHT THEME. Not an omission: a second palette
+   that nobody designed against is how a product ends up with one theme that
+   works and one that merely renders. The architecture below makes adding one
+   a single block of raw values on `prefers-color-scheme: light` the day
+   somebody designs it — most likely for daylight outdoor use, which is the
+   real argument for it.
+
    Structure
    ---------
-   1. RAW TOKENS   `--estia-*` on :root. Actual values. Light theme.
+   1. RAW TOKENS   `--estia-*` on :root. Actual values.
    2. THEME MAP    `@theme inline` binds raw tokens to Tailwind namespaces,
                    which is what generates the utility classes.
-   3. DARK THEME   `prefers-color-scheme: dark` REDEFINES the raw tokens only.
-                   Nothing in the theme map or in any component changes, so
-                   there are no `dark:` variants scattered through the UI.
 
    Semantic roles (use the role, not the hue)
    ------------------------------------------
    background / foreground     the page ground and its primary ink
    surface                     raised panels: cards, header
+   surface-raised              a panel sitting on a panel
    muted / muted-foreground    recessed fills and secondary ink
    border / border-strong      hairline separators / control outlines (>= 3:1)
-   primary                     the brand green. Actions, emphasis.
+   primary                     the interactive hue. Actions, active nav, focus.
    accent                      the warm gold. Highlights and badges.
                                `accent` is a FILL (pair with accent-foreground);
                                `accent-strong` is the INK version for gold text.
    success / warning / danger  state colours
+   series-1..4                 chart series, distinguishable from one another
+                               AND from the state colours, so a bar is never
+                               mistaken for a warning
 
    Contrast
    --------
    Every pair below was measured against WCAG 2.1: text pairs meet AA
-   (>= 4.5:1) or better in BOTH themes, and border-strong / ring meet the 3:1
-   non-text requirement. Measured ratios are noted inline. If you change a
-   value, re-measure — do not eyeball it.
+   (>= 4.5:1) or better, and border-strong / ring meet the 3:1 non-text
+   requirement. Measured ratios are noted inline. If you change a value,
+   re-measure — do not eyeball it.
    ============================================================================ */
 
 /* ---------------------------------------------------------------- 1. RAW --- */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
   /* -- Ground & ink ------------------------------------------------------- */
-  --estia-background: #faf8f3; /* warm ivory, not clinical white           */
-  --estia-surface: #ffffff;
-  --estia-surface-raised: #ffffff;
-  --estia-muted: #f1eee6;
-  --estia-foreground: #0c1e16; /* 16.31:1 on background — AAA              */
-  --estia-muted-foreground: #55665d; /*  5.74:1 on background — AA         */
+  /* Violet-biased near-black, not neutral grey. A pure grey reads as
+     unconsidered; the bias is what makes the primary hue below look chosen
+     rather than dropped on. */
+  --estia-background: #1a181f;
+  --estia-surface: #211f27;
+  --estia-surface-raised: #26242d;
+  --estia-muted: #26242d;
+  --estia-foreground: #f4f2f7; /* 15.62:1 on background — AAA               */
+  --estia-muted-foreground: #b9b3c6; /*  8.85:1 on background — AAA         */
 
   /* -- Lines -------------------------------------------------------------- */
-  --estia-border: #e4e0d5; /* decorative hairline                          */
-  --estia-border-strong: #8c8778; /*  3.38:1 on background — AA non-text    */
+  --estia-border: #2b2833; /* decorative hairline                           */
+  --estia-border-strong: #6f6885; /*  3.36:1 on background — AA non-text     */
 
-  /* -- Brand: deep green -------------------------------------------------- */
-  --estia-primary: #0e5138; /*  8.78:1 on background — AAA                  */
-  --estia-primary-foreground: #ffffff; /*  9.32:1 on primary — AAA          */
-  --estia-primary-soft: #e6efe9; /* tinted fill for quiet brand surfaces    */
+  /* -- Brand: the interactive violet -------------------------------------- */
+  /* THE ONE IDENTITY DECISION IN THIS FILE. The product's mark was a deep
+     forest green; dusk moves the interactive hue to violet, which is what
+     carries the active nav, the dials and the primary bars in the approved
+     design. Gold stays, and green survives as `success`. Reverting is these
+     four lines and nothing else — that is the whole point of the layer. */
+  --estia-primary: #a78bfa; /*  6.72:1 on background — AA                    */
+  --estia-primary-foreground: #1a1030; /*  6.41:1 on primary — AA           */
+  --estia-primary-soft: #2a2440; /* tinted fill for quiet brand surfaces     */
 
   /* -- Brand: warm gold --------------------------------------------------- */
-  --estia-accent: #c8912a; /* fill only                                     */
-  --estia-accent-foreground: #1a1206; /*  6.65:1 on accent — AA            */
-  --estia-accent-strong: #8a5a0f; /*  5.57:1 on background — AA (gold ink)  */
-  --estia-accent-soft: #f8efdc;
+  --estia-accent: #f0a848; /* fill only                                      */
+  --estia-accent-foreground: #2a1a05; /*  8.94:1 on accent — AAA            */
+  --estia-accent-strong: #f0b866; /*  9.04:1 on background — AAA (gold ink)  */
+  --estia-accent-soft: #2f2313;
 
   /* -- State -------------------------------------------------------------- */
-  --estia-success: #136b4a; /*  6.50:1 on surface — AA                      */
-  --estia-warning: #8f4c0b; /*  6.55:1 on surface — AA                      */
-  --estia-danger: #a32320; /*  7.45:1 on surface — AAA                      */
+  --estia-success: #2dd4a7; /*  9.81:1 on background — AAA                   */
+  --estia-warning: #f0a848; /*  8.02:1 on background — AAA                   */
+  --estia-danger: #fb7185; /*  6.21:1 on background — AA                     */
+
+  /* -- Chart series ------------------------------------------------------- */
+  /* Four hues that stay apart from each other AND from the state colours
+     above. Before this existed every chart picked its own literals, which is
+     how one screen's "good" ended up the same green as another's series. */
+  --estia-series-1: #a78bfa;
+  --estia-series-2: #2dd4a7;
+  --estia-series-3: #f472b6;
+  --estia-series-4: #60a5fa;
 
   /* -- Focus -------------------------------------------------------------- */
-  --estia-ring: #0e5138; /*  8.78:1 on background — well past 3:1           */
+  --estia-ring: #a78bfa; /*  6.72:1 on background — well past 3:1            */
 
   /* -- Elevation ---------------------------------------------------------- */
+  /* Two shadows and a hairline of light along the top edge. On a dark ground
+     a drop shadow alone does almost nothing; the inset highlight is what
+     actually separates a card from what is behind it. */
   --estia-shadow-soft:
-    0 1px 2px rgb(12 30 22 / 0.05), 0 6px 20px -12px rgb(12 30 22 / 0.16);
+    inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4),
+    0 8px 24px -14px rgb(0 0 0 / 0.7);
   --estia-shadow-lift:
-    0 2px 4px rgb(12 30 22 / 0.06), 0 18px 44px -20px rgb(12 30 22 / 0.26);
+    inset 0 1px 0 rgb(255 255 255 / 0.05), 0 2px 6px rgb(0 0 0 / 0.45),
+    0 30px 60px -24px rgb(0 0 0 / 0.85);
+
+  /* -- Gradients ---------------------------------------------------------- */
+  /* The loud surfaces. Everything else in the product stays quiet so that
+     these four can carry the eye — spending the boldness in one place. */
+  --estia-grad-primary: linear-gradient(
+    135deg,
+    #8b5cf6 0%,
+    #6366f1 55%,
+    #4f83f1 100%
+  );
+  --estia-grad-success: linear-gradient(
+    135deg,
+    #2dd4a7 0%,
+    #14b8a6 52%,
+    #0e9488 100%
+  );
+  --estia-grad-accent: linear-gradient(
+    135deg,
+    #f472b6 0%,
+    #ec4899 48%,
+    #c084fc 100%
+  );
+  --estia-grad-quiet: linear-gradient(135deg, #2a2833 0%, #232029 100%);
 
   /* -- Type --------------------------------------------------------------- */
   /* Wired to next/font in src/app/layout.tsx. Hebrew-capable fallbacks are
-     listed first so a font failure degrades to a Hebrew face, not a Latin one. */
+     listed first so a font failure degrades to a Hebrew face, not a Latin one.
+
+     `display` is now the same family as `sans`, at a heavier weight. The
+     serif was doing the opposite of what this interface needs: a dashboard is
+     scanned, and a serif headline in a dense dark UI reads as an article
+     about the data rather than as the data. It stays defined so the public
+     WEBSITE — which is read, not operated — can point it back at a serif. */
   --estia-font-sans:
     var(--font-heebo), 'Segoe UI', Arial, system-ui, sans-serif;
   --estia-font-display:
-    var(--font-frank-ruhl-libre), 'Frank Ruhl Libre', Georgia, serif;
+    var(--font-heebo), 'Segoe UI', Arial, system-ui, sans-serif;
 
   /* -- Geometry ----------------------------------------------------------- */
-  --estia-radius-xs: 0.375rem;
-  --estia-radius-sm: 0.5rem;
-  --estia-radius-md: 0.75rem;
+  /* Rounder than before, across the board. The reference language this was
+     drawn from is built on generous radii, and a 0.375rem corner beside a
+     1.75rem card is what makes an interface look assembled from two kits. */
+  --estia-radius-xs: 0.5rem;
+  --estia-radius-sm: 0.625rem;
+  --estia-radius-md: 0.875rem;
   --estia-radius-lg: 1rem;
-  --estia-radius-xl: 1.375rem;
+  --estia-radius-xl: 1.25rem;
   --estia-radius-2xl: 1.75rem;
 
   /* -- Layout measures ---------------------------------------------------- */
-  --estia-shell: 76rem; /* max content width                                */
-  --estia-prose: 40rem; /* max comfortable reading measure                  */
+  --estia-shell: 78rem; /* max content width                                 */
+  --estia-prose: 40rem; /* max comfortable reading measure                   */
 }
 
 /* ------------------------------------------------------------- 2. THEME --- */
 /* `inline` makes utilities emit `var(--estia-*)` directly, which is what lets
-   the dark block below re-theme the whole product by changing raw values. */
+   a future theme re-skin the whole product by changing raw values. */
 @theme inline {
   --color-background: var(--estia-background);
   --color-foreground: var(--estia-foreground);
@@ -130,6 +200,11 @@
   --color-warning: var(--estia-warning);
   --color-danger: var(--estia-danger);
 
+  --color-series-1: var(--estia-series-1);
+  --color-series-2: var(--estia-series-2);
+  --color-series-3: var(--estia-series-3);
+  --color-series-4: var(--estia-series-4);
+
   --font-sans: var(--estia-font-sans);
   --font-display: var(--estia-font-display);
 
@@ -147,45 +222,7 @@
   --container-prose: var(--estia-prose);
 }
 
-/* -------------------------------------------------------------- 3. DARK --- */
-/* Only raw values are redefined. No colour is restated anywhere else. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --estia-background: #07140f; /* deep green ground                       */
-    --estia-surface: #0e1f18;
-    --estia-surface-raised: #16291f;
-    --estia-muted: #16291f;
-    --estia-foreground: #eaf1ec; /* 16.39:1 on background — AAA             */
-    --estia-muted-foreground: #a0b3a8; /*  8.52:1 on background — AAA      */
-
-    --estia-border: #1f3529;
-    --estia-border-strong: #527260; /*  3.53:1 on background — AA non-text  */
-
-    --estia-primary: #34d19a; /*  9.62:1 on background — AAA                */
-    --estia-primary-foreground: #04150e; /*  9.59:1 on primary — AAA        */
-    --estia-primary-soft: #102b20;
-
-    --estia-accent: #f2c879;
-    --estia-accent-foreground: #1f1503; /* 11.41:1 on accent — AAA         */
-    --estia-accent-strong: #f2c879; /* 11.93:1 on background — AAA          */
-    --estia-accent-soft: #2a2010;
-
-    --estia-success: #4ade9e;
-    --estia-warning: #f0b44e;
-    --estia-danger: #ff8a80;
-
-    --estia-ring: #34d19a;
-
-    --estia-shadow-soft:
-      0 1px 2px rgb(0 0 0 / 0.5), 0 6px 20px -12px rgb(0 0 0 / 0.7);
-    --estia-shadow-lift:
-      0 2px 4px rgb(0 0 0 / 0.55), 0 18px 44px -20px rgb(0 0 0 / 0.85);
-  }
-}
-
-/* --------------------------------------------------------------- 4. BASE -- */
+/* --------------------------------------------------------------- 3. BASE -- */
 @layer base {
   /* Tailwind v4 defaults border-color to currentColor; anchor it to the token
      so an un-suffixed `border` is always the themed hairline. */
@@ -218,6 +255,70 @@
   ::selection {
     background-color: var(--color-primary);
     color: var(--color-primary-foreground);
+  }
+}
+
+/* -------------------------------------------------------- 4. UTILITIES ---- */
+/* The few things the token layer cannot express as a colour. Each is used by
+   more than one screen; anything used once belongs in that screen's own file. */
+@layer utilities {
+  /* The ambient field the shell floats on. Two soft violet masses cropped by
+     the viewport rather than one centred blob, which is what stops it reading
+     as a stock gradient background. */
+  .estia-stage {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(
+        60rem 40rem at 88% -10%,
+        rgb(164 138 212 / 0.22),
+        transparent 62%
+      ),
+      radial-gradient(
+        46rem 34rem at 4% 106%,
+        rgb(139 92 246 / 0.16),
+        transparent 60%
+      ),
+      var(--color-background);
+  }
+
+  .estia-grad-primary {
+    background-image: var(--estia-grad-primary);
+  }
+  .estia-grad-success {
+    background-image: var(--estia-grad-success);
+  }
+  .estia-grad-accent {
+    background-image: var(--estia-grad-accent);
+  }
+  .estia-grad-quiet {
+    background-image: var(--estia-grad-quiet);
+  }
+
+  /* A photograph supplied by the customer sits under text. This is the veil
+     that keeps the text legible whatever they upload — a bright midday
+     picture would otherwise erase every label placed over it. Used by the
+     dashboard hero and by every property card that carries a cover image. */
+  .estia-photo-veil {
+    background:
+      linear-gradient(
+        to top,
+        rgb(12 10 16 / 0.86) 0%,
+        rgb(12 10 16 / 0.14) 46%,
+        transparent 70%
+      ),
+      radial-gradient(
+        120% 90% at 50% 40%,
+        transparent 52%,
+        rgb(12 10 16 / 0.45) 100%
+      );
+  }
+
+  /* Digits that line up in a column. Reached for often enough in a product
+     full of money and counts that it belongs here rather than being
+     remembered per screen. */
+  .estia-figures {
+    font-variant-numeric: tabular-nums;
   }
 }
 

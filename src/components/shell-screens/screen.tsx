@@ -95,7 +95,7 @@ export function Panel({
     // document outline the headings below imply is not there.
     <section
       className={cn(
-        'flex flex-col rounded-xl border border-border bg-surface p-6 shadow-soft sm:p-7',
+        'flex flex-col rounded-2xl border border-border bg-surface p-6 shadow-lift sm:p-7',
         className,
       )}
       {...props}

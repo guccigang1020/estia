@@ -20,7 +20,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'flex flex-col rounded-xl border p-6 sm:p-7',
+        'flex flex-col rounded-2xl border p-6 sm:p-7',
         TONE[tone],
         className,
       )}

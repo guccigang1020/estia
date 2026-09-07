@@ -26,8 +26,18 @@ const BASE =
   'disabled:pointer-events-none disabled:opacity-50'
 
 const VARIANT: Record<ButtonVariant, string> = {
+  /**
+   * The gradient, not a flat fill, and it is the product's signature surface.
+   *
+   * `estia-grad-primary` is a token in globals.css rather than a literal here,
+   * so the same three stops carry the primary button, the enabled tiles and
+   * the dials — three places that would otherwise drift apart. The gradient
+   * paints over `bg-primary`, which stays as the fallback ink relationship
+   * the contrast measurement was made against.
+   */
   primary:
-    'bg-primary text-primary-foreground shadow-soft hover:bg-primary/90 active:bg-primary/80',
+    'estia-grad-primary bg-primary text-primary-foreground shadow-soft ' +
+    'hover:brightness-110 active:brightness-95',
   secondary:
     'border border-border-strong bg-surface text-foreground hover:bg-muted active:bg-muted',
   ghost: 'text-foreground hover:bg-muted active:bg-muted',
@@ -38,9 +48,12 @@ const VARIANT: Record<ButtonVariant, string> = {
    * `bg-primary` and the winner would be decided by stylesheet order. See the
    * note in `cn.ts`.
    *
-   * The ink is `surface`, not a hardcoded white, because `danger` inverts
-   * between themes. Measured: #ffffff on #a32320 is 7.45:1 (light) and
-   * #0e1f18 on #ff8a80 is 7.91:1 (dark) — AAA in both.
+   * The ink is `surface`, not a hardcoded white, so it follows the token when
+   * the palette moves — which it just did. Re-measured against the dusk
+   * values rather than left claiming the old ones: #211f27 on #fb7185 is
+   * 5.79:1 — AA. It is deliberately NOT a gradient: `primary` owns that
+   * surface, and an irreversible action that looked like the ordinary one
+   * would be the wrong kind of consistency.
    */
   danger:
     'bg-danger text-surface shadow-soft hover:bg-danger/90 active:bg-danger/80',
