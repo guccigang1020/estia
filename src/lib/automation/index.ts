@@ -101,16 +101,16 @@ export {
 } from './state'
 
 /**
- * The repository, the operations, the runs and the performing half are NOT
- * re-exported here.
+ * The repository, the operations, the runs, the ledger and the performing half
+ * are NOT re-exported here.
  *
  * This barrel is imported by pure modules and by client components — the rule
  * cards read `AUTOMATION_ACTIONS` and `READINESS_LABEL` from it — and those
- * files all run on a server: `repository.ts` and `runs.ts` take a Supabase
- * client, `operations.ts` reaches the authorization engine and the audit
- * pipeline, and `performing.ts` is the door to acting on somebody's business.
- * Re-exporting them would put a database client in the import graph of a
- * component that renders in a browser.
+ * files all run on a server: `repository.ts`, `runs.ts` and `ledger.ts` take a
+ * Supabase client, `operations.ts` reaches the authorization engine and the
+ * audit pipeline, and `performing.ts` is the door to acting on somebody's
+ * business. Re-exporting them would put a database client in the import graph
+ * of a component that renders in a browser.
  *
  * `performing.ts` is kept out for a second reason as well. It is the half that
  * is deliberately switched off, and a barrel is how a module becomes easy to

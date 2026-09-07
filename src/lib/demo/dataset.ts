@@ -718,6 +718,14 @@ const TABLES: DemoTables = {
   automation_runs: [],
   automation_execution_consent: [],
 
+  // 0078 · the durable claim, one row per automation action actually
+  // performed. Empty for the strongest reason on this list: a seeded claim
+  // says an automation DID something to a guest, and nothing in this demo
+  // ever did. It would also be self-defeating — the claim is what stops the
+  // action running, so a seeded one would silently suppress the very rule a
+  // demonstration was trying to show.
+  automation_ledger: [],
+
   // 0067 · which automation rules this business switched on. Empty, and that
   // is the product default: the library ships every rule OFF, and a demo
   // showing rules already enabled would show a state no new customer starts

@@ -45,17 +45,32 @@
  * in one place, which of them are missing — and it is what a screen renders
  * instead of a switch that looks live.
  *
- * ══ WHAT IS STILL MISSING BEYOND THE HANDLERS ═══════════════════════════════
+ * ══ THE DURABLE LEDGER — WAS MISSING, NOW EXISTS ════════════════════════════
  *
- * A DURABLE LEDGER. `AutomationLedger` is injected and the only implementation
- * in this codebase is `InMemoryAutomationLedger`, which is atomic because
- * JavaScript is single-threaded and for no other reason. Two application
- * instances behind a load balancer would each keep their own idea of which keys
- * are taken, and the failure that produces — "we sent the guest two payment
- * links" — is precisely what the ledger exists to prevent. So this module takes
- * a ledger rather than choosing one, and a durable implementation is part of
- * what must exist before the first gate is opened. Said here rather than
- * discovered later.
+ * This header used to end by naming a gap: `AutomationLedger` was injected and
+ * the only implementation was `InMemoryAutomationLedger`, which is atomic
+ * because JavaScript is single-threaded and for no other reason. Two
+ * application instances behind a load balancer would each have kept their own
+ * idea of which keys were taken, and the failure that produces — "we sent the
+ * guest two payment links" — is precisely what the ledger exists to prevent.
+ *
+ * `SupabaseAutomationLedger` in `ledger.ts` closes it, over
+ * `public.automation_ledger` from 0078. The claim is one
+ * `insert … on conflict do nothing` and the primary key decides it, so two
+ * concurrent deliveries cannot both perform however many instances are running.
+ *
+ * This module still TAKES a ledger rather than choosing one, and that is not
+ * leftover indirection: every test in `performing.test.ts` and `engine.test.ts`
+ * runs against the in-memory one, and a module that reached for a database
+ * client itself could not be tested without a database.
+ *
+ * ══ WHAT IS STILL MISSING ═══════════════════════════════════════════════════
+ *
+ * The handlers, and only the handlers. `shippedActionHandlers()` returns an
+ * empty registry, `executionReadiness` reports every unhandled action as a
+ * blocker with its name, and a rule whose action has no handler is refused
+ * rather than reported done. That gap is closed one action at a time, by the
+ * module that owns the concept — not here.
  */
 
 import { holdsGrant, type Actor } from '../authz/can'
@@ -214,7 +229,10 @@ export interface PerformEvaluatedEventInput {
   actor: Actor
   consent: AutomationExecutionConsent | null
   registry: ActionHandlerRegistry
-  /** Injected, and there is no durable implementation yet. See the header. */
+  /**
+   * Injected so the tests can run without a database. The durable one is
+   * `SupabaseAutomationLedger` in `ledger.ts`; see the header.
+   */
   ledger: AutomationLedger
   audit: AuditWriter
   requestId: string
