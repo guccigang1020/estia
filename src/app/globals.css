@@ -73,7 +73,17 @@
 
   /* -- Lines -------------------------------------------------------------- */
   --estia-border: #2b2833; /* decorative hairline                           */
-  --estia-border-strong: #6f6885; /*  3.36:1 on background — AA non-text     */
+  /* Control outlines: text inputs, checkboxes, quiet buttons.
+     MEASURED AGAINST THE LIGHTEST GROUND A CONTROL SITS ON, not against the
+     page. The first value here was #6f6885, measured at 3.36:1 against
+     `background` — but an input sits on `surface`, and against that it was
+     3.06:1. Technically passing, and on screen the field boundary was almost
+     invisible: somebody could not see where to click. The token file's own
+     instruction is to re-measure rather than eyeball, and this is what
+     happens when the re-measurement uses the wrong ground.
+       4.25:1 on background · 4.01:1 on surface-raised — AA non-text, twice
+     over, on every surface a control is drawn on. */
+  --estia-border-strong: #8b8398;
 
   /* -- Brand: the interactive violet -------------------------------------- */
   /* THE ONE IDENTITY DECISION IN THIS FILE. The product's mark was a deep

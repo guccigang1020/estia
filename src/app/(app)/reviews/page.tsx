@@ -10,6 +10,13 @@ import {
 } from '@/components/shell-screens/screen'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dial,
+  Figure,
+  Instrument,
+  InstrumentBar,
+  StatTile,
+} from '@/components/ui/metric'
+import {
   DIMENSION_LABEL,
   MIN_REVIEWS_TO_AVERAGE,
   REVIEW_DIMENSIONS,
@@ -99,6 +106,57 @@ export default async function ReviewsPage() {
 
   return (
     <ScreenFrame title="ביקורות" lead={lead} width="prose">
+      {/*
+        A dial, because a rating out of five is one of the few figures in this
+        product with a denominator that is genuinely fixed. `null` below the
+        threshold rather than a small arc: two five-star reviews would draw a
+        full ring, and a full ring is read as "excellent" rather than as
+        "nobody has said much yet" — which is the whole argument
+        `MIN_REVIEWS_TO_AVERAGE` exists to make.
+      */}
+      <InstrumentBar>
+        <Instrument>
+          <Dial
+            tone="accent"
+            fraction={summary.average === null ? null : summary.average / 5}
+            label="מתוך 5"
+            value={
+              summary.average === null ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  —
+                </span>
+              ) : (
+                summary.average
+              )
+            }
+          />
+        </Instrument>
+
+        <Instrument className="flex-col items-stretch gap-1 sm:items-stretch">
+          <Figure
+            label="ביקורות שנספרות"
+            value={{ known: true, display: summary.counted }}
+          />
+          <Figure
+            label="ממתינות לתשובה"
+            value={{ known: true, display: summary.awaitingReply }}
+          />
+        </Instrument>
+
+        <Instrument>
+          <StatTile
+            tone={summary.hidden > 0 ? 'accent' : 'quiet'}
+            className="w-40"
+            name={
+              <span className="estia-figures text-3xl font-semibold">
+                {summary.hidden}
+              </span>
+            }
+            detail="מוסתרות — אינן בממוצע"
+          />
+        </Instrument>
+      </InstrumentBar>
+
       <Panel title="הממוצע">
         <RowList>
           <Row>

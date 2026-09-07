@@ -9,7 +9,12 @@ import {
   RowList,
   ScreenFrame,
 } from '@/components/shell-screens/screen'
-import { Figure as SharedFigure } from '@/components/ui/metric'
+import {
+  Dial,
+  Figure as SharedFigure,
+  Instrument,
+  InstrumentBar,
+} from '@/components/ui/metric'
 import {
   METRIC_LABEL,
   METRIC_NOTE,
@@ -126,6 +131,80 @@ export default async function RevenuePage({
           ))}
         </div>
       </Panel>
+
+      {/*
+        The instrument row. Two dials and the money between them — and the
+        dials are here rather than on the dashboard because these are the two
+        figures in the product that HAVE a real denominator: occupancy divides
+        by bookable unit-nights, and the cancellation rate divides by the
+        bookings that were actually decided. A dial without a denominator is a
+        decoration shaped like a measurement.
+
+        `null` when the measure is unknown, never 0. `Dial` draws the track
+        and no value for null, so "nobody counted the units" cannot be read as
+        "nothing was sold" — which is the distinction `metrics.ts` spends its
+        whole `no_denominator` branch protecting.
+      */}
+      <InstrumentBar>
+        <Instrument>
+          <Dial
+            fraction={
+              report.occupancy.known ? report.occupancy.value / 100 : null
+            }
+            label={METRIC_LABEL.occupancy}
+            value={
+              report.occupancy.known ? (
+                <>
+                  {report.occupancy.value}
+                  <span className="text-sm font-light text-muted-foreground">
+                    %
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm font-normal text-muted-foreground">
+                  —
+                </span>
+              )
+            }
+          />
+        </Instrument>
+
+        <Instrument className="flex-col items-stretch gap-1 sm:items-stretch">
+          <Figure label={METRIC_LABEL.adr} measure={report.adrAgorot} money />
+          <Figure
+            label={METRIC_LABEL.revpar}
+            measure={report.revparAgorot}
+            money
+          />
+        </Instrument>
+
+        <Instrument>
+          <Dial
+            tone="accent"
+            sweep={0.75}
+            fraction={
+              report.cancellationRate.known
+                ? report.cancellationRate.value / 100
+                : null
+            }
+            label={METRIC_LABEL.cancellation}
+            value={
+              report.cancellationRate.known ? (
+                <>
+                  {report.cancellationRate.value}
+                  <span className="text-sm font-light text-muted-foreground">
+                    %
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm font-normal text-muted-foreground">
+                  —
+                </span>
+              )
+            }
+          />
+        </Instrument>
+      </InstrumentBar>
 
       <Panel title="השורה התחתונה">
         <RowList>
