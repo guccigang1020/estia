@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-import { shellContext } from '../../../_lib/context'
+import { shellContext, type PropertyOption } from '../../../_lib/context'
 import { requireGrant } from '../../../_lib/guard'
 
 export const metadata: Metadata = { title: 'הוצאה חדשה' }
@@ -51,7 +51,7 @@ export default async function NewExpensePage() {
   // option: picking "" from a list is not a choice anybody can make on purpose.
   const properties: ExpenseProperty[] = context.properties
     .filter(
-      (property): property is { id: string; name: string } =>
+      (property): property is PropertyOption & { name: string } =>
         typeof property.name === 'string' && property.name.length > 0,
     )
     .map((property) => ({ id: property.id, name: property.name }))

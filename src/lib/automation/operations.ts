@@ -23,15 +23,19 @@
  *
  * ── WHAT ENABLING DOES TODAY, SAID PLAINLY ────────────────────────────────
  *
- * It records the decision. It does not start anything: nothing in this
- * deployment feeds `runAutomations` a live event — `(app)/_lib/events.ts`
- * publishes to webhooks and says in its own header that automations are one
- * subscribers entry away and deliberately not turned on — and no performer
- * exists for any of the eight action kinds. So an enabled rule is intent that
- * a runner will read on its first day, and the screen says exactly that in
- * Hebrew rather than letting a switch imply an engine. Storing the intent is
- * still worth doing and it is worth doing first: the alternative is a runner
- * that arrives and has no idea which rules a business wanted.
+ * It records the decision, and the decision is now READ. `(app)/_lib/events.ts`
+ * subscribes automations to the domain event stream, so an enabled rule is
+ * resolved against every event it listens to and what it decided is written to
+ * `automation_runs` (0075). That is the difference between an intention and a
+ * running rule, and it happened here.
+ *
+ * It still does not start anything. Nothing performs: `automation/performing.ts`
+ * is the door to acting, it is called by nothing, and it refuses unless a named
+ * person has consented for the organization in `automation_execution_consent`
+ * AND a handler exists for the action — and the shipped registry is empty, so
+ * all eight kinds are unimplemented regardless of the consent. So an enabled
+ * rule is evaluated, recorded and visible, and sends nothing. The screen says
+ * exactly that in Hebrew rather than letting a switch imply an engine.
  *
  * ── The scope is a decision the caller makes, not one inferred ────────────
  *

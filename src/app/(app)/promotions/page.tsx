@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { ActionError } from '@/components/booking/action-error'
 import { PlanLock } from '@/components/distribution/plan-lock'
@@ -31,18 +32,26 @@ export const metadata: Metadata = { title: 'מבצעים ותמחור' }
  * EXECUTION CONTEXT — SERVER COMPONENT. The rules that decide what money moves,
  * and what has actually been given away.
  *
- * ══ THE HONEST STATEMENT THIS SCREEN LEADS WITH ══════════════════════════
+ * ══ THE STATEMENT THIS SCREEN USED TO LEAD WITH, AND WHAT REPLACED IT ═════
  *
- * There is no promotions catalogue in ESTIA. `promotion` is a member of
- * `PRICE_LINE_KINDS` — a line on a booking — and no table stores a campaign, a
- * rate plan or a pricing calendar. `pricing.manage` is in the permission
- * catalogue and `dynamic_pricing` is an entitlement, and the engine behind them
- * is not built.
+ * This header said, until `0073_promotions_and_coupons.sql`, that there is no
+ * promotions catalogue in ESTIA: that `promotion` is a member of
+ * `PRICE_LINE_KINDS` — a line on a booking — and that no table stores a
+ * campaign. That was true, and drawing campaign cards over it would have been
+ * the worst kind of screen: a business planning a season around
+ * "last-minute · midweek · early bird" tiles that apply to nothing, finding out
+ * when the bookings came in at full price.
  *
- * Drawing campaign cards over that would be the worst kind of screen: a
- * business would plan a season around "last-minute · midweek · early bird" tiles
- * that apply to nothing, and would find out when the bookings came in at full
- * price. So the screen says what exists, and shows it.
+ * 0073 adds `promotions`, `coupons` and `discount_redemptions`, and the
+ * catalogue now lives at `/promotions/campaigns`. **This screen did not become
+ * that one**, for the reason set out in that page's header: this is a REPORT —
+ * what has already been given away and under which sellers' terms — and that is
+ * CONFIGURATION. They are gated on different grants and answer questions in
+ * different tenses, and a screen that is half report and half form is one where
+ * the number beside a button means something the button will not change.
+ *
+ * So the statement below changed from "there is no catalogue" to "the catalogue
+ * is over there", and everything else on this screen is untouched.
  *
  * WHAT EXISTS, AND IS SHOWN.
  *
@@ -127,14 +136,23 @@ export default async function PromotionsPage() {
         </p>
       </header>
 
-      {/* The honest statement, on the screen and not only in the code. */}
+      {/* The honest statement, on the screen and not only in the code. It
+          changed with 0073: the catalogue exists now, and it is somewhere
+          else. What this screen shows is unchanged — what was given, not what
+          is offered. */}
       <p className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
         <span className="font-semibold text-foreground">
-          אין עדיין קטלוג מבצעים במערכת.
+          המסך הזה מראה מה כבר ניתן, לא מה מוצע.
         </span>{' '}
-        מבצע היום הוא שורת הנחה שמישהו רשם על הזמנה — לא קמפיין שהמערכת מפעילה
-        לפי תאריכים או תפוסה. מה שכן קיים כמנוע כללים הוא כללי העמלה של הסוכנים
-        ותקרות ההנחה שלהם, והם מוצגים כאן כפי שהם.
+        כללי העמלה של הסוכנים, תקרות ההנחה שלהם, וההנחות שנרשמו בפועל על הזמנות.
+        הגדרת קמפיינים וקופונים — מי זכאי, כמה, וכמה פעמים — נמצאת{' '}
+        <Link
+          href="/promotions/campaigns"
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          בקטלוג המבצעים
+        </Link>
+        .
       </p>
 
       {failure ? (

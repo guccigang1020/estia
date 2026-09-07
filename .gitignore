@@ -58,3 +58,4 @@ supabase/.temp/
 # sees a second full copy of src/ and reports its findings twice. Ignored in
 # each of them for the same reason, and here so one is never committed.
 .claude/worktrees/
+.next-verify/

@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 
 import { ActionError } from '@/components/booking/action-error'
 import { BookingStatusBadge } from '@/components/booking/status-badge'
-import { DomainGap, GrantCode } from '@/components/shell-screens/domain-gap'
+import { EnquiryStatusControl } from '@/components/leads/enquiry-status'
+import { GrantCode } from '@/components/shell-screens/domain-gap'
 import {
   Panel,
   PanelNote,
@@ -17,6 +18,11 @@ import { holdsGrant } from '@/lib/authz/can'
 import { formatDayMonth, localDate } from '@/lib/booking/dates'
 import { BOOKING_STATUS_LABEL } from '@/lib/booking/state-machine'
 import { toSafeResponse } from '@/lib/errors'
+import {
+  LEAD_LOST_REASON_LABEL,
+  LEAD_SOURCE_LABEL,
+  LEAD_STATUS_LABEL,
+} from '@/lib/leads'
 import { formatAgorot } from '@/lib/plans/plan'
 import { createClient } from '@/lib/supabase/server'
 
@@ -24,8 +30,15 @@ import { ALL_PROPERTIES, shellContext } from '../_lib/context'
 import { requireGrant } from '../_lib/guard'
 import { BOOKING_SOURCE_LABEL, HOLD_REASON_LABEL } from './_lib/labels'
 import {
+  ENQUIRY_PAGE_SIZE,
+  byLeadStage,
+  convertedBookingIds,
+  listEnquiries,
+  seesUnassignedEnquiries,
+  type Enquiry,
+} from './_lib/enquiries'
+import {
   LEAD_PAGE_SIZE,
-  PIPELINE_ORDER,
   attachHolds,
   byStage,
   listLeads,
@@ -40,32 +53,37 @@ export const metadata: Metadata = { title: 'צנרת מכירות' }
 /**
  * EXECUTION CONTEXT — SERVER COMPONENT. The sales pipeline.
  *
- * WHAT IS ON THIS SCREEN, AND WHAT IT IS READ FROM. Bookings in the four
- * statuses before a sale is committed — `inquiry`, `quote`, `option`,
- * `awaiting_payment` — grouped by stage in the enum's own order, plus the holds
- * that are keeping inventory off sale while somebody closes.
+ * ══ THERE ARE TWO LISTS HERE AND THEY COUNT TWO DIFFERENT THINGS ════════════
  *
- * THERE IS NO `leads` TABLE. The grants exist and the storage does not, and
- * that is stated on the screen rather than mocked. `_lib/queries.ts` sets out
- * the argument in full: `BOOKING_STATUSES` is the life of a stay from enquiry
- * onward, so a lead here genuinely *is* a booking that has not been committed
- * to, and the honest screen is the one that says which statuses it is treating
- * as the pipeline. What that costs is written down too — an enquiry with no
- * dates and no unit cannot be recorded at all, and `lead.assign` has no column
- * to write.
+ * **פניות** are rows in `public.leads` — an enquiry, with no stay behind it.
+ * Nothing is held, nothing is priced, and the unit may not have been chosen.
+ * That is the table `0074_leads_and_guest_merges.sql` created, and the reason
+ * it had to exist is that `bookings` requires a unit and two dates, so
+ * "somebody rang about August" could not be written down at all.
  *
- * GATING. `requireGrant('lead.view')` refuses the route. The rows come from
- * `bookings` and `holds`, so each read asks `holdsGrant` for its own grant, and
- * every row is checked again with `can()` against its property. The guest's
- * name and their written request are withheld without `guest.view_name`, the
- * price without `booking.view_price`.
+ * **הזמנות שנפתחו** are bookings in `inquiry`/`quote`/`option`/`awaiting_payment`
+ * — a stay being opened. A unit and dates exist; the money has not settled.
+ * `_lib/queries.ts` has read these since before `leads` existed and still does.
  *
- * NO CONVERSION RATE. `conversion_rate` is a metric with a definition in
- * `src/lib/metrics`, a grant of its own and a screen of its own at
- * `/reports/operations`. A second figure computed here would be a second
- * answer to the same question, which is the defect the metrics module opens by
- * describing. The numbers beside the stage headings are the lengths of the
- * lists underneath them.
+ * 🔒 **Nothing appears in both.** A booking named by any `leads.booking_id` is
+ * removed from the second list: it is shown as that enquiry's outcome, once.
+ * The old rows were deliberately NOT migrated into `leads` — inventing an
+ * enquiry nobody recorded, and then counting the stay twice, is exactly the
+ * failure this de-duplication exists to prevent. `src/lib/revenue/stays.ts`
+ * keeps the same three statuses out of occupancy for the same reason, and
+ * nothing here restates its list.
+ *
+ * GATING. `requireGrant('lead.view')` refuses the route. The enquiries come
+ * from `leads`, which has its own policies; the second list comes from
+ * `bookings` and `holds`, which have theirs, so each read asks `holdsGrant` for
+ * its own grant first and every row is checked again with `can()`. The
+ * enquirer's name and their words are withheld without `guest.view_name`, the
+ * telephone without `guest.view_phone`, the address without `guest.view_email`.
+ *
+ * NO CONVERSION RATE. `lead_conversion` is a metric with a definition, a grant
+ * and a screen of its own. A second figure computed here would be a second
+ * answer to the same question. The numbers beside the headings are the lengths
+ * of the lists underneath them.
  */
 export default async function LeadsPage() {
   const [actor, context] = await Promise.all([
@@ -73,8 +91,6 @@ export default async function LeadsPage() {
     shellContext(),
   ])
 
-  // `requireGrant` redirects when the context is not ready, so this is
-  // narrowing for the type system rather than a second decision.
   if (!context || context.status !== 'ready') return null
 
   const propertyId =
@@ -97,16 +113,32 @@ export default async function LeadsPage() {
     today,
   }
 
-  const [leads, holds] = await Promise.all([
+  const [enquiries, converted, leads, holds] = await Promise.all([
+    settle(() => listEnquiries({ ...args })),
+    settle(() => convertedBookingIds(db, actor.organizationId)),
     settle(() => listLeads(args)),
     settle(() => listLiveHolds(args)),
   ])
 
-  const rows =
+  const stages = byLeadStage(enquiries.ok ? enquiries.value : [])
+
+  const bookingRows =
     leads.ok && leads.value
-      ? attachHolds(leads.value, holds.ok ? holds.value : null)
+      ? attachHolds(
+          // The de-duplication. A booking that is an enquiry's outcome belongs
+          // to that enquiry, and showing it again here would put one person's
+          // business in the pipeline twice.
+          leads.value.filter(
+            (lead) =>
+              !(converted.ok ? converted.value : new Set()).has(lead.id),
+          ),
+          holds.ok ? holds.value : null,
+        )
       : []
-  const stages = byStage(rows)
+  const bookingStages = byStage(bookingRows)
+
+  const mayCreate = holdsGrant(actor, 'lead.create')
+  const mayUpdate = holdsGrant(actor, 'lead.update')
 
   return (
     <ScreenFrame
@@ -116,117 +148,121 @@ export default async function LeadsPage() {
           ? `כל מה שנמכר עכשיו ב״${propertyName}״ ועדיין לא נסגר.`
           : 'כל מה שנמכר עכשיו ועדיין לא נסגר, בכל הנכסים שבטווח שלך.'
       }
-      banner={
-        <DomainGap
-          title="אין טבלת לידים נפרדת — והצנרת עצמה אמיתית"
-          body={
-            <>
-              <p>
-                בקטלוג ההרשאות יש <GrantCode>lead.view</GrantCode>,{' '}
-                <GrantCode>lead.create</GrantCode>,{' '}
-                <GrantCode>lead.update</GrantCode> ו־
-                <GrantCode>lead.assign</GrantCode>, אבל אף מיגרציה אינה יוצרת
-                טבלת לידים. זה לא חסם: מסלול החיים של הזמנה מתחיל ב״פנייה״ ועובר
-                דרך ״הצעת מחיר״ ו״אופציה״, ולכן ליד כאן הוא הזמנה שעוד לא נסגרה
-                — עם האורח, התאריכים, המחיר, המקור והסוכן שהביא אותה.
-              </p>
-              <p className="mt-2">
-                מה שחסר בגלל זה, במדויק: אי אפשר לרשום פנייה בלי תאריכים ובלי
-                יחידה, כי{' '}
-                <span dir="ltr" className="font-mono text-xs">
-                  bookings
-                </span>{' '}
-                דורשת את שלושתם; ואי אפשר להקצות ליד לאיש מכירות, כי אין עמודה
-                לכתוב אליה. מה שמוצג במקום זה הוא מי מכר ומי הזין — שתי עובדות
-                אמיתיות ושונות זו מזו.
-              </p>
-            </>
-          }
-          missingTables={['leads', 'lead_activities', 'quotes']}
-          alreadyBuilt={[
-            <>
-              ההרשאות <GrantCode>lead.view</GrantCode> ·{' '}
-              <GrantCode>lead.create</GrantCode> ·{' '}
-              <GrantCode>lead.update</GrantCode> ·{' '}
-              <GrantCode>lead.assign</GrantCode>
-            </>,
-            <>
-              ארבעת מצבי ההזמנה שלפני הסגירה, בסדר שהם נעבדים בו:{' '}
-              {PIPELINE_ORDER.map(
-                (status) => BOOKING_STATUS_LABEL[status],
-              ).join(' · ')}
-            </>,
-            <>
-              שיוך מלא על ההזמנה:{' '}
-              <span dir="ltr" className="font-mono text-xs">
-                source
-              </span>
-              ,{' '}
-              <span dir="ltr" className="font-mono text-xs">
-                source_channel
-              </span>
-              ,{' '}
-              <span dir="ltr" className="font-mono text-xs">
-                agent_user_id
-              </span>
-              ,{' '}
-              <span dir="ltr" className="font-mono text-xs">
-                agency_id
-              </span>
-            </>,
-            <>
-              טבלת{' '}
-              <span dir="ltr" className="font-mono text-xs">
-                holds
-              </span>
-              , שמחזיקה תאריכים בזמן שסוגרים מכירה
-            </>,
-          ]}
-        />
-      }
     >
-      {!leads.ok && <ActionError error={leads.error} />}
-
-      {leads.ok && leads.value === null && (
-        <PanelNote tone="attention">
-          יש לך הרשאת לידים אך לא הרשאת צפייה בהזמנות. הצנרת מאוחסנת כהזמנות,
-          ולכן אין מה להציג לך כאן — זו הרשאה חסרה ולא צנרת ריקה. נדרשת{' '}
-          <GrantCode>booking.view</GrantCode>.
-        </PanelNote>
-      )}
-
-      {leads.ok && leads.value !== null && rows.length === 0 && (
-        <PanelNote>
-          אין כרגע אף פנייה, הצעת מחיר, אופציה או הזמנה שממתינה לתשלום בטווח
-          שלך. זו תשובה אמיתית ולא סינון שהסתיר משהו.
-        </PanelNote>
-      )}
-
-      {stages
-        .filter((stage) => stage.leads.length > 0)
-        .map((stage) => (
-          <Panel
-            key={stage.status}
-            title={BOOKING_STATUS_LABEL[stage.status]}
-            count={stage.leads.length}
-            description={STAGE_DESCRIPTION[stage.status]}
-          >
-            <RowList>
-              {stage.leads.map((lead) => (
-                <LeadRow key={lead.id} lead={lead} />
+      {/* ------------------------------------------------------ enquiries -- */}
+      <Panel
+        title="פניות"
+        count={enquiries.ok ? enquiries.value.length : undefined}
+        description="מישהו שאל ועדיין אין הזמנה. פנייה יכולה להיות בלי תאריכים, בלי יחידה ובלי מחיר — זה בדיוק המקרה שנופל בין הכיסאות."
+        action={
+          mayCreate ? (
+            <Button href="/leads/new" size="sm">
+              פנייה חדשה
+            </Button>
+          ) : undefined
+        }
+      >
+        {!enquiries.ok ? (
+          <ActionError error={enquiries.error} />
+        ) : enquiries.value.length === 0 ? (
+          <PanelNote>
+            אין פניות פתוחות. כל מי שפנה — טופל. זו תשובה אמיתית ולא סינון
+            שהסתיר משהו.
+          </PanelNote>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {stages
+              .filter((stage) => stage.enquiries.length > 0)
+              .map((stage) => (
+                <section key={stage.status} className="flex flex-col gap-3">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {LEAD_STATUS_LABEL[stage.status]}{' '}
+                    <span className="tabular-nums font-normal text-muted-foreground">
+                      {stage.enquiries.length}
+                    </span>
+                  </h3>
+                  <RowList>
+                    {stage.enquiries.map((enquiry) => (
+                      <EnquiryRow
+                        key={enquiry.id}
+                        enquiry={enquiry}
+                        mayUpdate={mayUpdate}
+                      />
+                    ))}
+                  </RowList>
+                </section>
               ))}
-            </RowList>
-          </Panel>
-        ))}
+          </div>
+        )}
 
-      {rows.length === LEAD_PAGE_SIZE && (
-        <p
-          role="status"
-          className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
-        >
-          מוצגות {LEAD_PAGE_SIZE} הפניות הוותיקות ביותר. יש נוספות.
-        </p>
-      )}
+        {enquiries.ok && enquiries.value.length === ENQUIRY_PAGE_SIZE && (
+          <p role="status" className="mt-4 text-sm text-muted-foreground">
+            מוצגות {ENQUIRY_PAGE_SIZE} הפניות הוותיקות ביותר. יש נוספות.
+          </p>
+        )}
+
+        {!seesUnassignedEnquiries(actor, actor.organizationId) && (
+          // Said out loud rather than left as an empty column. A manager
+          // narrowed to properties does not see an enquiry that names none —
+          // `can()` treats an absent property as out of reach, deliberately —
+          // and somebody missing a whole queue should know to ask rather than
+          // conclude it is empty. `_lib/enquiries.ts` sets out the full
+          // reconciliation with `leads_select`.
+          <PanelNote tone="attention">
+            הטווח שלך מוגבל לנכסים מסוימים, ולכן פניות שלא שויכו לנכס אינן
+            מוצגות לך. אם נראה לך שחסרות פניות — זו הסיבה, וההשלמה היא לשייך
+            אותן לנכס.
+          </PanelNote>
+        )}
+      </Panel>
+
+      {/* -------------------------------------------------------- bookings -- */}
+      <Panel
+        title="הזמנות שנפתחו ועדיין לא נסגרו"
+        count={bookingRows.length}
+        description="הזמנה בשלב שלפני הסגירה — יש יחידה, יש תאריכים, והכסף עוד לא סגור. הזמנה שנוצרה מתוך פנייה אינה מופיעה כאן שוב: היא מוצגת כתוצאה של אותה פנייה, פעם אחת."
+      >
+        {!leads.ok ? (
+          <ActionError error={leads.error} />
+        ) : leads.value === null ? (
+          <PanelNote tone="attention">
+            יש לך הרשאת לידים אך לא הרשאת צפייה בהזמנות, ולכן החלק הזה סגור
+            בפניך. זו הרשאה חסרה ולא צנרת ריקה. נדרשת{' '}
+            <GrantCode>booking.view</GrantCode>.
+          </PanelNote>
+        ) : bookingRows.length === 0 ? (
+          <PanelNote>אין הזמנה פתוחה שממתינה לסגירה בטווח שלך.</PanelNote>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {bookingStages
+              .filter((stage) => stage.leads.length > 0)
+              .map((stage) => (
+                <section key={stage.status} className="flex flex-col gap-3">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {BOOKING_STATUS_LABEL[stage.status]}{' '}
+                    <span className="tabular-nums font-normal text-muted-foreground">
+                      {stage.leads.length}
+                    </span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {STAGE_DESCRIPTION[stage.status]}
+                  </p>
+                  <RowList>
+                    {stage.leads.map((lead) => (
+                      <BookingRow key={lead.id} lead={lead} />
+                    ))}
+                  </RowList>
+                </section>
+              ))}
+          </div>
+        )}
+
+        {bookingRows.length === LEAD_PAGE_SIZE && (
+          <p role="status" className="mt-4 text-sm text-muted-foreground">
+            מוצגות {LEAD_PAGE_SIZE} ההזמנות הוותיקות ביותר. יש נוספות.
+          </p>
+        )}
+      </Panel>
 
       {/* --------------------------------------------------------- holds -- */}
       <Panel
@@ -255,7 +291,7 @@ export default async function LeadsPage() {
 
       {!holdsGrant(actor, 'guest.view_name') && (
         <PanelNote>
-          שמות האורחים ובקשותיהם מוסתרים ממך לפי ההרשאות שלך. מספר ההזמנה מוצג
+          שמות הפונים ובקשותיהם מוסתרים ממך לפי ההרשאות שלך. מספר ההזמנה מוצג
           במקום, והוא מזהה אמיתי שאפשר לעבוד לפיו.
         </PanelNote>
       )}
@@ -281,7 +317,7 @@ async function settle<T>(read: () => Promise<T>): Promise<Settled<T>> {
 }
 
 /**
- * What each stage means, in the words the workflow uses.
+ * What each booking stage means, in the words the workflow uses.
  *
  * Only the four in the pipeline. A `Partial` rather than a total record,
  * because the other fifteen statuses are not stages of a sale and inventing a
@@ -289,7 +325,7 @@ async function settle<T>(read: () => Promise<T>): Promise<Settled<T>> {
  * never shows.
  */
 const STAGE_DESCRIPTION: Partial<Record<Lead['status'], string>> = {
-  inquiry: 'נרשמה פנייה. אף תאריך אינו מוחזק ואף מחיר לא נשלח.',
+  inquiry: 'נרשמה פנייה על ההזמנה. אף תאריך אינו מוחזק ואף מחיר לא נשלח.',
   quote: 'נשלח מחיר. התאריכים עדיין פתוחים למכירה לאחרים אלא אם יש החזקה.',
   option: 'התאריכים מוחזקים ביומן לטובת הלקוח הזה, ואינם ניתנים למכירה כפולה.',
   awaiting_payment: 'סוכם — וממתין לכסף. זה השלב שנופל הכי הרבה.',
@@ -297,7 +333,92 @@ const STAGE_DESCRIPTION: Partial<Record<Lead['status'], string>> = {
 
 /* ----------------------------------------------------------------- rows -- */
 
-function LeadRow({ lead }: { lead: Lead }) {
+function EnquiryRow({
+  enquiry,
+  mayUpdate,
+}: {
+  enquiry: Enquiry
+  mayUpdate: boolean
+}) {
+  const dates =
+    enquiry.requestedCheckIn && enquiry.requestedCheckOut
+      ? `${formatDayMonth(enquiry.requestedCheckIn)}–${formatDayMonth(enquiry.requestedCheckOut)}`
+      : // The case this table exists for. Named rather than left blank, so
+        // nobody reads an empty cell as missing data.
+        'בלי תאריכים'
+
+  return (
+    <Row className="flex-col items-stretch gap-3">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="font-semibold text-foreground">
+          {'rawName' in enquiry ? (
+            (enquiry.rawName ?? 'פנייה ללא שם')
+          ) : (
+            <Withheld />
+          )}
+        </span>
+        <Badge tone="neutral">{LEAD_SOURCE_LABEL[enquiry.source]}</Badge>
+        {enquiry.guestId === null ? (
+          <Badge tone="neutral">לא מקושרת לאורח</Badge>
+        ) : (
+          <Badge tone="brand">מקושרת לפרופיל אורח</Badge>
+        )}
+        {enquiry.firstResponseAt === null && (
+          // The one badge on this row that is about the business rather than
+          // about the enquiry: an unanswered enquiry is money that has not
+          // come in yet, and §1 of the specification opens by saying a business
+          // that does not track them discovers at the end of the month that it
+          // answered half.
+          <Badge tone="accent">טרם נענתה</Badge>
+        )}
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        {dates} · {enquiry.partySize} אורחים
+        {enquiry.sourceDetail ? ` · ${enquiry.sourceDetail}` : ''}
+        {enquiry.budgetAgorot !== null
+          ? ` · תקציב ${formatAgorot(enquiry.budgetAgorot)}`
+          : ''}
+      </p>
+
+      <p className="text-sm text-muted-foreground">
+        נפתחה לפני {enquiry.ageDays === 1 ? 'יום' : `${enquiry.ageDays} ימים`}
+        {' · '}
+        {enquiry.assignedToUserId
+          ? `אחראי: ${enquiry.assignedToName ?? 'משתמש שאינו פתוח לצפייה'}`
+          : 'ללא אחראי'}
+        {'rawPhone' in enquiry && enquiry.rawPhone ? (
+          <>
+            {' · '}
+            <span dir="ltr">{enquiry.rawPhone}</span>
+          </>
+        ) : null}
+        {enquiry.lostReason !== null
+          ? ` · סיבת סגירה: ${LEAD_LOST_REASON_LABEL[enquiry.lostReason]}`
+          : ''}
+      </p>
+
+      {'message' in enquiry && enquiry.message && (
+        <p className="text-sm text-foreground">״{enquiry.message}״</p>
+      )}
+
+      {mayUpdate && (
+        <EnquiryStatusControl
+          leadId={enquiry.id}
+          status={enquiry.status}
+          version={enquiry.version}
+          displayName={
+            'rawName' in enquiry
+              ? (enquiry.rawName ?? 'פנייה ללא שם')
+              : 'הפנייה'
+          }
+        />
+      )}
+    </Row>
+  )
+}
+
+function BookingRow({ lead }: { lead: Lead }) {
   return (
     <Row>
       <div className="flex min-w-0 flex-col gap-1">

@@ -193,9 +193,9 @@ export function RuleSwitch(props: RuleSwitchProps) {
 
       {/* The absence, stated where the belief is formed. */}
       <p className="rounded border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-        ההחלטה נשמרת, אבל שום דבר עדיין לא מריץ אותה: אין במוצר רכיב שמזין את
-        מנוע האוטומציות באירועים חיים, ואין מבצע לאף אחת מהפעולות. כלל שדולק כאן
-        הוא הכוונה שתירשם, ולא פעולה שמתחילה עכשיו.
+        כלל שדולק כאן יוכרע על כל אירוע מתאים שיקרה בעסק, וההחלטה שלו תופיע בלוח
+        ״מה הכללים החליטו״. הוא לא יבצע דבר: אין מבצע לאף אחת מהפעולות, והפעלת
+        ביצוע בפועל דורשת אישור נפרד של אדם בשם מלא לכל ארגון.
       </p>
 
       {props.canManage ? (

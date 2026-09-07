@@ -159,9 +159,20 @@ export default async function GuestsPage({
           </p>
         </div>
 
-        {/* The control is hidden without the grant, and the action refuses
-            without it regardless — see `createGuestAction`. */}
-        {mayCreate && <Button href="/guests/new">אורח חדש</Button>}
+        <div className="flex flex-wrap gap-3">
+          {/* The only way into `/guests/merge`, because `src/components/nav`
+              is another worker's file. Shown on `guest.view` alone: the screen
+              itself refuses the merge without `guest.update` AND
+              `guest.delete` together (ח40-19), and reading the list of
+              possible duplicates is the same right as reading the guests it
+              is built from. */}
+          <Button href="/guests/merge" variant="secondary">
+            כפילויות אפשריות
+          </Button>
+          {/* The control is hidden without the grant, and the action refuses
+              without it regardless — see `createGuestAction`. */}
+          {mayCreate && <Button href="/guests/new">אורח חדש</Button>}
+        </div>
       </header>
 
       <GuestFiltersBar

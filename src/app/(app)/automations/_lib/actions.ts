@@ -11,14 +11,17 @@
  *
  * ── WHAT THESE ACTIONS DO NOT START ───────────────────────────────────────
  *
- * They record a decision. Nothing in this deployment yet hands
- * `runAutomations` a live event, so an enabled rule does not begin acting the
- * moment this returns — `(app)/_lib/events.ts` publishes domain events to
- * webhooks only, and says in its own header that automations are one
- * subscribers entry away and deliberately not switched on. The screen states
- * that in Hebrew above every control. It is stated here as well, because the
- * first person to wire the runner will read this file, and the second will be
- * whoever wonders why a rule that says "on" sent nothing.
+ * They record a decision, and that decision is now acted upon in one sense and
+ * not in the other. `(app)/_lib/events.ts` subscribes automations to the domain
+ * event stream, so an enabled rule IS evaluated against every event it listens
+ * to and what it decided is written to `automation_runs` (0075).
+ *
+ * What still does not happen is performing. `automation/performing.ts` is
+ * called by nothing, and it refuses unless a named person has consented for the
+ * organization AND a handler exists for the action — the shipped registry has
+ * none for any of the eight kinds. The screen states that in Hebrew above every
+ * control. It is stated here as well, because whoever wonders why a rule that
+ * says "on" sent nothing will read this file.
  *
  * ── Idempotency, and why the key comes from the caller ────────────────────
  *

@@ -731,6 +731,17 @@ export const MENU: readonly MenuSectionDefinition[] = [
         },
       },
       {
+        id: 'pricing',
+        label: 'תמחור ותעריפים',
+        // `rate.view_public` matches the route gate. Reading a rate plan is
+        // not reading money: it is the price a guest would be quoted, which
+        // anybody taking a booking needs. Changing one is `rate.manage`, and
+        // that is gated inside the screen rather than on the entry — somebody
+        // who may quote a price and not set one should still find this.
+        requires: { kind: 'grant', anyOf: ['rate.view_public'] },
+        destination: { status: 'ready', href: '/pricing' },
+      },
+      {
         id: 'reviews',
         label: 'ביקורות',
         // `review.view` — the grant that had no table behind it until 0066.

@@ -33,20 +33,83 @@
  *
  * ══ IT IS ADDITIVE, AND DELIBERATELY QUIET FOR NOW ══════════════════════════
  *
- * Webhooks is the only subscriber wired here. Notifications and automations
- * are the obvious next two and are NOT turned on in the same change: this bus
- * begins publishing events that nothing has published before, and starting
- * three consumers at once means any surprise has three possible causes. They
- * are one `subscribers` entry each when their own wiring is ready.
+ * Webhooks was the only subscriber wired here. Automations is the second, and
+ * it is the EVALUATION half only: on every event it resolves which rules are on
+ * for the organization, evaluates their conditions and records what each one
+ * DECIDED — `automation_runs`, 0075. It performs nothing, and the code that
+ * would perform is behind a per-organization switch a named human turns on
+ * (`automation_execution_consent`), reached from `automation/performing.ts` and
+ * called by nothing.
+ *
+ * That split is the whole reason this is safe to wire. There is no organization
+ * on this database, so nothing here can be watched working before it reaches a
+ * paying customer — and a runner that acts, untested against real data, would
+ * message somebody's guests on their first day. A runner that only records what
+ * it would have done is useful on its own and is what makes switching the other
+ * half on safe later.
+ *
+ * Notifications remains the obvious next one and is NOT turned on in the same
+ * change, for the reason this header gave about starting three consumers at
+ * once: it is one `subscribers` entry when its own wiring is ready.
+ *
+ * ══ ONE SUBSCRIBER'S FAILURE IS ONLY ITS OWN ════════════════════════════════
  *
  * A failure here never reaches the operation. `operation.ts` catches, reports
  * through `onEventError` and never rethrows — "a confirmation email that fails
- * must not un-create the booking". This file keeps that promise per event, so
- * one endpoint's problem cannot stop another event in the same batch.
+ * must not un-create the booking". This file keeps that promise per event AND
+ * per subscriber: an automation rule that throws must not stop the webhook
+ * fan-out for the same event, and neither may stop the next event in the batch.
+ * Every failure is collected and thrown together at the end, exactly as before,
+ * because deciding that a failed event does not fail the operation is the
+ * pipeline's job and a bus that absorbed everything itself would leave that
+ * guarantee untested.
  */
 
+import { recordAutomationEvaluation } from '@/lib/automation/runs'
 import type { Db } from '@/lib/persistence'
 import type { DomainEvent, EventBus } from '@/lib/service'
+
+/** One consumer of the stream. Named, so a failure can say whose it was. */
+interface Subscriber {
+  name: string
+  deliver: (db: Db, event: DomainEvent) => Promise<void>
+}
+
+/**
+ * Everything that reacts to a domain event, in order.
+ *
+ * A list rather than a chain of `await`s, so that adding the third consumer is
+ * an entry rather than an edit to the loop — and so that the isolation between
+ * them is written once instead of once per subscriber.
+ */
+const SUBSCRIBERS: readonly Subscriber[] = [
+  {
+    name: 'webhooks',
+    async deliver(db, event) {
+      const { error } = await db.rpc('enqueue_webhook_deliveries', {
+        p_organization_id: event.organizationId,
+        p_event_name: event.name,
+        // `?? null` rather than `?? {}`: an event with no payload has no
+        // payload, and inventing an empty object would tell a receiver
+        // something the emitting operation did not say.
+        p_payload: event.payload ?? null,
+        p_property_id: event.propertyId,
+        p_correlation_id: event.correlationId,
+      })
+      if (error) throw error
+    },
+  },
+  {
+    name: 'automations',
+    // Records what the rules decided. Performs nothing — see the header and
+    // `src/lib/automation/performing.ts`. Costs no round trip for the ninety-odd
+    // catalogue names no shipped rule listens to, because the check against the
+    // frozen library is local.
+    deliver: async (db, event) => {
+      await recordAutomationEvaluation(db, event)
+    },
+  },
+]
 
 /**
  * The production bus.
@@ -60,20 +123,22 @@ export function domainEventBus(db: Db): EventBus {
       const failures: unknown[] = []
 
       for (const event of events) {
-        try {
-          const { error } = await db.rpc('enqueue_webhook_deliveries', {
-            p_organization_id: event.organizationId,
-            p_event_name: event.name,
-            // `?? null` rather than `?? {}`: an event with no payload has no
-            // payload, and inventing an empty object would tell a receiver
-            // something the emitting operation did not say.
-            p_payload: event.payload ?? null,
-            p_property_id: event.propertyId,
-            p_correlation_id: event.correlationId,
-          })
-          if (error) failures.push(error)
-        } catch (error) {
-          failures.push(error)
+        for (const subscriber of SUBSCRIBERS) {
+          try {
+            await subscriber.deliver(db, event)
+          } catch (error) {
+            // Caught per subscriber, not per event. A rule that throws must not
+            // cost the customer their webhook delivery, and neither may stop
+            // the next event in the batch.
+            failures.push(
+              error instanceof Error
+                ? new Error(
+                    `${subscriber.name} failed for ${event.name}: ${error.message}`,
+                    { cause: error },
+                  )
+                : error,
+            )
+          }
         }
       }
 
@@ -84,7 +149,7 @@ export function domainEventBus(db: Db): EventBus {
       if (failures.length > 0) {
         throw new AggregateError(
           failures,
-          `${failures.length} of ${events.length} domain event(s) could not be queued`,
+          `${failures.length} domain event subscriber call(s) failed across ${events.length} event(s)`,
         )
       }
     },

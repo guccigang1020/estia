@@ -30,6 +30,14 @@ export {
 } from './conditions'
 
 export {
+  COMPARED_FACTS,
+  candidatesForEvent,
+  factsForEvent,
+  type EvaluationCandidate,
+  type EvaluationGate,
+} from './evaluation'
+
+export {
   DEFAULT_RETRY,
   InMemoryAutomationLedger,
   executedActions,
@@ -93,13 +101,19 @@ export {
 } from './state'
 
 /**
- * The repository and the operations are NOT re-exported here.
+ * The repository, the operations, the runs and the performing half are NOT
+ * re-exported here.
  *
  * This barrel is imported by pure modules and by client components — the rule
- * cards read `AUTOMATION_ACTIONS` and `READINESS_LABEL` from it — and both of
- * those files are server-only: one takes a Supabase client, the other reaches
- * the authorization engine and the audit pipeline. Re-exporting them would put
- * a database client in the import graph of a component that renders in a
- * browser. `import { AutomationRuleRepository } from '@/lib/automation/repository'`
- * is one character longer and says where it runs.
+ * cards read `AUTOMATION_ACTIONS` and `READINESS_LABEL` from it — and those
+ * files all run on a server: `repository.ts` and `runs.ts` take a Supabase
+ * client, `operations.ts` reaches the authorization engine and the audit
+ * pipeline, and `performing.ts` is the door to acting on somebody's business.
+ * Re-exporting them would put a database client in the import graph of a
+ * component that renders in a browser.
+ *
+ * `performing.ts` is kept out for a second reason as well. It is the half that
+ * is deliberately switched off, and a barrel is how a module becomes easy to
+ * reach by accident. `import { performEvaluatedEvent } from '@/lib/automation/performing'`
+ * is a line somebody has to mean.
  */

@@ -518,7 +518,17 @@ src/lib/demo/dataset-inventory.ts             management           write
 src/app/(app)/agents/**                       distribution         write
 src/app/(app)/agencies/**                     distribution         write
 src/app/(app)/quotes/**                       distribution         write
+
+# The campaigns subtree is the promotions MODULE (0073 — promotions, coupons,
+# discount_redemptions). `/promotions` itself stays with distribution: it is a
+# view of agent commission rules that borrowed the word, and it predates the
+# catalogue by many migrations. Listed FIRST because this register is
+# first-match-wins, not most-specific-wins — below the line under it, this
+# rule would never fire and the conflict would look resolved while nothing
+# had changed.
+src/app/(app)/promotions/campaigns/**         promotions           write
 src/app/(app)/promotions/**                   distribution         write
+src/lib/promotions/**                         promotions           write
 # /channels moved to channels-parity for this wave. What distribution built
 # there is a report of bookings BY SOURCE and is being kept; the channel
 # manager — connectors, mapping, sync, reconciliation — is a new capability

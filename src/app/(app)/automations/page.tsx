@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { ActionError } from '@/components/booking/action-error'
 import { Button } from '@/components/ui/button'
 import {
+  AUTOMATION_TEMPLATES,
   parametersFor,
   reachesOutsideTheBusiness,
   resolveRules,
@@ -10,11 +11,16 @@ import {
 } from '@/lib/automation'
 import { mayManageAutomation } from '@/lib/automation/operations'
 import { AutomationRuleRepository } from '@/lib/automation/repository'
+import {
+  AutomationRunRepository,
+  type RecordedDecision,
+} from '@/lib/automation/runs'
 import { holdsGrant } from '@/lib/authz/can'
 import { toSafeResponse } from '@/lib/errors'
 
 import { ALL_PROPERTIES, shellContext } from '../_lib/context'
 import { financeRepository } from '../finance/_lib/wiring'
+import { DecisionsPanel } from './_components/decisions-panel'
 import { DryRunPanel } from './_components/dry-run-panel'
 import { AutomationPlanLock } from './_components/plan-lock'
 import { RuleCard } from './_components/rule-card'
@@ -31,6 +37,30 @@ import {
 } from './_lib/rules'
 
 export const metadata: Metadata = { title: 'אוטומציות' }
+
+/**
+ * How many recorded decisions the panel reads.
+ *
+ * Read in one glance, like the dry run's own ceiling and for the same reason: a
+ * screen whose job is to be believed is not improved by being exhaustive, and
+ * the panel states the number rather than leaving somebody to discover the list
+ * stopped growing.
+ */
+const DECISION_SAMPLE = 40
+
+/**
+ * The Hebrew name of every rule the library carries, by template id.
+ *
+ * The decision record stores the id, not the name — a name is presentation and
+ * it would be stale the day somebody rewords a template. Resolved here against
+ * the live library so a row always reads the way the rule card above it does.
+ */
+const RULE_NAMES: Readonly<Record<string, string>> = Object.fromEntries(
+  AUTOMATION_TEMPLATES.map((template) => [
+    template.rule.id,
+    template.rule.name,
+  ]),
+)
 
 /** What the module buys, for the plan lock. Concrete things, never a brochure. */
 const MODULE_INCLUDES = [
@@ -84,13 +114,25 @@ const MODULE_INCLUDES = [
  * ignored the customer's own switches would be a preview of somebody else's
  * product.
  *
- * What a switch still does not do is start anything. Nothing in this
- * deployment hands `runAutomations` a live event: `(app)/_lib/events.ts`
- * publishes domain events to webhooks and says in its own header that
- * automations are one `subscribers` entry away and deliberately not turned on,
- * and no performer exists behind any of the eight action kinds. So enabling
- * records intent, the banner below says so in Hebrew, and the switch itself
- * says it again where the decision is actually made. A screen that let a
+ * ── The rules are now RUN, and they still do not act ──────────────────────
+ *
+ * `(app)/_lib/events.ts` subscribes automations to the domain event stream, and
+ * `0075_automation_runs.sql` records what every listening rule decided about
+ * every event: which rule, which event, what it decided, why, and what it WOULD
+ * have done. `DecisionsPanel` below is that record, and it is the first thing on
+ * this screen that is neither a preview nor a definition — it is what happened.
+ *
+ * What a switch still does not do is start anything. The half that performs is
+ * `automation/performing.ts`, it is called by nothing, and it refuses before it
+ * reaches the engine unless a named person has consented for the organization
+ * in `automation_execution_consent` AND a handler exists for the action — and
+ * `shippedActionHandlers()` is empty, so the second gate is shut for all eight
+ * kinds regardless of the first.
+ *
+ * So enabling a rule now means it will be EVALUATED and its decision recorded;
+ * it still does not mean anything is sent. The banner below says that in
+ * Hebrew, the decisions panel says it again above its first row, and the switch
+ * says it a third time where the decision is actually made. A screen that let a
  * toggle imply an engine would be the one dishonest thing in a module built
  * entirely around telling a zero from a silence.
  */
@@ -128,6 +170,7 @@ export default async function AutomationsPage() {
   let inputs: DryRunInputs | null = null
   let views: readonly RuleView[] = []
   let totals: DryRunHeadline | null = null
+  let decisions: readonly RecordedDecision[] = []
   let failure: ReturnType<typeof toSafeResponse> | null = null
 
   try {
@@ -144,6 +187,17 @@ export default async function AutomationsPage() {
     )
     const states = new Map<string, ResolvedRule>(
       resolved.map((entry) => [entry.rule.id, entry]),
+    )
+
+    // The record of what the rules decided on real events. Read here rather
+    // than in its own boundary because a failure to read it is a failure of
+    // this screen: a decision list that quietly rendered empty would say "your
+    // rules have never decided anything", which is a claim about the business
+    // made out of a claim about ESTIA. Zero and unreadable are different.
+    decisions = await new AutomationRunRepository(db).recent(
+      actor.organizationId,
+      propertyId,
+      DECISION_SAMPLE,
     )
 
     inputs = await loadDryRunInputs({ db, repo, actor, propertyId })
@@ -191,6 +245,16 @@ export default async function AutomationsPage() {
             <DryRunPanel headline={totals} inputs={inputs} locked={locked} />
           )}
 
+          {/* Under the preview and above the rules, because that is the order
+              somebody uses them in: watch what would happen, then read what did
+              get decided, then change a switch. */}
+          <DecisionsPanel
+            decisions={decisions}
+            sample={DECISION_SAMPLE}
+            propertyName={propertyName}
+            ruleNames={RULE_NAMES}
+          />
+
           <section
             aria-labelledby="rules-title"
             className="flex flex-col gap-4"
@@ -220,10 +284,13 @@ export default async function AutomationsPage() {
                   מה שמתג כאן עושה, ומה שהוא עדיין לא עושה:
                 </span>{' '}
                 ההחלטה איזה כלל דולק נשמרת, נרשמת ביומן הפעילות עם השם והזמן,
-                וההרצה היבשה שלמעלה מתחשבת בה. מה שאין עדיין הוא מנוע שמריץ את
-                הכללים על אירועים חיים — אף רכיב במוצר לא מזין את מנוע
-                האוטומציות באירועים, ולאף אחת משמונה הפעולות אין מבצע. כלל שדולק
-                כאן הוא הכוונה שתירשם, ולא פעולה שמתחילה עכשיו.
+                וההרצה היבשה שלמעלה מתחשבת בה. מעכשיו הכלל גם מוכרע באמת: על כל
+                אירוע שקורה בעסק המערכת בודקת אם הכלל דלוק ואם התנאים שלו
+                התקיימו, ורושמת את ההחלטה — זה מה שמופיע בלוח ״מה הכללים
+                החליטו״. מה שעדיין לא קורה הוא הביצוע: לאף אחת משמונה הפעולות
+                אין מבצע, והפעלת ביצוע בפועל דורשת אישור נפרד של אדם בשם מלא לכל
+                ארגון, שכבוי בכל הארגונים. כלל שדולק כאן יוכרע וייכתב, ולא ישלח
+                דבר.
               </p>
             </div>
 

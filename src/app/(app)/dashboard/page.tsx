@@ -8,6 +8,7 @@ import {
   TileCard,
   type TileTone,
 } from '@/components/dashboard/tile'
+import { CoverPhoto } from '@/components/media/cover-photo'
 import { MyJobsPanel } from '@/components/dashboard/my-jobs'
 import {
   buildTiles,
@@ -163,11 +164,11 @@ export default async function DashboardPage({
     context.selectedPropertyId === ALL_PROPERTIES
       ? null
       : context.selectedPropertyId
-  const propertyName =
+  const property =
     propertyId === null
       ? null
-      : (context.properties.find((property) => property.id === propertyId)
-          ?.name ?? null)
+      : (context.properties.find((item) => item.id === propertyId) ?? null)
+  const propertyName = property?.name ?? null
 
   // The wiring lives here and not in `_lib/home.ts`, so that module stays
   // importable by a suite with no Supabase project — the same reason
@@ -213,6 +214,25 @@ export default async function DashboardPage({
           {refusal.message} {refusal.remedy}
         </div>
       ) : null}
+
+      {/*
+        The property's own photograph, and the place a business first meets
+        the upload. Only when ONE property is selected: a cover image is a
+        fact about one property, and showing the first of nine would be
+        picking a favourite on the customer's behalf.
+      */}
+      {property !== null && (
+        <CoverPhoto
+          propertyId={property.id}
+          propertyName={property.name ?? 'הנכס'}
+          url={property.coverImageUrl}
+          canEdit={actor.grants.has('property.update')}
+        >
+          <span className="text-sm font-medium text-white drop-shadow">
+            {property.name ?? 'הנכס'}
+          </span>
+        </CoverPhoto>
+      )}
 
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">

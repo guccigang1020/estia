@@ -31,7 +31,7 @@
  * an optimistic view that never corrects itself would be worse than a spinner.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { fromSafeError } from '@/components/states/error-copy'
@@ -64,7 +64,23 @@ export function CoverPhoto({
   const [error, setError] = useState<string | null>(null)
   const [over, setOver] = useState(false)
 
-  useEffect(() => setShown(url), [url])
+  /**
+   * Re-sync when the server sends a different picture, adjusted DURING render
+   * rather than in an effect.
+   *
+   * `useEffect(() => setShown(url), [url])` is the obvious way to write this
+   * and it is wrong twice: React renders once with the stale picture before
+   * the effect runs, so a refresh flashes the previous photograph — and it is
+   * a cascading render, which is what the lint rule is about. Setting state
+   * while rendering is the documented pattern for exactly this case: React
+   * discards the output and re-renders the component immediately, before
+   * anything reaches the screen.
+   */
+  const [syncedTo, setSyncedTo] = useState(url)
+  if (url !== syncedTo) {
+    setSyncedTo(url)
+    setShown(url)
+  }
 
   async function send(file: File | undefined) {
     if (!file) return

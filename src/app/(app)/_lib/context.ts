@@ -63,6 +63,14 @@ export type Workspace = {
 export type PropertyOption = {
   id: string
   name: string | null
+  /**
+   * The photograph the business uploaded of this property, or null.
+   *
+   * Carried on the shell context rather than fetched per screen because more
+   * than one screen shows it, and a second query for the same column is a
+   * second place that can disagree about which picture is current.
+   */
+  coverImageUrl: string | null
 }
 
 /** Display only. The authorization engine never sees a role name. */
@@ -174,7 +182,7 @@ async function propertiesInScope(scope: Scope): Promise<PropertyOption[]> {
   const supabase = await createClient()
   const query = supabase
     .from('properties')
-    .select('id, name')
+    .select('id, name, cover_image_url')
     .is('deleted_at', null)
     .order('name')
 
@@ -188,13 +196,14 @@ async function propertiesInScope(scope: Scope): Promise<PropertyOption[]> {
   // which keeps the chooser usable, rather than failing the page over a label.
   if (error || !data) {
     return scope.kind === 'properties'
-      ? scope.propertyIds.map((id) => ({ id, name: null }))
+      ? scope.propertyIds.map((id) => ({ id, name: null, coverImageUrl: null }))
       : []
   }
 
   return data.map((row) => ({
     id: row.id as string,
     name: (row.name as string | null) ?? null,
+    coverImageUrl: (row.cover_image_url as string | null) ?? null,
   }))
 }
 

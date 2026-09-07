@@ -680,6 +680,44 @@ const TABLES: DemoTables = {
   // deployment actually starts with.
   message_templates: [],
 
+  // 0072 · pricing. Empty, and this one is the most tempting to fill: a demo
+  // with no rate plan shows a screen that says "no prices are set", which
+  // looks like a broken deployment rather than a business that has not
+  // finished setting up. It stays empty anyway, because
+  // `booking_price_snapshots` is the frozen record of what a guest was
+  // actually charged — and a seeded snapshot is a fabricated financial fact
+  // about a stay nobody took. Seeding the plans and not the snapshots would
+  // be worse still: the demo's bookings would then disagree with the demo's
+  // prices, which is the one thing a pricing screen must never do.
+  rate_plans: [],
+  rate_rules: [],
+  rate_calendar: [],
+  rate_modifiers: [],
+  rate_suggestions: [],
+  dynamic_pricing_policies: [],
+  booking_price_snapshots: [],
+
+  // 0073 · promotions and coupons. Empty for the reason above, plus one of
+  // its own: `discount_redemptions` is the ledger that stops a coupon being
+  // over-redeemed, and inventing redemptions would be inventing money.
+  promotions: [],
+  coupons: [],
+  discount_redemptions: [],
+
+  // 0074 · leads and the record of merging two guests into one. A seeded
+  // merge is a claim that somebody decided two real people were the same
+  // person — the audit row names who and when, and there was no who.
+  leads: [],
+  guest_merges: [],
+
+  // 0075 · what the automation rules decided. Written by the product as
+  // events arrive; a seeded decision is a decision nobody's rule made.
+  // `automation_execution_consent` is empty everywhere by design: it is the
+  // gate that lets automations ACT, and a demo that shipped it consented on
+  // a customer's behalf.
+  automation_runs: [],
+  automation_execution_consent: [],
+
   // 0067 · which automation rules this business switched on. Empty, and that
   // is the product default: the library ships every rule OFF, and a demo
   // showing rules already enabled would show a state no new customer starts

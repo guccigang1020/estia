@@ -33,6 +33,8 @@ import {
   type AutomationActionKind,
   type AutomationCondition,
 } from '@/lib/automation'
+import type { RuleSource } from '@/lib/automation'
+import type { AutomationDecision } from '@/lib/automation/runs'
 import type { Grant } from '@/lib/authz/permissions'
 import type { DomainEventName } from '@/lib/contracts/events'
 
@@ -211,4 +213,46 @@ export function notSimulatedReason(name: DomainEventName): string {
     NOT_SIMULATED_REASON[name] ??
     'אין במסד הנתונים מצב שממנו אפשר לשחזר את האירוע הזה, ולכן ההדמיה לא מייצרת אותו.'
   )
+}
+
+/* ------------------------------------------------ what a rule decided --- */
+
+/**
+ * The three decisions `automation_runs` records, in Hebrew.
+ *
+ * The wording of `would_act` is the one that matters and it is deliberately in
+ * the conditional. The record says the rule is switched on here and its
+ * conditions held; it does NOT say the action happened, and it does not even
+ * say the action would have been allowed — the permission and plan floors are
+ * per action and belong to the engine, which the event bus has no actor to run.
+ * "הכלל פעל" would be a lie in two directions at once.
+ */
+export const DECISION_LABEL: Readonly<Record<AutomationDecision, string>> = {
+  would_act: 'הכלל היה מבקש לפעול',
+  skipped_conditions: 'התנאי לא התקיים',
+  skipped_disabled: 'הכלל כבוי כאן',
+}
+
+/**
+ * The same three, as the sentence under the badge.
+ *
+ * Longer than a badge because each one leads somewhere different: the first is
+ * an argument for switching performing on one day, the second is usually a fact
+ * the event did not carry, and the third is a decision somebody in the business
+ * made and can unmake.
+ */
+export const DECISION_MEANING: Readonly<Record<AutomationDecision, string>> = {
+  would_act:
+    'הכלל דלוק כאן והתנאים שלו התקיימו על האירוע הזה. שום פעולה לא בוצעה — אין עדיין מי שמבצע אותה.',
+  skipped_conditions:
+    'הכלל דלוק, אבל התנאי שלו לא התקיים על האירוע הזה. לרוב זה אומר שהאירוע לא נשא את השדה שהתנאי משווה.',
+  skipped_disabled:
+    'האירוע קרה, והכלל שהיה מטפל בו כבוי כאן. זו החלטה של העסק ואפשר לשנות אותה במתג של הכלל.',
+}
+
+/** Where the answer came from, in the words the rule card already uses. */
+export const DECISION_SOURCE_LABEL: Readonly<Record<RuleSource, string>> = {
+  shipped: 'ברירת המחדל של המערכת',
+  organization: 'הגדרת הארגון',
+  property: 'הגדרה של הנכס הזה',
 }
