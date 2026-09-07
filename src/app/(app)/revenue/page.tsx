@@ -9,7 +9,7 @@ import {
   RowList,
   ScreenFrame,
 } from '@/components/shell-screens/screen'
-import { Badge } from '@/components/ui/badge'
+import { Figure as SharedFigure } from '@/components/ui/metric'
 import {
   METRIC_LABEL,
   METRIC_NOTE,
@@ -251,10 +251,13 @@ export default async function RevenuePage({
 }
 
 /**
- * One figure, or the sentence explaining why there is none.
+ * A revenue  rendered by the shared kit.
  *
- * A dash is read as zero by everybody in a hurry, so an absent measure gets
- * words rather than a placeholder.
+ * The wrapper survives rather than being inlined at twelve call sites, because
+ * it is the one place that knows a `Measure` is agorot when `money` is set and
+ * a plain number otherwise. `Figure` in the kit deliberately formats nothing —
+ * a component that guessed at units would eventually print a percentage as
+ * shekels, and it would look right.
  */
 function Figure({
   label,
@@ -268,21 +271,18 @@ function Figure({
   unit?: string
 }) {
   return (
-    <Row>
-      <FactRow label={label}>
-        {measure.known ? (
-          <span className="font-mono text-sm">
-            {money ? shekels(measure.value) : `${measure.value}${unit}`}
-          </span>
-        ) : (
-          <span className="flex items-center gap-2">
-            <Badge>לא ניתן למדוד</Badge>
-            <span className="text-xs text-muted-foreground">
-              {UNMEASURABLE_LABEL[measure.reason]}
-            </span>
-          </span>
-        )}
-      </FactRow>
-    </Row>
+    <SharedFigure
+      label={label}
+      value={
+        measure.known
+          ? {
+              known: true,
+              display: money
+                ? shekels(measure.value)
+                : `${measure.value}${unit}`,
+            }
+          : { known: false, why: UNMEASURABLE_LABEL[measure.reason] }
+      }
+    />
   )
 }

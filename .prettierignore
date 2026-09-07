@@ -24,3 +24,5 @@ public/
 
 # Agent worktrees: a second copy of the whole tree.
 .claude/worktrees/
+
+.next-verify/

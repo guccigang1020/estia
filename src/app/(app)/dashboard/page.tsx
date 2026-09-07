@@ -9,6 +9,7 @@ import {
   type TileTone,
 } from '@/components/dashboard/tile'
 import { CoverPhoto } from '@/components/media/cover-photo'
+import { StatTile } from '@/components/ui/metric'
 import { MyJobsPanel } from '@/components/dashboard/my-jobs'
 import {
   buildTiles,
@@ -40,6 +41,7 @@ import {
   type Settled,
   type TodayCounts,
 } from './_lib/home'
+import { morningShape } from './_lib/shape'
 import { homeWiring } from './_lib/wiring'
 
 export const metadata: Metadata = { title: 'מסך הבית' }
@@ -233,6 +235,46 @@ export default async function DashboardPage({
           </span>
         </CoverPhoto>
       )}
+
+      {/*
+        The morning's shape, in the order somebody actually asks it: who is
+        coming, who is going, what is owed, what is not moving. Every one of
+        these can be UNKNOWN rather than zero — see `shape.ts` on why a
+        failed read must never render as 0.
+      */}
+      <section
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        aria-label="מצב הבוקר"
+      >
+        {morningShape(home).map((figure, index) => (
+          <StatTile
+            key={figure.label}
+            tone={
+              figure.count === null
+                ? 'quiet'
+                : index === 0
+                  ? 'primary'
+                  : index === 1
+                    ? 'success'
+                    : index === 2
+                      ? 'accent'
+                      : 'quiet'
+            }
+            name={
+              figure.count === null ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  לא ידוע
+                </span>
+              ) : (
+                <span className="estia-figures text-3xl font-semibold">
+                  {figure.count}
+                </span>
+              )
+            }
+            detail={figure.why ?? figure.detail ?? undefined}
+          />
+        ))}
+      </section>
 
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">

@@ -25,6 +25,12 @@ const eslintConfig = defineConfig([
     // does not read .gitignore, so the moment anybody runs the demo the gate
     // turns red with hundreds of errors inside Turbopack's own bundles.
     '.next-demo/**',
+    // Same again for the verification build. Next writes a dist directory
+    // wherever NEXT_DIST_DIR points, and ESLint does not read .gitignore —
+    // so a build run to a fresh directory turns the gate red with thousands
+    // of findings inside Turbopack's own bundles. Third time this pattern
+    // has cost a red gate; the list is the fix.
+    '.next-verify/**',
     // The frozen legacy product, kept verbatim as reference. Not ours to
     // lint, and it must never be reformatted.
     '_reference/**',
