@@ -3,10 +3,11 @@
  *
  * ── What this screen is, and what it refuses to be ────────────────────────
  *
- * Seven questions about today, each answered from a table and none of them a
+ * Eight questions about today, each answered from a table and none of them a
  * statistic: who arrives, who leaves, which of those stays still owes money,
  * which work is stuck, which decision is waiting for a person, which damage or
- * fault nobody has closed, and which channel failure nobody has cleared. Every row
+ * fault nobody has closed, which laundry will not be back in time, and which
+ * channel failure nobody has cleared. Every row
  * that comes out of this file is a record somebody can open and act on. There
  * is no occupancy percentage here and no revenue tile, and that is not an
  * omission — `dashboard/page.tsx` argues at length that a fabricated "72%
@@ -1205,5 +1206,122 @@ export async function listChannelExceptions(
   const rank: Record<string, number> = { critical: 0, urgent: 1, warning: 2 }
   return [...rows].sort(
     (a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3),
+  )
+}
+
+/* ------------------------------------------------------- laundry risk -- */
+
+/**
+ * Laundry that will not be back in time, and laundry nobody has sent.
+ *
+ * ── The two shapes of "at risk", and why one table answers both ───────────
+ *
+ * Spec 6.0 §4 names "laundry risk" and §72 says the whole chain — delay →
+ * towels short → preparation incomplete → arrival at risk — must be ONE
+ * incident rather than four alerts. This panel is the top of that chain, which
+ * is the only place it can be caught early enough to act on.
+ *
+ *   · `required_by` has passed and the linen is not back. Late, factually.
+ *   · `expected_return_at` is after `required_by`. Not late yet, and already
+ *     cannot make it — the engine computed the return from the provider's own
+ *     turnaround, so this is arithmetic rather than pessimism.
+ *
+ * The second is the one worth having. A screen that only reports what has
+ * already failed tells a manager on Friday afternoon about a Friday morning
+ * they could have changed on Wednesday.
+ *
+ * `delivered_to_property`, `completed` and `cancelled` are excluded: the linen
+ * is back, or the order is not a commitment any more.
+ */
+const LAUNDRY_OPEN_STATUSES = [
+  'draft',
+  'awaiting_approval',
+  'to_collect',
+  'collected',
+  'sorting',
+  'washing',
+  'drying',
+  'folding',
+  'ready',
+] as const
+
+const LAUNDRY_RISK_COLUMNS =
+  'id, property_id, status, reference, required_by, expected_return_at, ' +
+  'sent_at, mode'
+
+export type LaundryRisk = {
+  id: string
+  propertyId: string | null
+  status: string
+  reference: string
+  requiredBy: string
+  expectedReturnAt: string | null
+  /** True when the deadline has already passed. */
+  late: boolean
+  /** True when the computed return is after the deadline. */
+  willMiss: boolean
+}
+
+export async function listLaundryAtRisk(
+  args: ActionCenterArgs,
+): Promise<readonly LaundryRisk[] | null> {
+  const { db, actor, organizationId, propertyId, today } = args
+  const limit = args.limit ?? ACTION_PANEL_SIZE
+
+  if (!holdsGrant(actor, 'laundry.view')) return null
+
+  // A week out. Further than that is a plan rather than a risk, and a panel
+  // that lists next month's linen is a panel nobody finishes reading.
+  const horizon = `${addDays(today, 7)}T00:00:00Z`
+
+  let query = db
+    .from('laundry_orders')
+    .select(LAUNDRY_RISK_COLUMNS)
+    .eq('organization_id', organizationId)
+    .in('status', [...LAUNDRY_OPEN_STATUSES])
+    .lt('required_by', horizon)
+
+  // A consolidated run carries no property — the breakdown lives on its lines
+  // — so a property filter keeps it rather than dropping it. Hiding the run
+  // that covers four properties from each of the four is the wrong answer.
+  if (propertyId !== null) {
+    query = query.or(`property_id.is.null,property_id.eq.${propertyId}`)
+  }
+
+  const { data, error } = await query
+    .order('required_by', { ascending: true })
+    .limit(limit)
+
+  if (error) throw error
+
+  // The real instant, not the property-local midnight.
+  //
+  // Every other panel here files rows into a DAY, and `today` is the right
+  // ruler for that. A laundry deadline is not a day — `required_by` is a
+  // moment ("back and clean by Friday 12:00"), and measuring it against
+  // midnight would call an order late from three hours before it is, on the
+  // one screen whose job is to be trusted about what is actually late.
+  const now = new Date().toISOString()
+
+  return (
+    toRows(data)
+      .map((row): LaundryRisk => {
+        const requiredBy = asTimestamp(row, 'required_by')
+        const expected = asTimestampOrNull(row, 'expected_return_at')
+        return {
+          id: asString(row, 'id'),
+          propertyId: asStringOrNull(row, 'property_id'),
+          status: asString(row, 'status'),
+          reference: asString(row, 'reference'),
+          requiredBy,
+          expectedReturnAt: expected,
+          late: requiredBy < now,
+          willMiss: expected !== null && expected > requiredBy,
+        }
+      })
+      // Only the ones that are actually a problem. Everything else in the window
+      // is laundry proceeding normally, and a panel that listed it would bury
+      // the two rows that matter.
+      .filter((order) => order.late || order.willMiss)
   )
 }

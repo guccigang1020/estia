@@ -38,6 +38,7 @@ import {
   listPaymentsNeedingAttention,
   listStaysToday,
   listChannelExceptions,
+  listLaundryAtRisk,
   listOpenIncidents,
   listStuckTasks,
   listWaitingApprovals,
@@ -57,14 +58,14 @@ export const metadata: Metadata = { title: 'מרכז הפעולות' }
 /**
  * EXECUTION CONTEXT — SERVER COMPONENT. What needs a person today.
  *
- * WHAT IS ON THIS SCREEN. Seven lists, each read from a table and each made of
+ * WHAT IS ON THIS SCREEN. Eight lists, each read from a table and each made of
  * records somebody can open: who is in the building today and in which role,
  * which of those stays still owes money, which work is blocked or late, which
  * payments the provider stopped answering about, which decision is waiting,
- * which damage or fault nobody has closed, and which channel failure nobody
- * has cleared. Every figure is a column or the domain's own sum over columns.
+ * which damage or fault nobody has closed, which laundry will not be back in
+ * time, and which channel failure nobody has cleared. Every figure is a column or the domain's own sum over columns.
  *
- * The last two are spec 6.0 §4 and §13. §13 is one sentence — do not hide
+ * The last three are spec 6.0 §4 and §13. §13 is one sentence — do not hide
  * failures — and this is the screen where hiding them costs most: a rate push
  * that failed on Friday is a weekend sold at last season's price.
  *
@@ -72,7 +73,7 @@ export const metadata: Metadata = { title: 'מרכז הפעולות' }
  * count of anything that is not a list of rows underneath it.
  * `dashboard/page.tsx` refuses to open with numbers and explains why; this
  * screen does not contradict it. A percentage on the one page a manager opens
- * at 8am is a number they will repeat to somebody, and none of the five
+ * at 8am is a number they will repeat to somebody, and none of the eight
  * questions above is answered by one. The counts beside the headings are the
  * length of the list below them and nothing else.
  *
@@ -84,7 +85,7 @@ export const metadata: Metadata = { title: 'מרכז הפעולות' }
  * `can()` against the property it names. And row level security refuses
  * regardless of all three.
  *
- * ONE FAILURE DOES NOT BLANK THE SCREEN. The seven reads are settled
+ * ONE FAILURE DOES NOT BLANK THE SCREEN. The eight reads are settled
  * independently and a failure is rendered inside its own panel. A morning
  * board that disappears because the approvals table was briefly unreachable is
  * worse than a board with four working panels and one that says what went
@@ -107,15 +108,23 @@ export default async function ActionCenterPage() {
 
   const stays = await settle(() => listStaysToday(args))
 
-  const [balances, tasks, payments, approvals, incidents, channelWork] =
-    await Promise.all([
-      settle(() => listOpenBalances(args, stays.ok ? stays.value : [])),
-      settle(() => listStuckTasks(args)),
-      settle(() => listPaymentsNeedingAttention(args)),
-      settle(() => listWaitingApprovals(args)),
-      settle(() => listOpenIncidents(args)),
-      settle(() => listChannelExceptions(args)),
-    ])
+  const [
+    balances,
+    tasks,
+    payments,
+    approvals,
+    incidents,
+    laundry,
+    channelWork,
+  ] = await Promise.all([
+    settle(() => listOpenBalances(args, stays.ok ? stays.value : [])),
+    settle(() => listStuckTasks(args)),
+    settle(() => listPaymentsNeedingAttention(args)),
+    settle(() => listWaitingApprovals(args)),
+    settle(() => listOpenIncidents(args)),
+    settle(() => listLaundryAtRisk(args)),
+    settle(() => listChannelExceptions(args)),
+  ])
 
   const approvalRefusal = authorize(actor, 'approval.decide')
 
@@ -373,6 +382,45 @@ export default async function ActionCenterPage() {
             </RowList>
             {incidents.value.length === ACTION_PANEL_SIZE && <AtCeiling />}
           </>
+        )}
+      </Panel>
+
+      {/* -------------------------------------------------- laundry -- */}
+      <Panel
+        title="כביסה שלא תחזור בזמן"
+        description="לא רק מה שכבר איחר. גם הזמנה שהחזרה הצפויה שלה מאוחרת מהדדליין — זה חשבון, לא פסימיות, והוא היחיד שאפשר עוד לפעול לפיו."
+        count={laundry.ok && laundry.value ? laundry.value.length : undefined}
+        action={
+          holdsGrant(actor, 'laundry.view') ? (
+            <Button href="/laundry" variant="secondary" size="sm">
+              מסך הכביסה
+            </Button>
+          ) : null
+        }
+      >
+        {!laundry.ok ? (
+          <ActionError error={laundry.error} />
+        ) : laundry.value === null ? (
+          <PanelNote>אין לך הרשאת צפייה בכביסה.</PanelNote>
+        ) : laundry.value.length === 0 ? (
+          <PanelNote>
+            אין הזמנת כביסה באיחור, ואין הזמנה שלפי זמן הסבב של הספק לא תספיק.
+          </PanelNote>
+        ) : (
+          <RowList>
+            {laundry.value.map((order) => (
+              <Row key={order.id}>
+                <FactRow label={order.reference}>
+                  <span className="flex items-center gap-2">
+                    <Badge>{order.late ? 'באיחור' : 'לא יספיק'}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      נדרש עד {formatDayMonth(order.requiredBy.slice(0, 10))}
+                    </span>
+                  </span>
+                </FactRow>
+              </Row>
+            ))}
+          </RowList>
         )}
       </Panel>
 
