@@ -53,30 +53,40 @@ export type TopBarProps = {
 const ICON_BUTTON =
   'inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
+/**
+ * The search control, which is now a search rather than a promise of one.
+ *
+ * This was a disabled placeholder badged "בקרוב" — the shape of the eventual
+ * field, honestly labelled, which was the right thing to ship while there was
+ * nothing behind it. `/search` exists now (spec 6.0 §96), so the placeholder
+ * becomes the link it was standing in for.
+ *
+ * Still a link to a page rather than a field in the bar. A field here would
+ * need a client component, a debounce and a request per keystroke across seven
+ * tables; the page puts the query in the URL, which makes a search shareable
+ * and back-navigable and costs no JavaScript at all.
+ */
 function SearchControl() {
   return (
     <>
       {/* Phone: an icon, because a search field would eat the whole bar. */}
-      <span
-        aria-disabled="true"
-        title="חיפוש גלובלי — בקרוב"
-        className={cn(ICON_BUTTON, 'cursor-default opacity-60 sm:hidden')}
+      <Link
+        href="/search"
+        title="חיפוש"
+        className={cn(ICON_BUTTON, 'sm:hidden')}
       >
         <NavIcon name="search" />
-        <span className="sr-only">חיפוש גלובלי — בקרוב</span>
-      </span>
+        <span className="sr-only">חיפוש</span>
+      </Link>
 
-      {/* Desktop: the shape of the eventual field, honestly labelled. */}
-      <span
-        aria-disabled="true"
-        className="hidden h-10 max-w-64 flex-1 cursor-default items-center gap-2 rounded-full border border-border bg-muted/60 px-4 text-sm text-muted-foreground sm:inline-flex"
+      {/* Desktop: reads as a field and behaves as a link to one. */}
+      <Link
+        href="/search"
+        className="hidden h-10 max-w-64 flex-1 items-center gap-2 rounded-full border border-border bg-muted/60 px-4 text-sm text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:inline-flex"
       >
         <NavIcon name="search" className="size-4 shrink-0" />
-        <span className="truncate">חיפוש</span>
-        <Badge tone="neutral" className="ms-auto px-2 py-0.5 text-[0.6875rem]">
-          בקרוב
-        </Badge>
-      </span>
+        <span className="truncate">שם · טלפון · הזמנה</span>
+      </Link>
     </>
   )
 }
