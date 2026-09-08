@@ -103,8 +103,13 @@ begin
     (org_a, 'idempotency-org-a', 'Organization A'),
     (org_b, 'idempotency-org-b', 'Organization B');
 
+  -- 0007 put a trigger on auth.users that creates the profile, so by the time
+  -- we get here these rows already exist and a plain INSERT raises 23505. The
+  -- upsert keeps the names above true rather than leaving whatever the trigger
+  -- derived from the (absent) sign-up metadata.
   insert into public.user_profiles (id, full_name) values
-    (user_a, 'User A'), (user_b, 'User B');
+    (user_a, 'User A'), (user_b, 'User B')
+  on conflict (id) do update set full_name = excluded.full_name;
 
   insert into public.memberships (id, user_id, organization_id, status, joined_at) values
     (mem_a, user_a, org_a, 'active', now()),

@@ -21,7 +21,16 @@
 --   `passed = false` anywhere is a security defect, not a flaky test.
 --
 -- Depends on
---   0001_identity.sql … 0005_audit.sql, applied in order.
+--   0001_identity.sql … 0007_user_profiles_trigger.sql, applied in order.
+--
+--   The header used to say "… 0005_audit.sql". That was true when this was
+--   written and stopped being true one migration later: 0007 put a trigger on
+--   auth.users that creates the profile row, and the fixture below was still
+--   inserting it by hand. The file aborted on 23505 before it reached its
+--   first assertion, which the harness reports as a failure but which nobody
+--   saw, because nothing ran it. Isolation itself was never broken — all 52
+--   assertions pass once the fixture is corrected — but for the span of
+--   thirty-odd migrations this proof was not proving anything.
 -- ============================================================================
 
 begin;
@@ -77,8 +86,13 @@ begin
     (org_a, 'isolation-org-a', 'Organization A'),
     (org_b, 'isolation-org-b', 'Organization B');
 
+  -- 0007 put a trigger on auth.users that creates the profile, so by the time
+  -- we get here these rows already exist and a plain INSERT raises 23505. The
+  -- upsert keeps the names above true rather than leaving whatever the trigger
+  -- derived from the (absent) sign-up metadata.
   insert into public.user_profiles (id, full_name) values
-    (user_a, 'User A'), (user_b, 'User B'), (user_s, 'User Suspended');
+    (user_a, 'User A'), (user_b, 'User B'), (user_s, 'User Suspended')
+  on conflict (id) do update set full_name = excluded.full_name;
 
   insert into public.memberships (id, user_id, organization_id, status, joined_at) values
     (mem_a, user_a, org_a, 'active',    now()),
