@@ -238,6 +238,110 @@ console.log(
 // A matrix that mislabels is worse than no matrix, because it is the thing
 // completion gets certified against. So each row now says what it actually
 // lacks.
+// ── Screens with no domain module ──────────────────────────────────────────
+//
+// `G-027`. Six top-level screens ask canonical tables straight out of their own
+// `_lib/queries.ts` with no `src/lib/<name>` behind them, and for a read-only
+// report that is a legitimate choice rather than a debt: a revenue table over
+// canonical rows does not need a domain.
+//
+// The gap was never the thinness. It was that NOTHING COULD TELL "thin on
+// purpose" FROM "stopped halfway", so this checker could not hold the
+// distinction and neither could a reader — which meant a screen that genuinely
+// stalled would look exactly like a deliberate one, for ever.
+//
+// So the intent is declared where it is made. A screen that means to be thin
+// carries `@thin-by-design` in its `_lib` or its page, with the reason on the
+// same line, and this prints the reason. A screen without a module and without
+// a declaration is listed as UNDECLARED — not failed, because a new screen
+// mid-build is a normal state, but named, so it cannot sit there unnoticed.
+const MARKER = '@thin-by-design'
+
+// Plumbing every screen imports, so importing one proves nothing about
+// whether the screen has a domain behind it. `authz` is on every screen by
+// construction — `can()` is the second floor — and `plans` is read wherever a
+// feature can be locked.
+//
+// `audit` is deliberately NOT here even though it is infrastructure elsewhere
+// in this file: a screen that imports it is a screen whose subject matter has
+// a module, which is the only question being asked.
+const PLUMBING = new Set([
+  'errors',
+  'persistence',
+  'supabase',
+  'service',
+  'contracts',
+  'actor',
+  'authz',
+  'plans',
+  'demo',
+])
+
+const productModules = rows.map((r) => r.module).filter((m) => !PLUMBING.has(m))
+
+const screens = readdirSync(join(APP, '(app)'))
+  .filter((entry) => {
+    try {
+      return statSync(join(APP, '(app)', entry)).isDirectory()
+    } catch {
+      return false
+    }
+  })
+  .filter((entry) => !entry.startsWith('_'))
+  .map((name) => {
+    const files = walk(join(APP, '(app)', name)).filter(isSource)
+    const declared = files.map(read).flatMap((text) =>
+      text
+        .split('\n')
+        .filter((line) => line.includes(MARKER))
+        .map((line) =>
+          line
+            .replace(/^[\s*/-]*/, '')
+            .replace(MARKER, '')
+            .replace(/^[\s:—-]*/, '')
+            .trim(),
+        ),
+    )
+    // Behaviour, not naming. A directory called `/bookings` is backed by
+    // `src/lib/booking`, `/listings` by `listing-quality`, `/dashboard` by
+    // `metrics` — so asking whether `src/lib/<name>` exists would answer a
+    // question about spelling, which is the exact mistake the adapter check
+    // above already had to be talked out of twice.
+    //
+    // The real question is whether the screen reaches a domain at all. A
+    // screen that imports a product module has one; a screen that imports
+    // none and selects from canonical tables in its own `_lib` is thin.
+    const text = files.map(read).join('\n')
+    const importsDomain = productModules.some((m) =>
+      new RegExp(`@/lib/${m}(/|['"\`])`).test(text),
+    )
+    const queriesTables = /\.from\(['"`]\w+['"`]\)/.test(text)
+
+    return {
+      name,
+      thin: queriesTables && !importsDomain,
+      reason: declared[0] ?? null,
+    }
+  })
+  .filter((s) => s.thin)
+
+if (screens.length > 0) {
+  console.log('\nscreens with no domain module:')
+  for (const s of screens.sort((a, b) => a.name.localeCompare(b.name))) {
+    console.log(
+      `  /${s.name.padEnd(15)} ${s.reason ? `thin by design — ${s.reason}` : 'UNDECLARED'}`,
+    )
+  }
+  const undeclared = screens.filter((s) => s.reason === null)
+  if (undeclared.length > 0) {
+    console.log(
+      `\n  ${undeclared.length} undeclared. A screen that means to be thin says so with ` +
+        `${MARKER}; one that does not is either mid-build or forgotten, and this ` +
+        `checker cannot tell which.`,
+    )
+  }
+}
+
 const incomplete = product.filter((r) => r.status !== 'INTEGRATED')
 if (incomplete.length > 0) {
   console.log('\nincomplete modules, and what each one lacks:')

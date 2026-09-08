@@ -1,4 +1,6 @@
 /**
+ * @thin-by-design — a read over canonical `units` rows for one screen; the header below argues why it is deliberately not `loadUnits` from the properties module.
+ *
  * EXECUTION CONTEXT — SERVER ONLY. The read side of the units screen.
  *
  * ── Why this is not `loadUnits` from the properties module ────────────────

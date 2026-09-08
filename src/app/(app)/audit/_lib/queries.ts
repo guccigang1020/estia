@@ -1,4 +1,6 @@
 /**
+ * @thin-by-design — a timeline over `audit_events`, and the trail is append-only by design; a domain module would be a second place to describe rows nobody may change.
+ *
  * EXECUTION CONTEXT — SERVER ONLY. The read side of the audit trail.
  *
  * ══ THIS IS EVIDENCE, AND IT IS READ ONLY ════════════════════════════════

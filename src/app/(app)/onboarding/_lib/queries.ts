@@ -1,4 +1,6 @@
 /**
+ * @thin-by-design — the domain is in the database: `create_first_workspace` (0064) is the whole rule, because the first write is the one no RLS policy can authorise.
+ *
  * EXECUTION CONTEXT — SERVER ONLY.
  *
  * Which step of onboarding this person is actually on.

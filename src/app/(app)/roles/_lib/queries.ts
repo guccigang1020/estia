@@ -1,4 +1,6 @@
 /**
+ * @thin-by-design — the domain is `src/lib/authz`, which every screen imports and which this checker therefore treats as plumbing; the rows here carry almost nothing.
+ *
  * EXECUTION CONTEXT — SERVER ONLY. What the roles screen reads from rows.
  *
  * Almost nothing, and that is the design. What each role *grants* comes from
