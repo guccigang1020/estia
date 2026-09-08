@@ -31,6 +31,10 @@
 import { priceStay, taxIncludedIn, type StayQuote } from '@/lib/booking/pricing'
 import type { DateRange } from '@/lib/booking/types'
 
+import type { BookingSource } from '@/lib/booking/types'
+import { priceWithRateCard } from '@/lib/pricing/stay'
+import type { Db } from '@/lib/persistence'
+
 import type { CalendarUnit } from './inventory'
 
 export interface UnitQuote extends StayQuote {
@@ -97,4 +101,109 @@ export function quoteFor(
  */
 export function fitsParty(unit: CalendarUnit, guests: number): boolean {
   return guests <= unit.maxGuests
+}
+
+/* ---------------------------------------------------- the rate card path -- */
+
+/**
+ * The same quote, priced against the organization's rate card when it has one.
+ *
+ * ══ WHY THIS EXISTS BESIDE `quoteFor` AND NOT INSTEAD OF IT ═════════════════
+ *
+ * `quoteFor` above is pure and stays that way; this is the impure half, and
+ * the split is what lets the arithmetic keep its unit tests while the reading
+ * of a rate card is tested separately with a fake client.
+ *
+ * The pipeline the pricing module documents is
+ *
+ *     resolvePricing(context) → StayPricingRequest → priceStay() → StayQuote
+ *
+ * and the middle arrow was the one nobody had drawn. `ResolvedStay.request` IS
+ * a `StayPricingRequest`, so a resolved rate card reaches the screen by being
+ * handed to the same `priceStay` that priced the base rate — which is what
+ * keeps "the total is the sum of the lines" true whichever path produced it.
+ *
+ * ── THREE ANSWERS, AND THE THIRD IS NOT A PRICE ───────────────────────────
+ *
+ * A business with no rate card gets exactly what it got before. A business
+ * with a working one gets its own prices. A business whose rate card EXISTS
+ * and did not resolve gets `null` and a reason — never a base-rate quote
+ * wearing the rate card's clothes, because that is a number nobody set and
+ * nobody would ever notice.
+ */
+export type RateCardQuote =
+  | {
+      readonly status: 'quoted'
+      readonly quote: UnitQuote
+      readonly fromRateCard: boolean
+    }
+  /** A configured rate card refused. The screen shows the reason, not a price. */
+  | { readonly status: 'refused'; readonly code: string }
+
+export async function quoteWithRateCard(
+  db: Db,
+  unit: CalendarUnit,
+  range: DateRange,
+  guests: number,
+  context: {
+    organizationId: string
+    source: BookingSource
+    grants: ReadonlySet<string>
+    /** The day the rate card's effective-dating is resolved against. */
+    effectiveOn: string
+    propertyMinNights: number
+  },
+): Promise<RateCardQuote | null> {
+  // The same refusal `quoteFor` makes, made before any read: a unit with no
+  // base rate has not been priced, and a rate card cannot rescue that because
+  // the base rate is the floor every ladder falls back to.
+  if (unit.basePriceAgorot <= 0) return null
+
+  const taxRatePercent = unit.taxRateBps / 100
+
+  const priced = await priceWithRateCard(db, {
+    organizationId: context.organizationId,
+    propertyId: unit.propertyId,
+    unitId: unit.id,
+    unitGroupId: null,
+    range,
+    guests,
+    eventType: null,
+    source: context.source,
+    grants: context.grants,
+    effectiveOn: context.effectiveOn,
+    baseUnitNightlyAgorot: unit.basePriceAgorot,
+    unitStandardGuests: unit.standardGuests,
+    unitMinNights: unit.minNights,
+    propertyMinNights: context.propertyMinNights,
+    extraGuestNightlyAgorot: unit.extraGuestPriceAgorot,
+    cleaningFeeAgorot: unit.cleaningFeeAgorot,
+    depositAgorot: unit.depositAgorot,
+    ...(unit.taxIncludedInPrice ? {} : { taxRatePercent }),
+  })
+
+  if (priced.status === 'refused') {
+    return { status: 'refused', code: priced.refusal.code }
+  }
+
+  if (priced.status === 'no_rate_card') {
+    const quote = quoteFor(unit, range, guests)
+    return quote === null
+      ? null
+      : { status: 'quoted', quote, fromRateCard: false }
+  }
+
+  const quote = priceStay(priced.stay.request)
+
+  return {
+    status: 'quoted',
+    fromRateCard: true,
+    quote: {
+      ...quote,
+      taxIncludedAgorot: unit.taxIncludedInPrice
+        ? taxIncludedIn(quote.stayTotalAgorot, taxRatePercent)
+        : null,
+      taxRateBps: unit.taxRateBps,
+    },
+  }
 }

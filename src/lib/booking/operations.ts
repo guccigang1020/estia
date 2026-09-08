@@ -129,6 +129,28 @@ const pricingInput = s.object({
       { max: 20, label: 'תוספות' },
     ),
   ),
+  /**
+   * What the rate card decided each night costs.
+   *
+   * An ARRAY rather than a map because the schema library validates arrays and
+   * objects with known keys, and a date-keyed record is neither — modelling it
+   * as one would have meant a field nothing checked, on the write path that
+   * decides what a guest is charged.
+   *
+   * Absent for a business with no rate card, which is every business until it
+   * builds one, and `baseNightlyAgorot` remains the whole answer.
+   */
+  nightlyOverrides: s.optional(
+    s.arrayOf(
+      s.object({
+        date: s.string({ min: 10, max: 10, label: 'תאריך' }),
+        agorot: s.agorot({ label: 'מחיר ללילה' }),
+      }),
+      // A year of nights. Long enough for any real stay and short enough that
+      // a malformed caller is refused rather than allocating.
+      { max: 400, label: 'מחירי הלילות מכרטיס המחירים' },
+    ),
+  ),
 })
 
 /** What the operations accept as a price. Mirrors `pricingInput`. */
@@ -147,6 +169,8 @@ export interface PricingInput {
     unitPriceAgorot: number
     quantity: number
   }[]
+  /** What the rate card decided each night costs. See `pricingInput`. */
+  nightlyOverrides?: readonly { date: string; agorot: number }[]
 }
 
 /**
@@ -215,10 +239,27 @@ function toPricingRequest(
   const agreed = options.agreedNightlyAgorot
   const sellerPriced = agreed !== undefined
 
+  /**
+   * The rate card's per-night answer, as `priceStay` wants it.
+   *
+   * Dropped entirely when a price was agreed with the guest, and that order is
+   * the point: an agreed price IS the price in this business, and a rate card
+   * that overrode it would re-price a stay somebody already shook hands on.
+   * `booking.override_price` is what guards the agreed figure; nothing here
+   * gets to argue with it.
+   */
+  const nightlyOverrides =
+    sellerPriced || input.nightlyOverrides === undefined
+      ? undefined
+      : Object.fromEntries(
+          input.nightlyOverrides.map((night) => [night.date, night.agorot]),
+        )
+
   return {
     range,
     guests,
     baseNightlyAgorot: sellerPriced ? agreed : input.baseNightlyAgorot,
+    ...(nightlyOverrides === undefined ? {} : { nightlyOverrides }),
     includedGuests: sellerPriced ? undefined : input.includedGuests,
     extraGuestNightlyAgorot: sellerPriced
       ? undefined

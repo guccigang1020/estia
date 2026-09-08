@@ -24,7 +24,7 @@ import { ALL_PROPERTIES } from '../../_lib/context'
 import { requireCalendarAccess } from '../_lib/access'
 import { loadSellability, type UnitSellability } from '../_lib/availability'
 import { loadCalendarUnits } from '../_lib/inventory'
-import { fitsParty, quoteFor, type UnitQuote } from '../_lib/quote'
+import { fitsParty, quoteWithRateCard, type UnitQuote } from '../_lib/quote'
 
 export const metadata: Metadata = { title: 'בדיקת זמינות' }
 
@@ -81,6 +81,7 @@ export default async function AvailabilityCheckPage({
   let results: UnitSellability[] = []
   let quotes = new Map<string, UnitQuote | null>()
   let unitCount = 0
+  let rateCardRefusals: string[] = []
   let failure: unknown = null
   const correlationId = crypto.randomUUID()
 
@@ -105,16 +106,58 @@ export default async function AvailabilityCheckPage({
       })
 
       if (showPrice) {
-        quotes = new Map(
-          results
-            // Only where the engine said yes. A quote for dates that cannot be
-            // sold is a number with no meaning behind it.
-            .filter((result) => result.available)
-            .map((result) => [
-              result.unit.id,
-              quoteFor(result.unit, { checkIn, checkOut }, guests),
-            ]),
+        // Only where the engine said yes. A quote for dates that cannot be
+        // sold is a number with no meaning behind it.
+        const sellable = results.filter((result) => result.available)
+
+        // Priced against the organization's rate card, per unit, in parallel.
+        //
+        // Before this the screen called `quoteFor` — the unit's base rate and
+        // nothing else — so a business that had built a rate card watched its
+        // guests be quoted the price it had replaced, with no error to notice.
+        // `quoteWithRateCard` falls back to that same base rate for a business
+        // with no rate card, so nothing changes for one that has none.
+        const priced = await Promise.all(
+          sellable.map(async (result) => {
+            const answer = await quoteWithRateCard(
+              db,
+              result.unit,
+              { checkIn, checkOut },
+              guests,
+              {
+                organizationId: access.organizationId,
+                // The desk is quoting, not a channel. `source` selects a rate
+                // plan scoped to a channel, and naming the wrong one here
+                // would quote an OTA's card to somebody at the counter.
+                source: 'direct_manual',
+                grants: access.actor.grants,
+                effectiveOn: today,
+                // The property floor is not on `CalendarUnit`; the unit's own
+                // minimum is, and the plan carries its own. Passing 1 asserts
+                // "no property floor" rather than inventing one, and
+                // `resolveStay` takes the strictest of the three regardless.
+                propertyMinNights: 1,
+              },
+            )
+            return [result.unit.id, answer] as const
+          }),
         )
+
+        // A rate card that exists and did not resolve is not a price. The map
+        // holds null for it — the same shape the screen already renders as
+        // "no price to show" — and the refusals are named separately so the
+        // reason is visible rather than looking like an unpriced unit.
+        quotes = new Map(
+          priced.map(([id, answer]) => [
+            id,
+            answer !== null && answer.status === 'quoted' ? answer.quote : null,
+          ]),
+        )
+        rateCardRefusals = priced
+          .filter(
+            ([, answer]) => answer !== null && answer.status === 'refused',
+          )
+          .map(([id]) => id)
       }
     } catch (error) {
       console.error(toLogEntry(error, correlationId))
@@ -181,6 +224,26 @@ export default async function AvailabilityCheckPage({
           reason="no_data"
           filterSummary={narrowed ? 'נכס אחד נבחר בסרגל העליון' : undefined}
         />
+      )}
+
+      {/*
+        A configured rate card that did not resolve. Said out loud rather than
+        rendered as a unit with no price, because those look identical on
+        screen and are opposite problems: one is a unit nobody has priced, the
+        other is a rate card that IS priced and is broken. Quoting the base
+        rate instead would hide it behind a plausible number.
+      */}
+      {rateCardRefusals.length > 0 && (
+        <p
+          role="status"
+          className="rounded-lg border border-accent bg-accent-soft px-4 py-3 text-sm leading-relaxed text-accent-strong"
+        >
+          {rateCardRefusals.length === 1
+            ? 'ליחידה אחת יש כרטיס מחירים שלא הצליח להיפתר, ולכן לא מוצג לה מחיר.'
+            : `ל-${rateCardRefusals.length} יחידות יש כרטיס מחירים שלא הצליח להיפתר, ולכן לא מוצג להן מחיר.`}{' '}
+          זו אינה יחידה בלי מחיר — זה כלל תמחור שצריך תיקון במסך התמחור. לא מוצג
+          מחיר בסיס במקומו, כדי שלא יוצע לאורח מחיר שהעסק לא קבע.
+        </p>
       )}
 
       {searched && !failure && unitCount > 0 && (

@@ -11,6 +11,20 @@
  * `@/lib/env`, which validates at module load and would demand three secrets.
  * Everything else — the persistence layer, the registry, the handler map — is
  * the real thing.
+ *
+ * ── Why these four carry their own timeout ────────────────────────────────
+ *
+ * Each one does `await import('./wiring')`, and that import pulls the real
+ * persistence layer, the real handler map and everything they reach. The
+ * transform is most of the wall clock: the file passes in about nine seconds
+ * against vitest's ten-second default, which means it was one module away from
+ * failing for a reason that has nothing to do with what it asserts — and it
+ * duly did, the first time the graph grew.
+ *
+ * The timeout below is not a workaround for a slow product. Nothing here runs
+ * at request time; this is a compiler cost paid once in a test process. The
+ * assertions are untouched. What changes is that the file now fails when the
+ * WIRING is wrong rather than when the bundler is busy.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,6 +33,9 @@ import { FakeSupabaseClient } from '../../persistence/fake-client'
 import type { Actor } from '../../authz/can'
 import { PERMISSIONS, type Grant } from '../../authz/permissions'
 import { ENTITLEMENTS } from '../../plans/entitlements'
+
+/** Generous on purpose. See the header: this is transform time, not behaviour. */
+const IMPORT_BOUND = 30_000
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => new FakeSupabaseClient().asDb(),
@@ -53,66 +70,82 @@ afterEach(() => {
 })
 
 describe('the unit of work', () => {
-  it('reports the sequential fallback rather than hiding it', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { autopilotWiring } = await import('./wiring')
+  it(
+    'reports the sequential fallback rather than hiding it',
+    async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { autopilotWiring } = await import('./wiring')
 
-    const wiring = await autopilotWiring({
-      actor: actor(),
-      correlationId: 'pass-1',
-    })
+      const wiring = await autopilotWiring({
+        actor: actor(),
+        correlationId: 'pass-1',
+      })
 
-    expect(wiring.atomic).toBe(false)
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(String(warn.mock.calls[0]?.[0])).toContain('DATABASE_URL')
-  })
+      expect(wiring.atomic).toBe(false)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain('DATABASE_URL')
+    },
+    IMPORT_BOUND,
+  )
 
-  it('warns once per process rather than once per pass', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { autopilotWiring } = await import('./wiring')
+  it(
+    'warns once per process rather than once per pass',
+    async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { autopilotWiring } = await import('./wiring')
 
-    await autopilotWiring({ actor: actor(), correlationId: 'pass-1' })
-    await autopilotWiring({ actor: actor(), correlationId: 'pass-2' })
+      await autopilotWiring({ actor: actor(), correlationId: 'pass-1' })
+      await autopilotWiring({ actor: actor(), correlationId: 'pass-2' })
 
-    // A message per action would train everybody to scroll past it.
-    expect(warn).toHaveBeenCalledTimes(1)
-  })
+      // A message per action would train everybody to scroll past it.
+      expect(warn).toHaveBeenCalledTimes(1)
+    },
+    IMPORT_BOUND,
+  )
 })
 
 describe('what the wiring hands the executor', () => {
-  it('builds a registry over the real handler map', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { autopilotWiring } = await import('./wiring')
+  it(
+    'builds a registry over the real handler map',
+    async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { autopilotWiring } = await import('./wiring')
 
-    const wiring = await autopilotWiring({
-      actor: actor(),
-      correlationId: 'pass-1',
-    })
+      const wiring = await autopilotWiring({
+        actor: actor(),
+        correlationId: 'pass-1',
+      })
 
-    expect(wiring.execution.registry.resolve('tasks.assignTask').status).toBe(
-      'available',
-    )
-    // Unwired for want of a port, and honestly reported as such rather than
-    // resolving to something that returns success.
-    expect(
-      wiring.execution.registry.resolve('payments.requestPayment').status,
-    ).toBe('unavailable')
-  })
+      expect(wiring.execution.registry.resolve('tasks.assignTask').status).toBe(
+        'available',
+      )
+      // Unwired for want of a port, and honestly reported as such rather than
+      // resolving to something that returns success.
+      expect(
+        wiring.execution.registry.resolve('payments.requestPayment').status,
+      ).toBe('unavailable')
+    },
+    IMPORT_BOUND,
+  )
 
-  it('is built per call, so one session is never two callers', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { autopilotWiring } = await import('./wiring')
+  it(
+    'is built per call, so one session is never two callers',
+    async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { autopilotWiring } = await import('./wiring')
 
-    const first = await autopilotWiring({
-      actor: actor(),
-      correlationId: 'pass-1',
-    })
-    const second = await autopilotWiring({
-      actor: actor(),
-      correlationId: 'pass-2',
-    })
+      const first = await autopilotWiring({
+        actor: actor(),
+        correlationId: 'pass-1',
+      })
+      const second = await autopilotWiring({
+        actor: actor(),
+        correlationId: 'pass-2',
+      })
 
-    expect(first.db).not.toBe(second.db)
-    expect(first.execution.repository).not.toBe(second.execution.repository)
-  })
+      expect(first.db).not.toBe(second.db)
+      expect(first.execution.repository).not.toBe(second.execution.repository)
+    },
+    IMPORT_BOUND,
+  )
 })

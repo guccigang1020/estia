@@ -36,6 +36,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { assertCan, can, type Resource } from '@/lib/authz/can'
+import { localDate } from '@/lib/booking/dates'
 import {
   BOOKING_STATUSES,
   checkAvailability,
@@ -50,7 +51,8 @@ import {
   toSafeResponse,
   type SafeErrorBody,
 } from '@/lib/errors'
-import { asAgorot, asNumber, toRow } from '@/lib/persistence'
+import { asAgorot, asNumber, asString, toRow } from '@/lib/persistence'
+import { priceWithRateCard } from '@/lib/pricing/stay'
 import type { EventType } from '@/lib/preparation/types'
 
 import { shellContext } from '../../_lib/context'
@@ -250,6 +252,59 @@ export async function createBookingAction(
       })
     }
 
+    // The rate card, if this business has one.
+    //
+    // This is the other half of the fix for the defect where a business built
+    // a summer rate card, watched the availability screen quote it, and then
+    // had the booking committed at the unit's base rate. The quote screen and
+    // this action must reach the same number or the desk agrees one price and
+    // the system stores another — which is worse than both being wrong the
+    // same way, because nobody would ever see it.
+    //
+    // A business with no rate card gets `no_rate_card` and nothing is passed,
+    // so the operation prices exactly as it always did.
+    const rateCard = await priceWithRateCard(db, {
+      organizationId: context.actor.organizationId,
+      propertyId: unit.propertyId,
+      unitId: input.unitId,
+      unitGroupId: null,
+      range: { checkIn: input.checkIn, checkOut: input.checkOut },
+      guests: guestCount,
+      eventType: input.eventType ?? null,
+      source: input.source,
+      grants: context.actor.grants,
+      effectiveOn: localDate(new Date()),
+      baseUnitNightlyAgorot: unit.pricing.baseNightlyAgorot,
+      unitStandardGuests: unit.pricing.includedGuests,
+      unitMinNights: unit.minNights,
+      propertyMinNights: 1,
+      extraGuestNightlyAgorot: unit.pricing.extraGuestNightlyAgorot,
+      cleaningFeeAgorot: unit.pricing.cleaningFeeAgorot,
+      depositAgorot: unit.pricing.depositAgorot,
+    })
+
+    // A configured rate card that did not resolve refuses the booking. It does
+    // NOT fall back to the base rate: that would charge a guest a number the
+    // business replaced, and the whole reason to refuse rather than price is
+    // that a quote produced despite a failed check is a quote somebody honours.
+    if (rateCard.status === 'refused') {
+      throw new BusinessRuleError({
+        code: 'booking.rate_card_unresolved',
+        message: `rate card refused: ${rateCard.refusal.code}`,
+        userMessage:
+          'כרטיס המחירים של העסק לא הצליח להיפתר לתאריכים האלה, ולכן ההזמנה ' +
+          'לא נוצרה. תקן את כללי התמחור במסך התמחור ונסה שוב — לא נבחר מחיר ' +
+          'בסיס במקום, כדי שלא תיווצר הזמנה במחיר שהעסק לא קבע.',
+      })
+    }
+
+    const nightlyOverrides =
+      rateCard.status === 'resolved'
+        ? Object.entries(rateCard.stay.request.nightlyOverrides ?? {}).map(
+            ([date, agorot]) => ({ date, agorot }),
+          )
+        : []
+
     // Assembled key by key rather than spread. `s.object` refuses a field it
     // does not name — `allowUnknown` is off by design — so passing the form's
     // own `idempotencyKey` through as input would fail validation with a
@@ -271,7 +326,10 @@ export async function createBookingAction(
       checkOut: input.checkOut,
       source: input.source,
       status: input.status,
-      pricing: unit.pricing,
+      pricing:
+        nightlyOverrides.length > 0
+          ? { ...unit.pricing, nightlyOverrides }
+          : unit.pricing,
       ...(input.agreedNightlyAgorot !== null
         ? { agreedNightlyAgorot: input.agreedNightlyAgorot }
         : {}),
@@ -326,7 +384,7 @@ async function unitTermsFor(
     .from('units')
     .select(
       'base_price_agorot, extra_guest_price_agorot, cleaning_fee_agorot, ' +
-        'deposit_agorot, standard_guests, max_guests',
+        'deposit_agorot, standard_guests, max_guests, min_nights, property_id',
     )
     .eq('organization_id', organizationId)
     .eq('id', unitId)
@@ -348,6 +406,8 @@ async function unitTermsFor(
 
   return {
     maxGuests: asNumber(row, 'max_guests'),
+    minNights: asNumber(row, 'min_nights'),
+    propertyId: asString(row, 'property_id'),
     pricing: {
       baseNightlyAgorot: asAgorot(row, 'base_price_agorot'),
       extraGuestNightlyAgorot: asAgorot(row, 'extra_guest_price_agorot'),
