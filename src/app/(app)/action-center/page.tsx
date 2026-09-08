@@ -26,6 +26,8 @@ import { toSafeResponse } from '@/lib/errors'
 import { formatAgorot } from '@/lib/plans/plan'
 import { createClient } from '@/lib/supabase/server'
 
+import { TriageStrip } from '@/components/shell-screens/triage-strip'
+
 import { requireActionCenterAccess } from './_lib/access'
 import {
   APPROVAL_TYPE_LABEL,
@@ -52,6 +54,7 @@ import {
   type StuckTask,
   type WaitingApproval,
 } from './_lib/queries'
+import { triage, type PanelState } from './_lib/triage'
 
 export const metadata: Metadata = { title: 'מרכז הפעולות' }
 
@@ -128,6 +131,38 @@ export default async function ActionCenterPage() {
 
   const approvalRefusal = authorize(actor, 'approval.decide')
 
+  // Arrivals with something unresolved: today's stays that still owe money.
+  // Derived from panels already read rather than queried again — a ninth
+  // round trip to restate what the second one knows would be a slower screen
+  // and a second answer to the same question.
+  const arrivalsUnresolved: PanelState<unknown> = balances.ok
+    ? {
+        ok: true,
+        value:
+          balances.value === null
+            ? null
+            : balances.value.filter((balance) => balance.role === 'arriving'),
+      }
+    : { ok: false }
+
+  const triaged = triage({
+    arrivalsUnresolved,
+    channelCritical: channelWork.ok
+      ? {
+          ok: true,
+          value:
+            channelWork.value === null
+              ? null
+              : channelWork.value.filter((row) => row.severity === 'critical'),
+        }
+      : { ok: false },
+    laundryMissing: asPanel(laundry),
+    moneyOwed: asPanel(balances),
+    workStuck: asPanel(tasks),
+    faultsOpen: asPanel(incidents),
+    decisionsWaiting: asPanel(approvals),
+  })
+
   return (
     <ScreenFrame
       title="מרכז הפעולות"
@@ -147,6 +182,8 @@ export default async function ActionCenterPage() {
         </p>
       }
     >
+      <TriageStrip result={triaged} />
+
       {/* ------------------------------------------------------- stays -- */}
       <Panel
         title="מי בבניין היום"
@@ -786,4 +823,17 @@ function ExceptionSize({ approval }: { approval: WaitingApproval }) {
   }
 
   return null
+}
+
+/**
+ * A settled panel as the triage strip wants it.
+ *
+ * `settle` returns `{ ok, value }` or `{ ok: false, error }`; the strip needs
+ * only the three states and never the rows, so the error is dropped here
+ * rather than travelling into a pure module that has no use for it.
+ */
+function asPanel<T>(
+  settled: Awaited<ReturnType<typeof settle<readonly T[] | null>>>,
+): PanelState<T> {
+  return settled.ok ? { ok: true, value: settled.value } : { ok: false }
 }
