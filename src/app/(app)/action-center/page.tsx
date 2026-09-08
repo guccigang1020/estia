@@ -27,12 +27,18 @@ import { formatAgorot } from '@/lib/plans/plan'
 import { createClient } from '@/lib/supabase/server'
 
 import { requireActionCenterAccess } from './_lib/access'
-import { APPROVAL_TYPE_LABEL } from './_lib/labels'
+import {
+  APPROVAL_TYPE_LABEL,
+  CHANNEL_SEVERITY_LABEL,
+  INCIDENT_STATUS_LABEL,
+} from './_lib/labels'
 import {
   ACTION_PANEL_SIZE,
   listOpenBalances,
   listPaymentsNeedingAttention,
   listStaysToday,
+  listChannelExceptions,
+  listOpenIncidents,
   listStuckTasks,
   listWaitingApprovals,
   outstandingTotalAgorot,
@@ -51,11 +57,16 @@ export const metadata: Metadata = { title: 'מרכז הפעולות' }
 /**
  * EXECUTION CONTEXT — SERVER COMPONENT. What needs a person today.
  *
- * WHAT IS ON THIS SCREEN. Five lists, each read from a table and each made of
+ * WHAT IS ON THIS SCREEN. Seven lists, each read from a table and each made of
  * records somebody can open: who is in the building today and in which role,
  * which of those stays still owes money, which work is blocked or late, which
- * payments the provider stopped answering about, and which decision is
- * waiting. Every figure is a column or the domain's own sum over columns.
+ * payments the provider stopped answering about, which decision is waiting,
+ * which damage or fault nobody has closed, and which channel failure nobody
+ * has cleared. Every figure is a column or the domain's own sum over columns.
+ *
+ * The last two are spec 6.0 §4 and §13. §13 is one sentence — do not hide
+ * failures — and this is the screen where hiding them costs most: a rate push
+ * that failed on Friday is a weekend sold at last season's price.
  *
  * WHAT IS DELIBERATELY NOT ON IT. Occupancy, revenue, a conversion rate, a
  * count of anything that is not a list of rows underneath it.
@@ -73,7 +84,7 @@ export const metadata: Metadata = { title: 'מרכז הפעולות' }
  * `can()` against the property it names. And row level security refuses
  * regardless of all three.
  *
- * ONE FAILURE DOES NOT BLANK THE SCREEN. The five reads are settled
+ * ONE FAILURE DOES NOT BLANK THE SCREEN. The seven reads are settled
  * independently and a failure is rendered inside its own panel. A morning
  * board that disappears because the approvals table was briefly unreachable is
  * worse than a board with four working panels and one that says what went
@@ -96,12 +107,15 @@ export default async function ActionCenterPage() {
 
   const stays = await settle(() => listStaysToday(args))
 
-  const [balances, tasks, payments, approvals] = await Promise.all([
-    settle(() => listOpenBalances(args, stays.ok ? stays.value : [])),
-    settle(() => listStuckTasks(args)),
-    settle(() => listPaymentsNeedingAttention(args)),
-    settle(() => listWaitingApprovals(args)),
-  ])
+  const [balances, tasks, payments, approvals, incidents, channelWork] =
+    await Promise.all([
+      settle(() => listOpenBalances(args, stays.ok ? stays.value : [])),
+      settle(() => listStuckTasks(args)),
+      settle(() => listPaymentsNeedingAttention(args)),
+      settle(() => listWaitingApprovals(args)),
+      settle(() => listOpenIncidents(args)),
+      settle(() => listChannelExceptions(args)),
+    ])
 
   const approvalRefusal = authorize(actor, 'approval.decide')
 
@@ -317,6 +331,98 @@ export default async function ActionCenterPage() {
               <ApprovalRow key={approval.id} approval={approval} />
             ))}
           </RowList>
+        )}
+      </Panel>
+
+      {/* --------------------------------------------------- incidents -- */}
+      <Panel
+        title="נזק ותקלות שלא נסגרו"
+        description="גם ״ממתין לספק״ ו״ממתין לאורח״ נספרים כאן. הם נראים כמו המתנה, ותיק שממתין לספק שבוע הוא תיק שאיש לא רדף אחריו. הישן ביותר ראשון."
+        count={
+          incidents.ok && incidents.value ? incidents.value.length : undefined
+        }
+        action={
+          holdsGrant(actor, 'incident.view') ? (
+            <Button href="/incidents" variant="secondary" size="sm">
+              תיקי אירוע
+            </Button>
+          ) : null
+        }
+      >
+        {!incidents.ok ? (
+          <ActionError error={incidents.error} />
+        ) : incidents.value === null ? (
+          <PanelNote>אין לך הרשאת צפייה בתיקי אירוע.</PanelNote>
+        ) : incidents.value.length === 0 ? (
+          <PanelNote>אין תיק פתוח בטווח שלך.</PanelNote>
+        ) : (
+          <>
+            <RowList>
+              {incidents.value.map((incident) => (
+                <Row key={incident.id}>
+                  <FactRow label={incident.title}>
+                    <span className="text-xs text-muted-foreground">
+                      {INCIDENT_STATUS_LABEL[incident.status] ??
+                        incident.status}
+                      {incident.openedAt !== null &&
+                        ` · נפתח ${formatDayMonth(incident.openedAt.slice(0, 10))}`}
+                    </span>
+                  </FactRow>
+                </Row>
+              ))}
+            </RowList>
+            {incidents.value.length === ACTION_PANEL_SIZE && <AtCeiling />}
+          </>
+        )}
+      </Panel>
+
+      {/* ------------------------------------------------ channel work -- */}
+      <Panel
+        title="תקלות ערוץ שלא טופלו"
+        description="עדכון מחיר שנכשל ביום שישי הוא סוף שבוע שנמכר במחיר של עונה שעברה. אין כאן הסתרה של כשלים — הקריטי ראשון, ואחריו הוותיק."
+        count={
+          channelWork.ok && channelWork.value
+            ? channelWork.value.length
+            : undefined
+        }
+        action={
+          holdsGrant(actor, 'channel.manage') ? (
+            <Button href="/channels" variant="secondary" size="sm">
+              מסך הערוצים
+            </Button>
+          ) : null
+        }
+      >
+        {!channelWork.ok ? (
+          <ActionError error={channelWork.error} />
+        ) : channelWork.value === null ? (
+          <PanelNote>אין לך הרשאת ניהול ערוצים.</PanelNote>
+        ) : channelWork.value.length === 0 ? (
+          <PanelNote>
+            אין תקלת ערוץ פתוחה. שים לב שאף ערוץ אינו מחובר עדיין, ולכן זו תשובה
+            על היעדר תקלות ולא על סנכרון תקין.
+          </PanelNote>
+        ) : (
+          <>
+            <RowList>
+              {channelWork.value.map((exception) => (
+                <Row key={exception.id}>
+                  <FactRow label={exception.title}>
+                    <span className="flex items-center gap-2">
+                      <Badge>
+                        {CHANNEL_SEVERITY_LABEL[exception.severity] ??
+                          exception.severity}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {exception.channelCode}
+                      </span>
+                    </span>
+                  </FactRow>
+                </Row>
+              ))}
+            </RowList>
+            {channelWork.value.length === ACTION_PANEL_SIZE && <AtCeiling />}
+          </>
         )}
       </Panel>
     </ScreenFrame>

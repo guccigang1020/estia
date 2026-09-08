@@ -3,9 +3,10 @@
  *
  * ── What this screen is, and what it refuses to be ────────────────────────
  *
- * Five questions about today, each answered from a table and none of them a
+ * Seven questions about today, each answered from a table and none of them a
  * statistic: who arrives, who leaves, which of those stays still owes money,
- * which work is stuck, and which decision is waiting for a person. Every row
+ * which work is stuck, which decision is waiting for a person, which damage or
+ * fault nobody has closed, and which channel failure nobody has cleared. Every row
  * that comes out of this file is a record somebody can open and act on. There
  * is no occupancy percentage here and no revenue tile, and that is not an
  * omission — `dashboard/page.tsx` argues at length that a fabricated "72%
@@ -134,10 +135,18 @@ export const ACTION_PANEL_SIZE = 25
  * and the door and the panels therefore cannot disagree about which grants are
  * in play.
  *
- * `message.view` and `incident.view` are deliberately absent even though the
- * menu entry lists them: there is no `messages` table and no `incidents` table
- * in any migration from 0001 to 0026, so admitting somebody on either would
- * open a screen with nothing on it for them. See `/inbox`.
+ * `message.view` is deliberately absent even though the menu entry lists it.
+ *
+ * `incident.view` used to be absent for the same stated reason — "there is no
+ * messages table and no incidents table in any migration from 0001 to 0026".
+ * That was true when it was written and stopped being true at
+ * `0059_incident_cases.sql`. Incidents now have a panel, so the grant is a
+ * real door rather than an empty room; the sentence is corrected here rather
+ * than deleted, because the reasoning was right and only the fact aged.
+ *
+ * It is still not in this tuple. Holding `incident.view` alone should not open
+ * a screen whose other six panels would all be shut — the tuple is the set of
+ * grants that make the screen worth opening, not the set it can render.
  */
 export const ACTION_CENTER_GRANTS: readonly [Grant, ...Grant[]] = [
   'task.view',
@@ -1010,4 +1019,191 @@ async function profileNames(
     if (name !== null) names.set(asString(row, 'id'), name)
   }
   return names
+}
+
+/* ------------------------------------------------- open incident cases -- */
+
+/**
+ * Damage, faults and guest problems that nobody has closed.
+ *
+ * ── Why this belongs on the Today screen at all ───────────────────────────
+ *
+ * Spec 6.0 §4 names "maintenance issue" and "guest request" among the eleven
+ * things this screen must surface, and §71 states the rule underneath it:
+ * ask continuously what should already have happened and did not. An incident
+ * that has been open for three days is exactly that question with a name.
+ *
+ * ── `resolved` and `closed` are different, and both are gone from here ────
+ *
+ * `incident_case_status` has seven members. The four that stay are the ones
+ * where somebody still owes an action — including `awaiting_guest` and
+ * `awaiting_vendor`, which look like waiting and are not: a case waiting on a
+ * vendor for a week is a case nobody chased.
+ */
+const OPEN_INCIDENT_STATUSES = [
+  'open',
+  'investigating',
+  'awaiting_guest',
+  'awaiting_vendor',
+  'awaiting_approval',
+] as const
+
+const INCIDENT_COLUMNS =
+  'id, property_id, unit_id, booking_id, case_type, status, title, opened_at'
+
+export type OpenIncident = {
+  id: string
+  propertyId: string
+  unitId: string | null
+  bookingId: string | null
+  caseType: string
+  status: string
+  title: string
+  openedAt: string | null
+}
+
+/**
+ * `null` when this reader may not see incidents at all.
+ *
+ * The same three-state answer every panel here returns, and the reason is the
+ * one this screen is built on: "no incidents" and "you may not read incidents"
+ * are opposite facts, and rendering both as an empty list tells somebody their
+ * properties are fine when the screen simply could not look.
+ */
+export async function listOpenIncidents(
+  args: ActionCenterArgs,
+): Promise<readonly OpenIncident[] | null> {
+  const { db, actor, organizationId, propertyId } = args
+  const limit = args.limit ?? ACTION_PANEL_SIZE
+
+  if (!holdsGrant(actor, 'incident.view')) return null
+
+  const results = await Promise.all(
+    narrowingsFor(actor, 'operations').map(async (narrowing) => {
+      let query = db
+        .from('incident_cases')
+        .select(INCIDENT_COLUMNS)
+        .eq('organization_id', organizationId)
+        .in('status', [...OPEN_INCIDENT_STATUSES])
+
+      if (propertyId !== null) query = query.eq('property_id', propertyId)
+      if (narrowing.kind === 'in') {
+        query = query.in(narrowing.column, [...narrowing.values])
+      } else if (narrowing.kind === 'eq') {
+        query = query.eq(narrowing.column, narrowing.value)
+      }
+
+      // Oldest first. A case opened on Sunday matters more than one opened an
+      // hour ago, and a screen sorted the other way buries exactly the row
+      // that has been ignored longest.
+      const { data, error } = await query
+        .order('opened_at', { ascending: true })
+        .limit(limit)
+
+      if (error) throw error
+      return toRows(data)
+    }),
+  )
+
+  const merged = new Map<string, Row>()
+  for (const row of results.flat()) merged.set(asString(row, 'id'), row)
+
+  return [...merged.values()]
+    .map((row): OpenIncident => ({
+      id: asString(row, 'id'),
+      propertyId: asString(row, 'property_id'),
+      unitId: asStringOrNull(row, 'unit_id'),
+      bookingId: asStringOrNull(row, 'booking_id'),
+      caseType: asString(row, 'case_type'),
+      status: asString(row, 'status'),
+      title: asString(row, 'title'),
+      openedAt: asStringOrNull(row, 'opened_at'),
+    }))
+    .slice(0, limit)
+}
+
+/* --------------------------------------------- unresolved channel work -- */
+
+const CHANNEL_EXCEPTION_COLUMNS =
+  'id, channel_code, kind, severity, state, title, detail, property_id, ' +
+  'occurred_at'
+
+export type ChannelException = {
+  id: string
+  channelCode: string
+  kind: string
+  severity: string
+  propertyId: string | null
+  occurredAt: string | null
+  title: string
+  detail: string
+}
+
+/**
+ * Channel problems nobody has cleared.
+ *
+ * Spec 6.0 §13 is one sentence — **do not hide failures** — and this is the
+ * screen where hiding them would cost the most: a rate push that failed on
+ * Friday is a weekend sold at last season's price, and nothing about it
+ * appears anywhere a person looks daily.
+ *
+ * Ordered by severity and then by age, so `critical` from an hour ago outranks
+ * a `warning` from Tuesday. Both are shown; the order is the only opinion.
+ *
+ * No connector exists yet, so today this reads an empty table for every
+ * organization — and that is the correct thing for it to do rather than a
+ * reason to leave it unwritten. The day a channel is connected, the failures
+ * have somewhere to arrive that a person already reads.
+ */
+export async function listChannelExceptions(
+  args: ActionCenterArgs,
+): Promise<readonly ChannelException[] | null> {
+  const { db, actor, organizationId, propertyId } = args
+  const limit = args.limit ?? ACTION_PANEL_SIZE
+
+  if (!holdsGrant(actor, 'channel.manage')) return null
+
+  // `state`, not `resolved_at is null`. The table carries both, and they are
+  // not the same question: `dismissed` has no `resolved_at` either, and a
+  // dismissed exception is one somebody has already decided about. Reading the
+  // timestamp would put it back on the screen every day.
+  let query = db
+    .from('channel_exceptions')
+    .select(CHANNEL_EXCEPTION_COLUMNS)
+    .eq('organization_id', organizationId)
+    .in('state', ['open', 'acknowledged'])
+
+  // A channel exception may carry no property — a mapping fault belongs to the
+  // connection rather than to a building — so a property filter keeps those
+  // rather than dropping them. Narrowing them away would hide the class of
+  // fault that affects every property at once.
+  if (propertyId !== null) {
+    query = query.or(`property_id.is.null,property_id.eq.${propertyId}`)
+  }
+
+  const { data, error } = await query
+    .order('occurred_at', { ascending: true })
+    .limit(limit)
+
+  if (error) throw error
+
+  const rows = toRows(data).map((row): ChannelException => ({
+    id: asString(row, 'id'),
+    channelCode: asString(row, 'channel_code'),
+    kind: asString(row, 'kind'),
+    severity: asString(row, 'severity'),
+    propertyId: asStringOrNull(row, 'property_id'),
+    occurredAt: asStringOrNull(row, 'occurred_at'),
+    title: asString(row, 'title'),
+    detail: asString(row, 'detail'),
+  }))
+
+  // Sorted here rather than by the database, because `severity` is an enum and
+  // Postgres orders enums by declaration — `warning, urgent, critical` — so
+  // `descending` would put warnings on top. Ordering in TypeScript against an
+  // explicit rank is the version that cannot be read backwards.
+  const rank: Record<string, number> = { critical: 0, urgent: 1, warning: 2 }
+  return [...rows].sort(
+    (a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3),
+  )
 }

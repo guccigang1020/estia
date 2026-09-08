@@ -46,3 +46,26 @@ export const APPROVAL_STATUS_LABEL: Record<ApprovalStatus, string> = {
   expired: 'פגה בלי מענה',
   withdrawn: 'בוטלה על ידי המבקש',
 }
+
+/**
+ * The five incident states that still owe somebody an action.
+ *
+ * `resolved` and `closed` are absent because a row in either state does not
+ * belong on a screen whose whole question is what is still open. The two
+ * "awaiting" states ARE here, and that is the point of the panel: they read as
+ * waiting and are not.
+ */
+export const INCIDENT_STATUS_LABEL: Readonly<Record<string, string>> = {
+  open: 'פתוח',
+  investigating: 'בבדיקה',
+  awaiting_guest: 'ממתין לאורח',
+  awaiting_vendor: 'ממתין לספק',
+  awaiting_approval: 'ממתין לאישור',
+}
+
+/** Severity as a word, so the order on screen is legible without colour. */
+export const CHANNEL_SEVERITY_LABEL: Readonly<Record<string, string>> = {
+  critical: 'קריטי',
+  urgent: 'דחוף',
+  warning: 'אזהרה',
+}
