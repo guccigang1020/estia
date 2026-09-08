@@ -159,6 +159,8 @@ export function CreateBookingForm({
 
   const [unitId, setUnitId] = useState(units[0]?.id ?? '')
   const [guestName, setGuestName] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [guestEmail, setGuestEmail] = useState('')
 
   // The party, as three fields. The defaults are the ordinary booking — two
   // adults — so the common case is still "type a name and pick two dates".
@@ -295,6 +297,8 @@ export function CreateBookingForm({
             unitLabel: unit?.name ?? '',
             propertyId: unit?.propertyId ?? null,
             guestName: guestName.trim(),
+            guestPhone: guestPhone.trim() || null,
+            guestEmail: guestEmail.trim() || null,
             adults: party.adults,
             children: party.children,
             infants: party.infants,
@@ -355,7 +359,7 @@ export function CreateBookingForm({
 
         <Field
           label="שם האורח"
-          description="שני תווים לפחות. נוצר ממנו כרטיס אורח חדש."
+          description="שני תווים לפחות."
           required
           error={
             touched && guestName.trim().length < 2
@@ -366,6 +370,38 @@ export function CreateBookingForm({
           <TextInput
             value={guestName}
             onChange={(event) => setGuestName(event.target.value)}
+            autoComplete="off"
+          />
+        </Field>
+
+        {/*
+          The phone is what makes a returning guest one card instead of two.
+          `guests.phone_e164` is generated from it and carries a unique index
+          per business, so 050-1234567 and +972501234567 are recognised as the
+          same person — and without a number there is nothing strong enough to
+          match on, because two people genuinely share a name.
+
+          Optional, deliberately: a walk-in who will not give a number must
+          still be bookable, and the cost is a card that cannot be matched
+          later rather than a booking that cannot be taken.
+        */}
+        <Field
+          label="טלפון האורח"
+          description="לא חובה. עם מספר, הזמנה חוזרת של אותו אורח מתחברת לכרטיס הקיים במקום ליצור כפילות."
+        >
+          <TextInput
+            value={guestPhone}
+            onChange={(event) => setGuestPhone(event.target.value)}
+            inputMode="tel"
+            autoComplete="off"
+          />
+        </Field>
+
+        <Field label="אימייל האורח" description="לא חובה.">
+          <TextInput
+            value={guestEmail}
+            onChange={(event) => setGuestEmail(event.target.value)}
+            inputMode="email"
             autoComplete="off"
           />
         </Field>

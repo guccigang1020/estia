@@ -471,6 +471,8 @@ export function defineBookingOperations(repo: BookingRepository) {
       unitLabel: s.string({ max: 120, label: 'שם היחידה' }),
       propertyId: s.optional(s.string()),
       guestName: s.string({ min: 2, max: 120, label: 'שם האורח' }),
+      guestPhone: s.optional(s.string({ max: 40, label: 'טלפון האורח' })),
+      guestEmail: s.optional(s.string({ max: 200, label: 'אימייל האורח' })),
       guestCount: s.number({
         integer: true,
         min: 1,
@@ -629,6 +631,8 @@ export function defineBookingOperations(repo: BookingRepository) {
           propertyId: input.propertyId ?? null,
           unitId: input.unitId,
           guestName: input.guestName,
+          guestPhone: input.guestPhone ?? null,
+          guestEmail: input.guestEmail ?? null,
           guestCount: input.guestCount,
           party: intake.party,
           sleeping: intake.sleeping,

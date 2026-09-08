@@ -126,6 +126,8 @@ export type CreateBookingInput = {
   unitLabel: string
   propertyId: string | null
   guestName: string
+  guestPhone: string | null
+  guestEmail: string | null
   /**
    * The party, split the way `public.bookings` has stored it since 0009.
    *
@@ -313,6 +315,8 @@ export async function createBookingAction(
       unitId: input.unitId,
       unitLabel: input.unitLabel,
       guestName: input.guestName,
+      ...(input.guestPhone ? { guestPhone: input.guestPhone } : {}),
+      ...(input.guestEmail ? { guestEmail: input.guestEmail } : {}),
       guestCount,
       adults: input.adults,
       children: input.children,

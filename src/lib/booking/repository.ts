@@ -66,6 +66,16 @@ export interface BookingDraft {
   propertyId: string | null
   unitId: string
   guestName: string
+  /**
+   * The guest's phone, and the only thing a returning guest is recognised by.
+   *
+   * `guests.phone_e164` is generated from this and carries a UNIQUE index per
+   * organization, so a number is what makes one person one row instead of one
+   * row per booking. A name is deliberately NOT enough — see
+   * `SupabaseBookingRepository.createGuest`.
+   */
+  guestPhone?: string | null
+  guestEmail?: string | null
   /** Every head, infants included. Always `totalGuests(party)`. */
   guestCount: number
   /** The same party, as the three columns the schema already holds. */

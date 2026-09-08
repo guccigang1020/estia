@@ -48,13 +48,20 @@
  * Reported rather than fixed, because the ports are not this work's to change:
  *
  * **`BookingDraft.guestName` versus `bookings.guest_id`.** The column is a
- * `NOT NULL` foreign key to `guests`; the draft carries a name and nothing
- * else. So this adapter creates a guest row per booking. It deliberately does
- * *not* look for an existing guest with the same name: two different people
- * called דנה לוי are two people, and silently merging them into one CRM record
- * — with one shared marketing consent and one shared block flag — is a worse
- * error than a duplicate row an operator can merge on purpose. The real fix is
- * `guestId` on `BookingDraft`.
+ * `NOT NULL` foreign key to `guests`, and the draft carries a name. This
+ * adapter used to create a row per booking from that name alone, which meant
+ * `phone_e164` was always null, every guest sat outside
+ * `guests_organization_phone_idx`, and a business accumulated one duplicate
+ * per booking — a CRM that could not answer "has this person stayed before".
+ *
+ * The draft now also carries `guestPhone` and `guestEmail`, and `createGuest`
+ * matches on the normalised phone before inserting. It still **never matches
+ * on a name**: two different people called דנה לוי are two people, and merging
+ * them into one record — one marketing consent, one block flag — is a worse
+ * error than a duplicate an operator can merge on purpose. A phone is the
+ * opposite kind of identifier and 0009 makes it a unique index, which is also
+ * why the match is mandatory rather than an optimisation: writing a phone
+ * without looking first would fail a returning guest's second booking.
  *
  * **`BookingDraft.propertyId` is nullable; `bookings.property_id` is not.**
  * When the draft says `null` the property is read from the unit. The unit
@@ -878,18 +885,76 @@ export class SupabaseBookingRepository implements BookingRepository {
   }
 
   /**
-   * A guest row for this booking's named guest.
+   * The guest this booking belongs to: the existing one, or a new row.
    *
-   * See the header for why this creates rather than matches. `full_name` is
-   * the only field the port carries; everything else on `guests` is left to
-   * its default, so the record is honest about knowing nothing more.
+   * ── Matched on the phone, and on nothing else ─────────────────────────
+   *
+   * The rule this adapter has always stated stands: **it never matches on a
+   * name.** Two different people called דנה לוי are two people, and merging
+   * them into one CRM record — one marketing consent, one block flag, one
+   * stay history — is a worse error than a duplicate an operator can merge on
+   * purpose.
+   *
+   * A phone is the opposite kind of identifier, and 0009 says so in the
+   * schema: `phone_e164` is generated from `phone` by `normalize_phone_il`,
+   * and `guests_organization_phone_idx` is a UNIQUE index over
+   * `(organization_id, phone_e164)`. One live guest per number per business
+   * is not this file's convention — it is a constraint.
+   *
+   * Which means the match is not an optimisation. Once a phone is written, a
+   * returning guest's second booking would violate that index and the whole
+   * booking would fail. Looking first is what makes writing the phone
+   * possible at all.
+   *
+   * ── Why the read is safe against the race it looks like ───────────────
+   *
+   * Two concurrent bookings for the same new number both read nothing and
+   * both insert; the unique index refuses one of them, and the booking fails
+   * with a constraint error rather than creating a duplicate. That is the
+   * correct outcome and the correct place for it — the database decides, and
+   * the retry succeeds by finding the row the winner wrote. A `select` that
+   * pretended to close the race would only move the decision somewhere it
+   * cannot be enforced.
+   *
+   * With no phone there is nothing strong to match on, and the old behaviour
+   * is exactly right: a new row, honest about knowing nothing more.
    */
   private async createGuest(db: Db, draft: BookingDraft): Promise<string> {
+    const phone = blankToNull(draft.guestPhone)
+    const email = blankToNull(draft.guestEmail)
+
+    if (phone !== null) {
+      // `phone_e164` is generated, so the comparison has to go through the
+      // same function the column does. Comparing the raw `phone` would miss
+      // `050-123-4567` against `+972501234567` — the two spellings of one
+      // number this whole mechanism exists to reconcile.
+      const { data: normalised, error: normaliseError } = await db.rpc(
+        'normalize_phone_il',
+        { raw: phone },
+      )
+      if (normaliseError) throw normaliseError
+
+      if (typeof normalised === 'string' && normalised.length > 0) {
+        const { data: existing, error: lookupError } = await db
+          .from('guests')
+          .select('id')
+          .eq('organization_id', draft.organizationId)
+          .eq('phone_e164', normalised)
+          .is('deleted_at', null)
+          .maybeSingle()
+
+        if (lookupError) throw lookupError
+        if (existing) return asString(toRow(existing), 'id')
+      }
+    }
+
     const { data, error } = await db
       .from('guests')
       .insert({
         organization_id: draft.organizationId,
         full_name: draft.guestName,
+        ...(phone === null ? {} : { phone }),
+        ...(email === null ? {} : { email }),
         created_by: draft.createdByUserId,
       })
       .select('id')
@@ -990,4 +1055,18 @@ function isRecordOfNumbers(
 function readDateList(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null
   return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+/**
+ * An empty or whitespace-only string is not a value.
+ *
+ * A form that submits an untouched field sends `''`, and writing that into
+ * `guests.phone` would make `phone_e164` normalise a blank — putting every
+ * such guest into the same unique-index slot and failing the second booking
+ * of the day for a reason nobody could read.
+ */
+function blankToNull(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null
+  const trimmed = value.trim()
+  return trimmed.length === 0 ? null : trimmed
 }
