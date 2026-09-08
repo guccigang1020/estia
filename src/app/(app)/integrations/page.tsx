@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { DomainErrorPanel } from '@/components/calendar/domain-error'
 import {
@@ -39,12 +40,22 @@ export const metadata: Metadata = { title: 'חיבורים' }
  *
  * ══ WHAT THIS SCREEN IS, AND WHAT IT DELIBERATELY IS NOT ═════════════════
  *
- * ESTIA has no integrations table. There is no stored connection, no
- * credential, no health check and no last-sync timestamp anywhere in
- * `supabase/migrations` — so there is no "connected" state to display and
- * nothing on this screen to switch off. Every other management screen here
- * reads a table named after itself; this one cannot, and says so at the top
- * rather than dressing the absence up in green ticks.
+ * This screen has no integrations table of its own, and shows no "connected"
+ * state, because no external provider is connected: no Booking.com account, no
+ * Airbnb key, no acquiring contract. A status panel over an integration that
+ * has never made a request is the single most dangerous screen this product
+ * could ship, so it is not drawn.
+ *
+ * **What used to be written here and is no longer true.** This header said
+ * there was no stored connection, no credential, no health check and no
+ * last-sync timestamp anywhere in `supabase/migrations`. That was accurate
+ * until `0051_channel_manager.sql`, which created `channel_connections` — with
+ * `credential_ref`, `credentials_expire_at` and three last-sync columns —
+ * along with `channel_listing_mappings`, `channel_sync_runs` and
+ * `channel_reservations`. The storage exists; the connector does not, and
+ * those tables are managed by `/channels` rather than here. The claim was left
+ * standing on a customer-facing screen for four migrations, which is the
+ * argument for putting the migration number in a sentence that dates itself.
  *
  * What it shows instead is real and is evidence: the mark each service leaves
  * on the rows it writes. `payments.provider` says who charged the card,
@@ -101,12 +112,23 @@ export default async function IntegrationsPage() {
       />
 
       <Notice title="אין כאן מתגי הפעלה, וזו אמירה על המוצר" tone="strong">
-        למסד הנתונים של ESTIA אין טבלת חיבורים: אין רשומת חיבור שמורה, אין
-        אישורי גישה, אין בדיקת בריאות ואין חותמת סנכרון אחרון. לכן אין כאן סטטוס
-        ״מחובר״ להציג ואין מה לנתק. מה שכן קיים הוא העקבות שכל שירות משאיר
-        בשורות שהוא כותב, וזה מה שמוצג — נפח ותאריך אחרון, ולא הצהרה על מצב
-        החיבור. ההרשאה <code dir="ltr">integration.manage</code>, שהמסך הזה חסום
-        מאחוריה, אינה שולטת כרגע באף פעולת כתיבה במוצר.
+        המסך הזה מציג את העקבות שכל שירות משאיר בשורות שהוא כותב — נפח ותאריך
+        אחרון — ולא הצהרה על מצב החיבור. אין כאן סטטוס ״מחובר״ ואין מה לנתק,
+        מפני שאף ספק חיצוני אינו מחובר: אין חשבון Booking.com, אין מפתח Airbnb
+        ואין חוזה סליקה, ולקוח HTTP שמעולם לא ביצע בקשה הוא בדיוק המסך שהמוצר
+        הזה מסרב לצייר. ההרשאה <code dir="ltr">integration.manage</code>, שהמסך
+        חסום מאחוריה, אינה שולטת כרגע באף פעולת כתיבה.
+      </Notice>
+
+      <Notice title="ניהול הערוצים כן קיים במסד, ויושב במסך אחר">
+        עד <code dir="ltr">0051_channel_manager.sql</code> המסך הזה אמר שאין
+        טבלת חיבורים כלל. זה נכון היה ואינו נכון עוד:{' '}
+        <code dir="ltr">channel_connections</code>,{' '}
+        <code dir="ltr">channel_listing_mappings</code>,{' '}
+        <code dir="ltr">channel_sync_runs</code> ו-
+        <code dir="ltr">channel_reservations</code> קיימות, כולל מפתח הייחודיות
+        שמונע קליטה כפולה של אותה הזמנה. מה שחסר הוא המחבר עצמו, לא האחסון — ומה
+        שמוגדר שם מנוהל ב<Link href="/channels">מסך הערוצים</Link>.
       </Notice>
 
       {failure ? (

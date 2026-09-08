@@ -1,13 +1,26 @@
 /**
  * EXECUTION CONTEXT — SERVER ONLY. The read behind the channels screen.
  *
- * ══ THERE IS NO CHANNEL INTEGRATION, AND THIS FILE PROVES IT RATHER THAN ══
+ * ══ THERE IS NO CHANNEL CONNECTOR, AND THIS FILE PROVES IT RATHER THAN ════
  * ══ ASSERTING IT ═════════════════════════════════════════════════════════
  *
- * No `channels` table, no `channel_connections`, no sync log, no mapping
- * between a unit and an Airbnb listing. `channel.manage` exists in the
- * permission catalogue and `channels` is a real entitlement Pro carries, and
- * behind them is nothing at all.
+ * Nothing in this product has ever made a request to Booking.com, Airbnb or
+ * Expedia. No account, no key, no contract — and `null-connector.ts` says why
+ * writing one anyway would be worse than not: a dashboard over an integration
+ * that has never run is the most dangerous screen here.
+ *
+ * **Correcting what this header used to say.** It read "No `channels` table,
+ * no `channel_connections`, no sync log, no mapping between a unit and an
+ * Airbnb listing … None of the four exists." All four exist, and have since
+ * `0051_channel_manager.sql`: `channel_connections` (unique per scope),
+ * `channel_listing_mappings`, `channel_sync_runs`, and `channel_reservations`
+ * whose `ledger_key` unique index IS the inbound idempotency guarantee
+ * `ARCHITECTURE.md` asks for. The storage landed; the connector did not.
+ *
+ * The sentence stayed wrong for four migrations, and it is worth naming why
+ * that is the expensive kind of comment: it was the first thing anybody
+ * working on this screen read, and it told them to build what was already
+ * there.
  *
  * The screen could simply say so from a constant. It does not, and the
  * difference matters: a hard-coded "not connected" is a claim that goes stale
@@ -26,10 +39,16 @@
  * ── What would have to exist ──────────────────────────────────────────────
  *
  * Written down here rather than as a roadmap note, because the next person to
- * open this file should not have to rediscover it: a connection record per
- * channel per property, a listing mapping per unit, a sync cursor, and an
- * idempotency key per inbound reservation — `ARCHITECTURE.md` already requires
- * the last of those for channel sync specifically. None of the four exists.
+ * open this file should not have to rediscover it. The four things a sync
+ * needs are a connection record per channel per property, a listing mapping
+ * per unit, a sync cursor, and an idempotency key per inbound reservation —
+ * `ARCHITECTURE.md` requires the last of those for channel sync specifically.
+ *
+ * **All four are built.** What is missing is the half that talks: an HTTP
+ * client per channel, the credentials to use it, and the scheduler that runs
+ * it. That is a commercial step — an account and a contract — before it is a
+ * technical one, which is why the storage was worth landing first and the
+ * connector was not.
  */
 
 import { can, holdsGrant, type Actor, type Resource } from '@/lib/authz/can'
